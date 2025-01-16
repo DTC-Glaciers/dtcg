@@ -34,6 +34,8 @@ classifiers = [
 ]
 dependencies = [
     "numpy<2.0",
+    "matplotlib",
+    "geopandas"
 ]
 
 [project.optional-dependencies]
