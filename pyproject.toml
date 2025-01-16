@@ -9,10 +9,10 @@ authors = [
     { name = "DTCG Contributors", email = "" },
 ]
 description = "DTCG API"
-readme = "README.rst"
+readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
-license-files = "LICENSE"
+license-files = ["LICENSE"]
 keywords = [
     "DTCG",
     "OGGM",
@@ -29,7 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Environment :: Console",
-    "Topic :: Database :: Database",
+    "Topic :: Database",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
