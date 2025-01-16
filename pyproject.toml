@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dtcg"
+version = "0.0.1"
+authors = [
+    { name = "DTCG Contributors", email = "" },
+]
+description = "DTCG API"
+readme = "README.rst"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = "LICENSE"
+keywords = [
+    "DTCG",
+    "OGGM",
+    "API"
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 1 - Planning",
+    "Private :: Do Not Upload",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Environment :: Console",
+    "Topic :: Database :: Database",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "numpy<2.0",
+]
+
+[project.optional-dependencies]
+tests = [
+    "pytest",
+    "coverage",
+    "coveralls",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme >= 1.1",
+]
+dev = [
+    "dtcg[tests,docs]",
+    "hatchling >= 1.12",
+    "build >= 0.7",
+    "pylint >= 2.16.1",
+    "flake8 >= 6.0",
+    "black >= 23.1",
+    "isort",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/DTC-Glaciers/dtcg"
+"Bug Tracker" = "https://github.com/DTC-Glaciers/dtcg/issues"
+"Documentation" = "https://dtc-glaciers.github.io"
+
+# [tool.pytest.ini_options]
+# addopts = [
+#     "--import-mode=importlib",
+# ]
+
+# [project.scripts]
+# run-dtcg = "main:main"
+# dtcg-run = "main:main"
+
+[tool.hatch.build.targets.sdist]
+packages = ["dtcg"]
+exclude = [
+    "logs",
+    "*.png",
+    "*.vtu",
+    "*.csv",
+    "*.nc",
+    "*.bat",
+    "*.sh",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["dtcg"]
