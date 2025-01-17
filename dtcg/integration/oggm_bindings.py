@@ -123,8 +123,6 @@ def get_glaciers_in_subregion(region, subregion):
     region = region.loc[subregion_mask]
     region = region.sort_values("Area", ascending=False)
 
-    for key in region.keys():
-        print(key)
     return region
 
 
@@ -137,16 +135,11 @@ def get_glacier_directories(glaciers: gpd.GeoDataFrame):
         initialised glacier directories.
     """
 
-    gdirs = workflow.init_glacier_regions(glaciers, from_prepro_level=4)
+    gdirs = workflow.init_glacier_directories(
+        glaciers, from_prepro_level=4, prepro_base_url=DEFAULT_BASE_URL
+    )
 
     return gdirs
-
-
-def get_glacier_details(gdirs) -> list:
-    details = []
-    for glacier in gdirs:
-        details.append(f"Region: {glacier.region}", f"Subregion: {glacier.subregion}")
-    return details
 
 
 def plot_glacier_domain(gdirs):
@@ -168,9 +161,5 @@ def get_user_subregion(request=None):
     region_file = get_rgi_file(region_name=region_name)
     basin_file = get_rgi_basin_file(subregion_name=region_name)
     basin_glaciers = get_glaciers_in_subregion(region=region_file, subregion=basin_file)
-    gdirs = get_glacier_directories(glaciers=basin_glaciers)
-    details = get_glacier_details(gdirs=gdirs)
-    for i in details:
-        print(f"{i[0]} {i[1]}")
 
-    return gdirs
+    return basin_glaciers
