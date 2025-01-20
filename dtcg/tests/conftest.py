@@ -38,15 +38,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-# This only works if the test directory is called as the top-level directory (`pytest dtcg/`)
-pytest_plugins = ["oggm.tests.conftest"]
-
-# Declaring individual fixtures prevents collisions
-# OGGM fixture hooks
-# @pytest.fixture(scope="class")
-# def class_case_dir(request, test_dir):
-#     return oggm_conftest.class_case_dir
-
 
 # Function patches
 @pytest.fixture(scope="function", autouse=False)
