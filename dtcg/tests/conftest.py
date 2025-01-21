@@ -34,6 +34,7 @@ from types import ModuleType
 from typing import Any
 from unittest.mock import patch
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -191,6 +192,14 @@ class TestBoilerplate:
         assert self.check_output(
             variable=max(test_array), x_type=float, x_value=test_value
         )
+
+    def check_gpd_dataframe(self, gpd_dataframe: gpd.GeoDataFrame) -> bool:
+        assert isinstance(gpd_dataframe, gpd.GeoDataFrame)
+        assert not gpd_dataframe.empty
+        return True
+
+    def test_check_gpd_dataframe(self):
+        pass
 
     def patch_variable(
         self,

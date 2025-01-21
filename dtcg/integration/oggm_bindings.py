@@ -21,14 +21,12 @@ Executes an OGGM-API request.
 """
 
 import csv
-from pathlib import Path
 
 import geopandas as gpd
 import shapely.geometry as shpg
-from oggm import DEFAULT_BASE_URL, cfg, graphics, tasks, utils, workflow
+from oggm import DEFAULT_BASE_URL, cfg, graphics, utils, workflow
 
-# DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup"
-
+# TODO: Link to DTCG instead.
 DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
 
 
@@ -44,7 +42,8 @@ def get_rgi_id(region_name: str) -> tuple:
 
     Returns
     -------
-    RGI version and region ID
+    tuple[str]
+        RGI version and region ID.
 
     Raises
     ------
@@ -53,8 +52,6 @@ def get_rgi_id(region_name: str) -> tuple:
     TypeError
         If region name is not a string.
     """
-
-    # region_db = {"rofental": ("61", "11")}
 
     try:
         rgi_ids = get_matching_region_ids(region_name=region_name)
@@ -67,6 +64,25 @@ def get_rgi_id(region_name: str) -> tuple:
 
 
 def get_matching_region_ids(region_name: str) -> set:
+    """Get the region ID matching a given name.
+
+    TODO: Fuzzy-finding
+
+    Parameters
+    ----------
+    region_name : str
+        The full name of a region.
+
+    Returns
+    -------
+    set[str]
+        All IDs matching the given region's name.
+
+    Raises
+    ------
+    KeyError
+        If the region name is not found.
+    """
 
     if not region_name:
         raise KeyError(f"{region_name} region not found.")
@@ -83,23 +99,53 @@ def get_matching_region_ids(region_name: str) -> set:
     return matching_region
 
 
-def init_oggm(region_name: str, **oggm_params) -> None:
-    """Initialise OGGM run parameters."""
-    cfg.initialize(logging_level="WORKFLOW")
-    cfg.PARAMS["border"] = 80
-    WORKING_DIR = utils.gettempdir(f"OGGM_{region_name}")
-    utils.mkdir(WORKING_DIR, reset=True)
-    cfg.PATHS["working_dir"] = WORKING_DIR
+def set_oggm_kwargs(oggm_params: dict) -> None:
+    """Set OGGM configuration parameters.
+
+    .. note:: This may eventually be moved to ``api.internal._parse_oggm``.
+
+    Parameters
+    ----------
+    oggm_params : dict
+        Key/value pairs corresponding to valid OGGM configuration
+        parameters.
+    """
+
     valid_keys = cfg.PARAMS.keys()
     for key, value in oggm_params.items():
         if key in valid_keys:
             cfg.PARAMS[key] = value
-    # if use_multiprocessing:
-    #     cfg.PARAMS["use_multiprocessing"] = True
+
+
+def init_oggm(dirname: str, **oggm_params) -> None:
+    """Initialise OGGM run parameters.
+
+    TODO: Add kwargs for cfg.PATH.
+
+    Parameters
+    ----------
+    dirname : str
+        Name of temporary directory
+
+    """
+
+    cfg.initialize(logging_level="WORKFLOW")
+    cfg.PARAMS["border"] = 80
+    WORKING_DIR = utils.gettempdir(dirname)  # already handles empty strings
+    utils.mkdir(WORKING_DIR, reset=True)  # TODO: this should be an API parameter
+    cfg.PATHS["working_dir"] = WORKING_DIR
+
+    set_oggm_kwargs(oggm_params=oggm_params)
 
 
 def get_rgi_metadata(path: str = "") -> list:
-    """Get RGI metadata."""
+    """Get RGI metadata.
+
+    Parameters
+    ----------
+    path : str
+        Path to database with region names and O1/O2 region IDs.
+    """
 
     if not path:  # fallback to sample-data
         path = utils.get_demo_file("rgi_subregions_V6.csv")
@@ -113,13 +159,15 @@ def get_rgi_metadata(path: str = "") -> list:
     return metadata
 
 
-def get_rgi_file(region_name: str) -> list:
+def get_rgi_file(region_name: str, version_number: str = "61") -> list:
     """Get RGI shapefile from a region name.
 
     Parameters
     ----------
     region_name : str
         Name of region.
+    version_number : str
+        RGI version number ("61", "62", "70G", "70C" etc.)
 
     Returns
     -------
@@ -127,32 +175,43 @@ def get_rgi_file(region_name: str) -> list:
     """
 
     rgi_ids = get_rgi_id(region_name=region_name)
-    # rgi_version, rgi_region = rgi_ids
     rgi_files = []
     for ids in rgi_ids:
-        path = utils.get_rgi_region_file(ids[0], version="61")
-        # path = utils.get_rgi_region_file(rgi_region, version=rgi_version)
+        path = utils.get_rgi_region_file(ids[0], version=version_number)
         rgi_files.append(gpd.read_file(path))
 
     return rgi_files
 
 
-def get_rgi_from_shapefile(path: str) -> gpd.GeoDataFrame:
-    """Get shapefile from user path."""
+def get_shapefile(path: str) -> gpd.GeoDataFrame:
+    """Get shapefile from user path.
+
+    Parameters
+    ----------
+    path : str
+        Path to shapefile.
+    """
+
+    shapefile = gpd.read_file(path)
+    return shapefile
+
+
+def get_shapefile_from_web(shapefile_name: str) -> gpd.GeoDataFrame:
+    """Placeholder for getting shapefiles from an online repository.
+
+    Parameters
+    ----------
+    shapefile_name : str
+        Name of file in ``oggm-sample-data`` repository.
+    """
+
+    path = utils.get_demo_file(shapefile_name)
     shapefile = gpd.read_file(path)
 
     return shapefile
 
 
-def get_rgi_basin_file(subregion_name: str) -> gpd.GeoDataFrame:
-    """Placeholder for getting shapefiles from DTCG database."""
-    path = utils.get_demo_file(f"{subregion_name.lower()}_hydrosheds.shp")
-    basin_file = gpd.read_file(path)
-
-    return basin_file
-
-
-def get_glaciers_in_subregion(region, subregion):
+def get_glaciers_in_subregion(region, subregion) -> gpd.GeoDataFrame:
     """Get only the glaciers in a given subregion.
 
     Parameters
@@ -167,6 +226,7 @@ def get_glaciers_in_subregion(region, subregion):
     gpd.GeoDataFrame
         Only glaciers inside the given subregion.
     """
+
     subregion_mask = [
         subregion.geometry.contains(shpg.Point(x, y))[0]
         for (x, y) in zip(region.CenLon, region.CenLat)
@@ -177,17 +237,21 @@ def get_glaciers_in_subregion(region, subregion):
     return region
 
 
-def get_glacier_directories(glaciers: gpd.GeoDataFrame):
+def get_glacier_directories(glaciers: list):
     """
 
     Returns
     -------
-    gdirs : List of :py:class:`oggm.GlacierDirectory` objects for the
+    gdirs : list
+        List of :py:class:`oggm.GlacierDirectory` objects for the
         initialised glacier directories.
     """
 
     gdirs = workflow.init_glacier_directories(
-        glaciers, from_prepro_level=4, prepro_base_url=DEFAULT_BASE_URL
+        glaciers,
+        from_prepro_level=4,
+        prepro_border=80,
+        prepro_base_url=DEFAULT_BASE_URL,
     )
 
     return gdirs
@@ -203,11 +267,11 @@ def get_user_subregion(region_name: str, shapefile_path: str = None, **oggm_para
     This should be called via gateway.
     """
 
-    init_oggm(region_name=region_name, **oggm_params)
+    init_oggm(dirname=f"OGGM_{region_name}", **oggm_params)
 
     region_file = get_rgi_file(region_name=region_name)[0]
     if shapefile_path:  # if user uploads/selects a shapefile
-        user_shapefile = get_rgi_from_shapefile(subregion_name=region_name)
+        user_shapefile = get_shapefile(path=shapefile_path)
         region_file = get_glaciers_in_subregion(
             region=region_file, subregion=user_shapefile
         )

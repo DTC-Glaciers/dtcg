@@ -14,17 +14,17 @@ limitations under the License.
 
 """
 
+import itertools
 import logging
 
 import pytest
 
-import itertools
-
 logger = logging.getLogger(__name__)
+import csv
+
 import geopandas as gpd
 import numpy as np
-import csv
-from oggm import cfg, utils
+from oggm import GlacierDirectory, cfg, utils
 
 import dtcg.integration.oggm_bindings as integration_ob
 
@@ -32,6 +32,31 @@ pytest_plugins = "oggm.tests.conftest"
 
 
 class TestOGGMBindings:
+    """Tests OGGM bindings for API queries."""
+
+    # Fixtures
+    def _get_sample_region_file(
+        self, rgi_region: str = "11", rgi_version: str = "61", reset: bool = False
+    ):
+        """Get a sample region file."""
+
+        sample_gdirs = gpd.read_file(
+            utils.get_rgi_region_file(rgi_region, version=rgi_version, reset=reset)
+        )
+
+        return sample_gdirs
+
+    def test_get_sample_region_file(self):
+        rgi_file = self._get_sample_region_file(
+            rgi_region="11", rgi_version="61", reset=False
+        )
+
+        assert isinstance(rgi_file, gpd.GeoDataFrame)
+        assert (rgi_file["O1Region"] == "11").all()
+
+    @pytest.fixture(name="sample_region_file", scope="function", autouse=False)
+    def fixture_get_sample_region_file(self):
+        return self._get_sample_region_file()
 
     def test_get_rgi_metadata(self):
         metadata = integration_ob.get_rgi_metadata()
@@ -84,22 +109,24 @@ class TestOGGMBindings:
             assert not frame["RGIId"].empty
             assert (frame["O1Region"] == "11").all()
 
-    def test_get_rgi_basin_file(self, class_case_dir):
+    def test_get_shapefile_from_web(self, class_case_dir):
         cfg.initialize()
         cfg.PATHS["working_dir"] = class_case_dir
 
-        compare_file = integration_ob.get_rgi_basin_file(subregion_name="rofental")
+        compare_file = integration_ob.get_shapefile_from_web(
+            shapefile_name="rofental_hydrosheds.shp"
+        )
 
         assert isinstance(compare_file, gpd.GeoDataFrame)
         assert not compare_file.empty
         assert not compare_file["geometry"].empty
         assert (compare_file["HYBAS_ID"] == 2120509820).all()
 
-    def test_get_glaciers_in_subregion(self, class_case_dir):
+    def test_get_glaciers_in_subregion(self, class_case_dir, sample_region_file):
         cfg.initialize()
         cfg.PATHS["working_dir"] = class_case_dir
+        region = sample_region_file
 
-        region = gpd.read_file(utils.get_rgi_region_file("11", version="61"))
         subregion = gpd.read_file(utils.get_demo_file("rofental_hydrosheds.shp"))
         compare_file = integration_ob.get_glaciers_in_subregion(
             region=region, subregion=subregion
