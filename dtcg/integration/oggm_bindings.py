@@ -159,15 +159,13 @@ def get_rgi_metadata(path: str = "") -> list:
     return metadata
 
 
-def get_rgi_file(region_name: str, version_number: str = "61") -> list:
+def get_rgi_file(region_name: str) -> list:
     """Get RGI shapefile from a region name.
 
     Parameters
     ----------
     region_name : str
         Name of region.
-    version_number : str
-        RGI version number ("61", "62", "70G", "70C" etc.)
 
     Returns
     -------
@@ -177,7 +175,7 @@ def get_rgi_file(region_name: str, version_number: str = "61") -> list:
     rgi_ids = get_rgi_id(region_name=region_name)
     rgi_files = []
     for ids in rgi_ids:
-        path = utils.get_rgi_region_file(ids[0], version=version_number)
+        path = utils.get_rgi_region_file(ids[0])
         rgi_files.append(gpd.read_file(path))
 
     return rgi_files
