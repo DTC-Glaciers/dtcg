@@ -51,6 +51,9 @@ class RequestAPIConstructor:
         else:
             self.oggm_params = {}
 
+    def get_query(self) -> dict:
+        return self.__dict__
+
 
 def _set_user_query(query: str, **kwargs) -> RequestAPIConstructor:
     """Create a user query."""

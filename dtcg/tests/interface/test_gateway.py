@@ -16,14 +16,7 @@ limitations under the License.
 
 import logging
 
-import pytest
-
-import itertools
-
 logger = logging.getLogger(__name__)
-import geopandas as gpd
-import numpy as np
-from oggm import cfg, utils
 
 import dtcg.interface.gateway as interface_gateway
 
