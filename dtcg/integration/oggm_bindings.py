@@ -30,20 +30,20 @@ from oggm import DEFAULT_BASE_URL, cfg, graphics, utils, workflow
 DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
 
 
-def get_rgi_id(region_name: str) -> tuple:
-    """Get RGI ID from a region/subregion name.
+def get_rgi_region_codes(region_name: str) -> tuple:
+    """Get RGI region and subregion codes from a subregion name.
 
     This can be replaced with OGGM backend if available.
 
     Parameters
     ----------
     region_name : str
-        name of region called by user.
+        Name of subregion called by user.
 
     Returns
     -------
     tuple[str]
-        RGI version and region ID.
+        RGI region (O1) and subregion (O2) codes.
 
     Raises
     ------
@@ -54,17 +54,17 @@ def get_rgi_id(region_name: str) -> tuple:
     """
 
     try:
-        rgi_ids = get_matching_region_ids(region_name=region_name)
+        rgi_codes = get_matching_region_codes(region_name=region_name)
     except KeyError as e:
         raise KeyError(f"{region_name} region not found.")
     except (TypeError, AttributeError) as e:
         raise TypeError(f"{region_name} is not a string.")
 
-    return rgi_ids
+    return rgi_codes
 
 
-def get_matching_region_ids(region_name: str) -> set:
-    """Get the region ID matching a given name.
+def get_matching_region_codes(region_name: str) -> set:
+    """Get region and subregion codes matching a given name.
 
     TODO: Fuzzy-finding
 
@@ -76,7 +76,8 @@ def get_matching_region_ids(region_name: str) -> set:
     Returns
     -------
     set[str]
-        All IDs matching the given region's name.
+        All pairs of region and subregion codes matching the given
+        region's name.
 
     Raises
     ------
@@ -91,8 +92,8 @@ def get_matching_region_ids(region_name: str) -> set:
     matching_region = set()
     for row in region_db:
         if region_name.lower() in row["Full_name"].lower():
-            id = (row["O1"].zfill(2), row["O2"].zfill(2))
-            matching_region.add(id)
+            region_codes = (row["O1"].zfill(2), row["O2"].zfill(2))
+            matching_region.add(region_codes)
     if not matching_region:
         raise KeyError(f"{region_name} region not found.")
 
@@ -144,7 +145,7 @@ def get_rgi_metadata(path: str = "") -> list:
     Parameters
     ----------
     path : str
-        Path to database with region names and O1/O2 region IDs.
+        Path to database with subregion names and O1/O2 codes.
     """
 
     if not path:  # fallback to sample-data
@@ -165,17 +166,17 @@ def get_rgi_file(region_name: str) -> list:
     Parameters
     ----------
     region_name : str
-        Name of region.
+        Name of region or subregion.
 
     Returns
     -------
         List of RGI shapefiles.
     """
 
-    rgi_ids = get_rgi_id(region_name=region_name)
+    rgi_region_codes = get_rgi_region_codes(region_name=region_name)
     rgi_files = []
-    for ids in rgi_ids:
-        path = utils.get_rgi_region_file(ids[0])
+    for codes in rgi_region_codes:
+        path = utils.get_rgi_region_file(codes[0])
         rgi_files.append(gpd.read_file(path))
 
     return rgi_files
