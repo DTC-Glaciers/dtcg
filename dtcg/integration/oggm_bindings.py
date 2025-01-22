@@ -30,14 +30,14 @@ from oggm import DEFAULT_BASE_URL, cfg, graphics, utils, workflow
 DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
 
 
-def get_rgi_region_codes(region_name: str) -> tuple:
+def get_rgi_region_codes(subregion_name: str) -> tuple:
     """Get RGI region and subregion codes from a subregion name.
 
     This can be replaced with OGGM backend if available.
 
     Parameters
     ----------
-    region_name : str
+    subregion_name : str
         Name of subregion called by user.
 
     Returns
@@ -48,54 +48,56 @@ def get_rgi_region_codes(region_name: str) -> tuple:
     Raises
     ------
     KeyError
-        If the region name is not available.
+        If the subregion name is not available.
     TypeError
-        If region name is not a string.
+        If subregion name is not a string.
     """
 
     try:
-        rgi_codes = get_matching_region_codes(region_name=region_name)
+        rgi_codes = get_matching_region_codes(subregion_name=subregion_name)
     except KeyError as e:
-        raise KeyError(f"{region_name} region not found.")
+        raise KeyError(f"{subregion_name} subregion not found.")
     except (TypeError, AttributeError) as e:
-        raise TypeError(f"{region_name} is not a string.")
+        raise TypeError(f"{subregion_name} is not a string.")
 
     return rgi_codes
 
 
-def get_matching_region_codes(region_name: str) -> set:
-    """Get region and subregion codes matching a given name.
+def get_matching_region_codes(subregion_name: str) -> set:
+    """Get region and subregion codes matching a given subregion name.
 
     TODO: Fuzzy-finding
 
     Parameters
     ----------
-    region_name : str
-        The full name of a region.
+    subregion_name : str
+        The full name of a subregion.
 
     Returns
     -------
     set[str]
         All pairs of region and subregion codes matching the given
-        region's name.
+        subregion's name.
 
     Raises
     ------
     KeyError
-        If the region name is not found.
+        If the subregion name is not found.
     """
 
-    if not region_name:
-        raise KeyError(f"{region_name} region not found.")
+    if not subregion_name:
+        raise KeyError(f"{subregion_name} subregion not found.")
 
     region_db = get_rgi_metadata()
     matching_region = set()
     for row in region_db:
-        if region_name.lower() in row["Full_name"].lower():
-            region_codes = (row["O1"].zfill(2), row["O2"].zfill(2))
+        if subregion_name.lower() in row["Full_name"].lower():
+            region_codes = (row["O1"], row["O2"])
+            # zfill should be applied only when using utils.parse_rgi_meta
+            # region_codes = (row["O1"].zfill(2), row["O2"].zfill(2))
             matching_region.add(region_codes)
     if not matching_region:
-        raise KeyError(f"{region_name} region not found.")
+        raise KeyError(f"{subregion_name} subregion not found.")
 
     return matching_region
 
@@ -142,6 +144,8 @@ def init_oggm(dirname: str, **oggm_params) -> None:
 def get_rgi_metadata(path: str = "") -> list:
     """Get RGI metadata.
 
+    TODO: Replace with call to ``oggm.utils.parse_rgi_meta``.
+
     Parameters
     ----------
     path : str
@@ -160,25 +164,34 @@ def get_rgi_metadata(path: str = "") -> list:
     return metadata
 
 
-def get_rgi_file(region_name: str) -> list:
-    """Get RGI shapefile from a region name.
+def get_rgi_files_from_subregion(subregion_name: str) -> list:
+    """Get RGI shapefile from a subregion name.
 
     Parameters
     ----------
-    region_name : str
-        Name of region or subregion.
+    subregion_name : str
+        Name of subregion.
 
     Returns
     -------
         List of RGI shapefiles.
+
+    Raises
+    ------
+    KeyError
+        If no glaciers are found for the given subregion.
     """
 
-    rgi_region_codes = get_rgi_region_codes(region_name=region_name)
+    rgi_region_codes = get_rgi_region_codes(subregion_name=subregion_name)
     rgi_files = []
     for codes in rgi_region_codes:
-        path = utils.get_rgi_region_file(codes[0])
-        rgi_files.append(gpd.read_file(path))
-
+        path = utils.get_rgi_region_file(region=codes[0])
+        candidate = gpd.read_file(path)
+        rgi_files.append(candidate[candidate["O2Region"] == codes[1]])
+    try:
+        rgi_files = rgi_files[0]
+    except KeyError as e:
+        raise KeyError(f"No glaciers found for {subregion_name}.")
     return rgi_files
 
 
@@ -260,19 +273,20 @@ def plot_glacier_domain(gdirs):
     graphics.plot_domain(gdirs, figsize=(6, 5))
 
 
-def get_user_subregion(region_name: str, shapefile_path: str = None, **oggm_params):
+def get_user_subregion(subregion_name: str, shapefile_path: str = None, **oggm_params):
     """Get user-selected subregion.
 
     This should be called via gateway.
     """
 
-    init_oggm(dirname=f"OGGM_{region_name}", **oggm_params)
+    init_oggm(dirname=f"OGGM_{subregion_name}", **oggm_params)
 
-    region_file = get_rgi_file(region_name=region_name)[0]
+    subregion_file = get_rgi_files_from_subregion(subregion_name=subregion_name)
+    assert shapefile_path is None
     if shapefile_path:  # if user uploads/selects a shapefile
         user_shapefile = get_shapefile(path=shapefile_path)
-        region_file = get_glaciers_in_subregion(
-            region=region_file, subregion=user_shapefile
+        subregion_file = get_glaciers_in_subregion(
+            region=subregion_file, subregion=user_shapefile
         )
 
-    return region_file
+    return subregion_file

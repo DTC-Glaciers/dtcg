@@ -65,7 +65,7 @@ class TestOGGMBindings:
 
     @pytest.mark.parametrize("arg_name", ["alps", "Alps"])
     def test_get_rgi_region_codes(self, arg_name):
-        region_codes = integration_ob.get_rgi_region_codes(region_name=arg_name)
+        region_codes = integration_ob.get_rgi_region_codes(subregion_name=arg_name)
         assert isinstance(region_codes, set)
         assert all(isinstance(i, tuple) for i in region_codes)
         assert all(
@@ -74,43 +74,48 @@ class TestOGGMBindings:
 
     @pytest.mark.parametrize("arg_name", ["alps", "Alps"])
     def test_get_matching_region_codes(self, arg_name):
-        compare_region = integration_ob.get_matching_region_codes(region_name=arg_name)
+        compare_region = integration_ob.get_matching_region_codes(
+            subregion_name=arg_name
+        )
 
         assert isinstance(compare_region, set)
         for element in itertools.chain.from_iterable(compare_region):
             assert isinstance(element, str)
-            assert len(element) == 2
+            # assert len(element) == 2
         for codes in compare_region:
             assert codes[0] == "11"
-            assert codes[1] == "01"
+            assert codes[1] == "1"
 
     @pytest.mark.parametrize("arg_name", ["Illegal name", ""])
     def test_get_matching_region_codes_missing(self, arg_name):
-        msg = f"{arg_name} region not found"
+        msg = f"{arg_name} subregion not found"
 
         with pytest.raises((KeyError, TypeError, AttributeError), match=msg) as excinfo:
-            integration_ob.get_matching_region_codes(region_name=arg_name)
+            integration_ob.get_matching_region_codes(subregion_name=arg_name)
         assert str(arg_name) in str(excinfo.value)
 
     @pytest.mark.parametrize("arg_name", ["Illegal name", "", None])
     def test_get_rgi_region_codes_missing_key(self, arg_name):
         with pytest.raises((KeyError, TypeError)) as excinfo:
-            integration_ob.get_rgi_region_codes(region_name=arg_name)
+            integration_ob.get_rgi_region_codes(subregion_name=arg_name)
         assert str(arg_name) in str(excinfo.value)
 
-    def test_get_rgi_file(self, class_case_dir):
+    def test_get_rgi_files_from_subregion(self, class_case_dir):
 
         cfg.initialize()
         cfg.PATHS["working_dir"] = class_case_dir
 
-        compare_files = integration_ob.get_rgi_file(region_name="Alps")
+        compare_files = integration_ob.get_rgi_files_from_subregion(
+            subregion_name="Alps"
+        )
 
-        assert isinstance(compare_files, list)
-        for frame in compare_files:
-            assert isinstance(frame, gpd.GeoDataFrame)
-            assert not frame.empty
-            assert not frame["RGIId"].empty
-            assert (frame["O1Region"] == "11").all()
+        # for frame in compare_files:
+        #     assert isinstance(frame, gpd.GeoDataFrame)
+        assert isinstance(compare_files, gpd.GeoDataFrame)
+        assert not compare_files.empty
+        assert not compare_files["RGIId"].empty
+        assert (compare_files["O1Region"] == "11").all()
+        assert (compare_files["O2Region"] == "1").all()
 
     def test_get_shapefile_from_web(self, class_case_dir):
         cfg.initialize()

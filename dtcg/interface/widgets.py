@@ -39,9 +39,9 @@ class OutputWidget:
         self.out = ipywidgets.widgets.Output(layout=self.layout)
 
 
-class WidgetSelectRegion(OutputWidget):
+class WidgetSelectSubRegion(OutputWidget):
     def __init__(self, *args, **kwargs):
-        super(WidgetSelectRegion, self).__init__(*args, **kwargs)
+        super(WidgetSelectSubRegion, self).__init__(*args, **kwargs)
         self.layout = {
             "border": "1px solid black",
             "width": "50%",
@@ -50,22 +50,22 @@ class WidgetSelectRegion(OutputWidget):
             "justify_content": "space-between",
             "align_items": "stretch",
         }
-        self.query = {"query": "select_region"}
+        self.query = {"query": "select_subregion"}
         self.out = ipywidgets.widgets.Output(layout=self.layout)
 
-        self.dropdown_region = self.get_dropdown_region()
+        self.dropdown_subregion = self.get_dropdown_subregion()
         self.multiprocessing_checkbox = self.get_multiprocessing_checkbox()
         self.result = self.get_result_widget()
 
     # @classmethod
-    def get_dropdown_region(self):
-        self.dropdown_region = ipywidgets.widgets.Dropdown(
+    def get_dropdown_subregion(self):
+        self.dropdown_subregion = ipywidgets.widgets.Dropdown(
             options=["Alps", "Karakaoram", "Southern and Eastern Europe"],
             value="Alps",
             description="Subregion:",
             disabled=False,
         )
-        return self.dropdown_region
+        return self.dropdown_subregion
 
     # @classmethod
     def get_multiprocessing_checkbox(self):
@@ -91,8 +91,8 @@ class WidgetSelectRegion(OutputWidget):
 
     def gen_query(self, _):
         query_params = {
-            "query": "select_region",
-            "region_name": self.dropdown_region.value,
+            "query": "select_subregion",
+            "subregion_name": self.dropdown_subregion.value,
             "oggm_params": {
                 "use_multiprocessing": self.checkbox_multiprocessing.value,
                 "rgi_version": "62",
@@ -103,14 +103,14 @@ class WidgetSelectRegion(OutputWidget):
 
     # @classmethod
     def get_output(self):
-        self.dropdown_region.observe(self.gen_query)
+        self.dropdown_subregion.observe(self.gen_query)
         self.checkbox_multiprocessing.observe(self.gen_query)
         # self.query = self.result.observe(self.gen_query)
 
         combi_widget = ipywidgets.widgets.VBox(
             [
                 ipywidgets.widgets.HBox(
-                    [self.dropdown_region, self.checkbox_multiprocessing]
+                    [self.dropdown_subregion, self.checkbox_multiprocessing]
                 ),
                 self.result,
             ]

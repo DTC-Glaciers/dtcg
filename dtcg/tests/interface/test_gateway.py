@@ -24,7 +24,7 @@ pytest_plugins = "oggm.tests.conftest"
 
 
 class TestOGGMRequestAPIConstructor:
-    attributes = ["query", "region_name", "shapefile_path"]
+    attributes = ["query", "subregion_name", "shapefile_path"]
 
     def test_init_RequestAPIConstructor(self):
         test_constructor = interface_gateway.RequestAPIConstructor(query="test_action")
@@ -37,7 +37,7 @@ class TestOGGMRequestAPIConstructor:
 
 class TestOGGMGateway:
 
-    attributes = ["query", "region_name", "shapefile_path"]
+    attributes = ["query", "subregion_name", "shapefile_path"]
 
     def test_set_user_query(self):
         test_query = interface_gateway._set_user_query(query="test_action")
@@ -48,11 +48,11 @@ class TestOGGMGateway:
         assert test_query.query == "test_action"
 
     def test_set_user_query_kwargs(self):
-        kwargs = {"query": "test_action", "region_name": "Alps"}
+        kwargs = {"query": "test_action", "subregion_name": "Alps"}
         test_query = interface_gateway._set_user_query(**kwargs)
 
         for attribute_name in self.attributes:
             assert attribute_name in test_query.__dict__
         assert test_query.query == "test_action"
-        assert test_query.region_name == "Alps"
+        assert test_query.subregion_name == "Alps"
         assert test_query.shapefile_path is None

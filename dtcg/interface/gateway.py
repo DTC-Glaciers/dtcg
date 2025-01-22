@@ -32,6 +32,8 @@ class RequestAPIConstructor:
         The type of query desired by the user.
     region_name : str
         The region selected by the user. Default None.
+    subregion_name : str
+        The subregion selected by the user. Default None.
     shapefile_path : str
         Path to a shapefile selected/uploaded by the user. Default None.
     """
@@ -40,11 +42,13 @@ class RequestAPIConstructor:
         self,
         query: str,
         region_name: str = None,
+        subregion_name: str = None,
         shapefile_path: str = None,
         oggm_params: dict = None,
     ):
         self.query = query
         self.region_name = region_name
+        self.subregion_name = subregion_name
         self.shapefile_path = shapefile_path
         if oggm_params:
             self.oggm_params = oggm_params
@@ -78,9 +82,9 @@ def _get_query_handler(query: RequestAPIConstructor) -> dict:
     """
 
     # Currently we link directly to the bindings until the internal API is set up (dtcg.api)
-    if query.query == "select_region":
+    if query.query == "select_subregion":
         data = oggm_bindings.get_user_subregion(
-            region_name=query.region_name,
+            subregion_name=query.subregion_name,
             shapefile_path=query.shapefile_path,
             **query.oggm_params,
         )
