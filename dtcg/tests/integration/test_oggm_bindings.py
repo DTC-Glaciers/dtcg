@@ -58,7 +58,7 @@ class TestOGGMBindings:
         return self._get_sample_region_file()
 
     def test_get_rgi_metadata(self):
-        metadata = integration_ob.get_rgi_metadata()
+        metadata = integration_ob.get_rgi_metadata(from_web=True)
         assert isinstance(metadata, list)
         for row in metadata:
             assert isinstance(row, dict)
@@ -86,19 +86,20 @@ class TestOGGMBindings:
             assert codes[0] == "11"
             assert codes[1] == "1"
 
-    @pytest.mark.parametrize("arg_name", ["Illegal name", ""])
+    @pytest.mark.parametrize("arg_name", ["Illegal name"])
     def test_get_matching_region_codes_missing(self, arg_name):
-        msg = f"{arg_name} subregion not found"
+        msg = f"No region found for {arg_name}"
 
         with pytest.raises((KeyError, TypeError, AttributeError), match=msg) as excinfo:
             integration_ob.get_matching_region_codes(subregion_name=arg_name)
         assert str(arg_name) in str(excinfo.value)
 
-    @pytest.mark.parametrize("arg_name", ["Illegal name", "", None])
-    def test_get_rgi_region_codes_missing_key(self, arg_name):
-        with pytest.raises((KeyError, TypeError)) as excinfo:
+    @pytest.mark.parametrize("arg_name", ["", None])
+    def test_get_rgi_region_codes_incorrect_type(self, arg_name):
+        msg = "No valid region or subregion name supplied."
+        with pytest.raises((ValueError), match=msg) as excinfo:
             integration_ob.get_rgi_region_codes(subregion_name=arg_name)
-        assert str(arg_name) in str(excinfo.value)
+        # assert str(arg_name) in str(excinfo.value)
 
     def test_get_rgi_files_from_subregion(self, class_case_dir):
 

@@ -84,6 +84,7 @@ def _get_query_handler(query: RequestAPIConstructor) -> dict:
     # Currently we link directly to the bindings until the internal API is set up (dtcg.api)
     if query.query == "select_subregion":
         data = oggm_bindings.get_user_subregion(
+            region_name=query.region_name,
             subregion_name=query.subregion_name,
             shapefile_path=query.shapefile_path,
             **query.oggm_params,
