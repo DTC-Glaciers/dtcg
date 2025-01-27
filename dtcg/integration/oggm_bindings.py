@@ -26,16 +26,14 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import shapely.geometry as shpg
-from oggm import DEFAULT_BASE_URL, cfg, graphics, utils, workflow
+import xarray as xr
+from oggm import DEFAULT_BASE_URL, cfg, graphics, tasks, utils, workflow
 
 # TODO: Link to DTCG instead.
 DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
-
 SHAPEFILE_PATH = (
-    Path("./ext/data/nested_catchments_oetztal").readlink()
-    / "nested_catchments_oetztal.shx"
+    "https://cluster.klima.uni-bremen.de/~dtcg/test_files/case_study_regions/austria"
 )
-SHAPEFILE_PATH = str(SHAPEFILE_PATH)
 
 
 def get_rgi_region_codes(region_name: str = "", subregion_name: str = "") -> tuple:
@@ -265,6 +263,15 @@ def get_shapefile_from_web(shapefile_name: str) -> gpd.GeoDataFrame:
     return shapefile
 
 
+def set_subregion_constraints(region, subregion, subregion_name: str = ""):
+    if region.crs != subregion.crs:
+        subregion = subregion.to_crs(region.crs)
+
+    if subregion_name:
+        subregion = subregion[subregion["id"] == subregion_name]
+    return subregion
+
+
 def get_glaciers_in_subregion(
     region, subregion, subregion_name: str = ""
 ) -> gpd.GeoDataFrame:
@@ -282,11 +289,6 @@ def get_glaciers_in_subregion(
     gpd.GeoDataFrame
         Only glaciers inside the given subregion.
     """
-    if region.crs != subregion.crs:
-        subregion = subregion.to_crs(region.crs)
-
-    if subregion_name:
-        subregion = subregion[subregion["id"] == subregion_name]
 
     # frame indices are fixed, so index by location instead
     subregion_mask = [
@@ -374,6 +376,103 @@ def plot_glacier_domain(gdirs):
     graphics.plot_domain(gdirs, figsize=(6, 5))
 
 
+def get_gdir_by_name(data: list, name: str):
+    rgi_ids = get_glacier_by_name(data=data, name=name)
+    gdirs = workflow.init_glacier_directories(
+        rgi_ids,
+        from_prepro_level=5,
+        prepro_border=160,
+        prepro_base_url="https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup",
+    )
+    return gdirs[0]
+
+
+def get_glacier_by_name(data, name: str) -> gpd.GeoDataFrame:
+    glacier = data[data["Name"] == name]
+    if glacier.empty:  # fallback in case of RGI ID
+        glacier = get_glacier_by_rgi_id(data=data, rgi_id=name)
+    return glacier
+
+
+def get_glacier_by_rgi_id(data, rgi_id: str) -> gpd.GeoDataFrame:
+    glacier = data[data["RGIId"] == rgi_id]
+    if glacier.empty:
+        raise KeyError(f"{rgi_id} not found.")
+    return glacier
+
+
+def get_named_glaciers(glaciers) -> gpd.GeoDataFrame:
+    return glaciers.dropna(subset="Name")
+
+
+def get_hydro_climatology(gdir, nyears: int = 20) -> xr.Dataset:
+    tasks.run_with_hydro(
+        gdir,
+        run_task=tasks.run_constant_climate,
+        nyears=20,
+        y0=2014,
+        halfsize=5,
+        init_model_filesuffix="_spinup_historical",
+        store_monthly_hydro=True,
+        output_filesuffix="_ct",
+    )
+    with xr.open_dataset(
+        gdir.get_filepath("model_diagnostics", filesuffix="_ct")
+    ) as ds:
+        ds = ds.isel(time=slice(0, -1)).load()
+    return ds
+
+
+def get_annual_runoff(ds: xr.Dataset):
+    sel_vars = [v for v in ds.variables if "month_2d" not in ds[v].dims]
+    df_annual = ds[sel_vars].to_dataframe()
+    runoff_vars = [
+        "melt_off_glacier",
+        "melt_on_glacier",
+        "liq_prcp_off_glacier",
+        "liq_prcp_on_glacier",
+    ]
+    df_runoff = df_annual[runoff_vars] * 1e-9
+    return df_runoff
+
+
+def get_min_max_runoff_years(annual_runoff: pd.Series) -> tuple:
+    runoff = annual_runoff.sum(axis=1)
+    runoff_year_min = int(runoff.idxmin())
+    runoff_year_max = int(runoff.idxmax())
+    return runoff_year_min, runoff_year_max
+
+
+def get_monthly_runoff(ds: xr.Dataset):
+    monthly_runoff = (
+        ds["melt_off_glacier_monthly"]
+        + ds["melt_on_glacier_monthly"]
+        + ds["liq_prcp_off_glacier_monthly"]
+        + ds["liq_prcp_on_glacier_monthly"]
+    )
+    monthly_runoff *= 1e-9
+    return monthly_runoff
+
+
+def get_climatology(data, name: str = ""):
+    glacier = get_gdir_by_name(data=data, name=name)
+    climatology = get_hydro_climatology(gdir=glacier)
+    return climatology
+
+
+def get_runoff(data: xr.Dataset) -> tuple:
+    annual_runoff = get_annual_runoff(ds=data)
+    min_year, max_year = get_min_max_runoff_years(annual_runoff=annual_runoff)
+    monthly_runoff = get_monthly_runoff(ds=data)
+    runoff_data = {
+        "annual_runoff": annual_runoff,
+        "monthly_runoff": monthly_runoff,
+        "runoff_year_min": min_year,
+        "runoff_year_max": max_year,
+    }
+    return runoff_data
+
+
 def get_user_subregion(
     region_name: str = "",
     subregion_name: str = "",
@@ -395,10 +494,12 @@ def get_user_subregion(
     init_oggm(dirname=temp_name, **oggm_params)
 
     if shapefile_path:  # if user uploads/selects a shapefile
+        shapefile_path = f"{SHAPEFILE_PATH}/{shapefile_path}"
         rgi_file = get_rgi_files_from_subregion(region_name=region_name)
         user_shapefile = get_shapefile(path=shapefile_path)
-        assert isinstance(user_shapefile, gpd.GeoDataFrame)
-        user_shapefile = set_polygon_overlap(user_shapefile)
+        user_shapefile = set_subregion_constraints(
+            region=rgi_file, subregion=user_shapefile, subregion_name=subregion_name
+        )
         rgi_file = get_glaciers_in_subregion(
             region=rgi_file, subregion=user_shapefile, subregion_name=subregion_name
         )
@@ -407,4 +508,4 @@ def get_user_subregion(
             region_name=region_name, subregion_name=subregion_name
         )
 
-    return rgi_file
+    return {"glacier_data": rgi_file, "shapefile": user_shapefile}
