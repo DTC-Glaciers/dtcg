@@ -20,6 +20,7 @@ through here.
 """
 
 import dtcg.integration.oggm_bindings as oggm_bindings
+import dtcg.interface.plotting as plotting
 
 
 class RequestAPIConstructor:
@@ -43,12 +44,14 @@ class RequestAPIConstructor:
         query: str,
         region_name: str = None,
         subregion_name: str = None,
+        glacier_name: str = None,
         shapefile_path: str = None,
         oggm_params: dict = None,
     ):
         self.query = query
         self.region_name = region_name
         self.subregion_name = subregion_name
+        self.glacier_name = glacier_name
         self.shapefile_path = shapefile_path
         if oggm_params:
             self.oggm_params = oggm_params
@@ -84,11 +87,16 @@ def _get_query_handler(query: RequestAPIConstructor) -> dict:
     # Currently we link directly to the bindings until the internal API is set up (dtcg.api)
     if query.query == "select_subregion":
         data = oggm_bindings.get_user_subregion(
+            region_name=query.region_name,
             subregion_name=query.subregion_name,
             shapefile_path=query.shapefile_path,
             **query.oggm_params,
         )
         response = {"response_code": "200", "data": data}
+        climatology = oggm_bindings.get_climatology(
+            data=response["data"]["glacier_data"], name=query.glacier_name
+        )
+        response["data"]["runoff_data"] = oggm_bindings.get_runoff(data=climatology)
     else:
         response = {"response_code": "422"}
         raise NotImplementedError(f"{query.query} is not yet implemented.")
