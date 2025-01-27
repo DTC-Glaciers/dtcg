@@ -138,7 +138,13 @@ def plot_basin_selection(basin_shapefile, glacier_data, subregion_name: str, ax=
 
 def plot_glacier_highlight(glacier_data, name: str, ax):
     glacier_data[glacier_data["Name"] == name].plot(
-        ax=ax, label=name, color="blue", edgecolor="black", lw=0.3
+        ax=ax,
+        label=name,
+        zorder=7,
+        color="#beacf6",
+        edgecolor="black",
+        lw=0.8,
+        alpha=0.9,
     )
     fig = plt.gcf()
     return fig, ax
@@ -166,4 +172,5 @@ def plot_runoff_dashboard(
         subregion_name=subregion_name,
         ax=axes[0][1],
     )
+    plot_glacier_highlight(glacier_data=response, name=name, ax=axes[0][1])
     return fig, axes
