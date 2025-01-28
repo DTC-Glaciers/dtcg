@@ -82,6 +82,7 @@ exclude = [
     "*.nc",
     "*.bat",
     "*.sh",
+    "*.ipynb",
 ]
 
 [tool.hatch.build.targets.wheel]
