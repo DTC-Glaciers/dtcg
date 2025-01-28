@@ -33,7 +33,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-    "numpy<2.0",
+    "numpy",
     "matplotlib",
     "geopandas"
 ]
