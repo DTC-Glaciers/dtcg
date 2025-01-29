@@ -21,7 +21,9 @@ Plotting utilities for the frontend.
 import matplotlib.pyplot as plt
 import xarray as xr
 from matplotlib.ticker import FormatStrFormatter
+import matplotlib.dates
 import seaborn as sns
+import pandas as pd
 
 
 def get_title(title: str, suffix: str = ""):
@@ -43,15 +45,28 @@ def get_colour_palette(name: str) -> tuple:
     return palettes[name]
 
 
-def plot_annual_runoff(runoff: xr.Dataset, name: str = "", ax=None):
+def set_time_constraint(dataset, nyears: int = 20):
+    if isinstance(dataset, (xr.DataArray, xr.Dataset)):
+        if len(dataset) > nyears:
+            dataset = dataset.isel(time=slice(-nyears, None))
+    elif isinstance(dataset, (pd.DataFrame, pd.Series, list, tuple)):
+        if len(dataset) > nyears:
+            dataset = dataset.iloc[-nyears:]
+    else:
+        raise TypeError(f"{type(dataset)} not supported.")
+
+    return dataset
+
+
+def plot_annual_runoff(runoff: xr.Dataset, name: str = "", nyears=20, ax=None):
     if not ax:
         fig, ax = plt.subplots(figsize=(10, 6))
     else:
         fig = plt.gcf()
     # fig, ax = plt.subplots(figsize=(10, 3.5), sharex=True)
-    runoff = runoff.sum(axis=1)
+    runoff = set_time_constraint(dataset=runoff, nyears=nyears).sum(axis=1)
     ax = runoff.plot(ax=ax)
-    ax.set_ylabel("Mt")
+    ax.set_ylabel("Runoff (Mt)")
     ax.set_xlabel("Years")
     ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
 
@@ -64,6 +79,7 @@ def plot_monthly_runoff(
     runoff: xr.DataArray,
     runoff_year_min: int,
     runoff_year_max: int,
+    nyears: int = 20,
     name: str = "",
     ax=None,
 ):
@@ -71,16 +87,19 @@ def plot_monthly_runoff(
         fig, ax = plt.subplots(figsize=(5, 5))
     else:
         fig = plt.gcf()
+    runoff = set_time_constraint(dataset=runoff, nyears=nyears)
     runoff.sel(time=[runoff_year_max, runoff_year_min]).plot(
         hue="time", label=[runoff_year_max, runoff_year_min], lw=0.8, ax=ax
     )
     mean_runoff = runoff.mean(dim="time")
     mean_runoff.plot(label=["20-yr mean"], color="black", ls="--", lw=0.8, ax=ax)
 
-    title = get_title(title="Annual Cycle", suffix=name)
+    title = get_title(title="Mean Monthly Runoff Cycle", suffix=name)
     ax.set_title(title)
     ax.set_xlabel("Month")
     ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
+    # ax.xaxis.set_major_locator(matplotlib.dates.MonthLocator())
+    # ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b" ))
     ax.legend()
     ax.set_ylabel("Runoff (Mt)")
 
@@ -88,11 +107,15 @@ def plot_monthly_runoff(
     return fig, ax
 
 
-def plot_runoff_partitioning(runoff: xr.DataArray, name: str = "", ax=None):
+def plot_runoff_partitioning(
+    runoff: xr.DataArray, name: str = "", nyears: int = 20, ax=None
+):
     if not ax:
         fig, ax = plt.subplots(figsize=(10, 6))
     else:
         fig = plt.gcf()
+    runoff = set_time_constraint(dataset=runoff, nyears=nyears)
+
     runoff.plot.area(ax=ax, color=sns.color_palette("rocket"))
     ax.set_xlabel("Years")
     ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))

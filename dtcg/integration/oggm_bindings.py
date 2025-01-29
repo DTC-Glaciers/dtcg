@@ -352,7 +352,7 @@ def set_polygon_overlap(frame: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return merge
 
 
-def get_glacier_directories(glaciers: list):
+def get_glacier_directories(glaciers: list, base_url=DEFAULT_BASE_URL):
     """
 
     Returns
@@ -406,18 +406,20 @@ def get_named_glaciers(glaciers) -> gpd.GeoDataFrame:
 
 
 def get_hydro_climatology(gdir, nyears: int = 20) -> xr.Dataset:
-    tasks.run_with_hydro(
-        gdir,
-        run_task=tasks.run_constant_climate,
-        nyears=nyears,
-        y0=2014,
-        halfsize=5,
+    workflow.execute_entity_task(
+        tasks.run_with_hydro,
+        gdir,  # Select the one glacier but actually should be a list
+        run_task=tasks.run_from_climate_data,
         init_model_filesuffix="_spinup_historical",
+        init_model_yr=1979,
+        ref_area_yr=2000,  # Important ! Fixed gauge runoff with ref year 2000
+        ys=1979,
+        ye=2020,
+        output_filesuffix="_spinup_historical_hydro",
         store_monthly_hydro=True,
-        output_filesuffix="_ct",
-    )
+    )[0]
     with xr.open_dataset(
-        gdir.get_filepath("model_diagnostics", filesuffix="_ct")
+        gdir.get_filepath("model_diagnostics", filesuffix="_spinup_historical_hydro")
     ) as ds:
         ds = ds.isel(time=slice(0, -1)).load()
     return ds
@@ -436,20 +438,25 @@ def get_annual_runoff(ds: xr.Dataset):
     return df_runoff
 
 
-def get_min_max_runoff_years(annual_runoff: pd.Series) -> tuple:
+def get_min_max_runoff_years(annual_runoff: pd.Series, nyears=20) -> tuple:
+    if len(annual_runoff) > nyears:
+        annual_runoff = annual_runoff.iloc[-nyears:]
     runoff = annual_runoff.sum(axis=1)
     runoff_year_min = int(runoff.idxmin())
     runoff_year_max = int(runoff.idxmax())
+
     return runoff_year_min, runoff_year_max
 
 
-def get_monthly_runoff(ds: xr.Dataset):
+def get_monthly_runoff(ds: xr.Dataset, nyears=20):
     monthly_runoff = (
         ds["melt_off_glacier_monthly"]
         + ds["melt_on_glacier_monthly"]
         + ds["liq_prcp_off_glacier_monthly"]
         + ds["liq_prcp_on_glacier_monthly"]
     )
+    if len(monthly_runoff > nyears):
+        monthly_runoff = monthly_runoff.isel(time=slice(nyears, None))
     monthly_runoff *= 1e-9
     return monthly_runoff
 
@@ -459,18 +466,17 @@ def get_climatology(data, name: str = ""):
     climatology = get_hydro_climatology(gdir=glacier)
     return climatology
 
-def get_aggregate_runoff(data:gpd.GeoDataFrame)->dict:
+
+def get_aggregate_runoff(data: gpd.GeoDataFrame) -> dict:
     annual_runoff = []
     monthly_runoff = []
     for rgi_id in data["RGIId"]:
-        climatology = get_climatology(
-            data=data, name = rgi_id
-        )
+        climatology = get_climatology(data=data, name=rgi_id)
         annual_runoff.append(get_annual_runoff(ds=climatology))
         monthly_runoff.append(get_monthly_runoff(ds=climatology))
     total_annual_runoff = sum(annual_runoff)
     total_monthly_runoff = sum(monthly_runoff)
-    min_year, max_year =get_min_max_runoff_years(annual_runoff=total_annual_runoff)
+    min_year, max_year = get_min_max_runoff_years(annual_runoff=total_annual_runoff)
     runoff_data = {
         "annual_runoff": total_annual_runoff,
         "monthly_runoff": total_monthly_runoff,
@@ -478,6 +484,7 @@ def get_aggregate_runoff(data:gpd.GeoDataFrame)->dict:
         "runoff_year_max": max_year,
     }
     return runoff_data
+
 
 def get_runoff(data: xr.Dataset) -> dict:
     annual_runoff = get_annual_runoff(ds=data)
