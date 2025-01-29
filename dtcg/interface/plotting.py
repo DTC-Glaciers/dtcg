@@ -53,6 +53,7 @@ def plot_annual_runoff(runoff: xr.Dataset, name: str = "", ax=None):
     ax = runoff.plot(ax=ax)
     ax.set_ylabel("Mt")
     ax.set_xlabel("Years")
+    ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
 
     title = get_title(title="Total Annual Runoff", suffix=name)
     ax.set_title(title)
@@ -77,10 +78,11 @@ def plot_monthly_runoff(
     mean_runoff.plot(label=["20-yr mean"], color="black", ls="--", lw=0.8, ax=ax)
 
     title = get_title(title="Annual Cycle", suffix=name)
-    plt.title(title)
-    plt.xlabel("Month")
-    plt.legend()
-    plt.ylabel("Runoff (Mt)")
+    ax.set_title(title)
+    ax.set_xlabel("Month")
+    ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
+    ax.legend()
+    ax.set_ylabel("Runoff (Mt)")
 
     fig = plt.gcf()
     return fig, ax
@@ -93,6 +95,7 @@ def plot_runoff_partitioning(runoff: xr.DataArray, name: str = "", ax=None):
         fig = plt.gcf()
     runoff.plot.area(ax=ax, color=sns.color_palette("rocket"))
     ax.set_xlabel("Years")
+    ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
     ax.set_ylabel("Runoff (Mt)")
     title = get_title(title="Annual Runoff", suffix=name)
     ax.set_title(title)
@@ -172,5 +175,6 @@ def plot_runoff_dashboard(
         subregion_name=subregion_name,
         ax=axes[0][1],
     )
-    plot_glacier_highlight(glacier_data=response, name=name, ax=axes[0][1])
+    if name:
+        plot_glacier_highlight(glacier_data=response, name=name, ax=axes[0][1])
     return fig, axes
