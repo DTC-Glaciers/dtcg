@@ -93,10 +93,24 @@ def _get_query_handler(query: RequestAPIConstructor) -> dict:
             **query.oggm_params,
         )
         response = {"response_code": "200", "data": data}
-        climatology = oggm_bindings.get_climatology(
-            data=response["data"]["glacier_data"], name=query.glacier_name
+        response["data"]["runoff_data"] = oggm_bindings.get_aggregate_runoff(data=response["data"]["glacier_data"])
+    
+    elif query.query == "select_glacier":
+        data = oggm_bindings.get_user_subregion(
+            region_name=query.region_name,
+            subregion_name=query.subregion_name,
+            shapefile_path=query.shapefile_path,
+            **query.oggm_params,
         )
-        response["data"]["runoff_data"] = oggm_bindings.get_runoff(data=climatology)
+        response = {"response_code": "200", "data": data}
+        if (
+            query.glacier_name
+            in response["data"]["glacier_data"]["Name"].dropna().values
+        ):
+            climatology = oggm_bindings.get_climatology(
+                data=response["data"]["glacier_data"], name=query.glacier_name
+            )
+            response["data"]["runoff_data"] = oggm_bindings.get_runoff(data=climatology)
     else:
         response = {"response_code": "422"}
         raise NotImplementedError(f"{query.query} is not yet implemented.")

@@ -161,7 +161,7 @@ def init_oggm(dirname: str, **oggm_params) -> None:
 
     """
 
-    cfg.initialize(logging_level="WORKFLOW")
+    cfg.initialize(logging_level="CRITICAL")
     cfg.PARAMS["border"] = 80
     WORKING_DIR = utils.gettempdir(dirname)  # already handles empty strings
     utils.mkdir(WORKING_DIR, reset=True)  # TODO: this should be an API parameter
@@ -409,7 +409,7 @@ def get_hydro_climatology(gdir, nyears: int = 20) -> xr.Dataset:
     tasks.run_with_hydro(
         gdir,
         run_task=tasks.run_constant_climate,
-        nyears=20,
+        nyears=nyears,
         y0=2014,
         halfsize=5,
         init_model_filesuffix="_spinup_historical",
@@ -459,8 +459,27 @@ def get_climatology(data, name: str = ""):
     climatology = get_hydro_climatology(gdir=glacier)
     return climatology
 
+def get_aggregate_runoff(data:gpd.GeoDataFrame)->dict:
+    annual_runoff = []
+    monthly_runoff = []
+    for rgi_id in data["RGIId"]:
+        climatology = get_climatology(
+            data=data, name = rgi_id
+        )
+        annual_runoff.append(get_annual_runoff(ds=climatology))
+        monthly_runoff.append(get_monthly_runoff(ds=climatology))
+    total_annual_runoff = sum(annual_runoff)
+    total_monthly_runoff = sum(monthly_runoff)
+    min_year, max_year =get_min_max_runoff_years(annual_runoff=total_annual_runoff)
+    runoff_data = {
+        "annual_runoff": total_annual_runoff,
+        "monthly_runoff": total_monthly_runoff,
+        "runoff_year_min": min_year,
+        "runoff_year_max": max_year,
+    }
+    return runoff_data
 
-def get_runoff(data: xr.Dataset) -> tuple:
+def get_runoff(data: xr.Dataset) -> dict:
     annual_runoff = get_annual_runoff(ds=data)
     min_year, max_year = get_min_max_runoff_years(annual_runoff=annual_runoff)
     monthly_runoff = get_monthly_runoff(ds=data)
