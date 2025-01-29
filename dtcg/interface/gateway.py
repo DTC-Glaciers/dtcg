@@ -93,8 +93,10 @@ def _get_query_handler(query: RequestAPIConstructor) -> dict:
             **query.oggm_params,
         )
         response = {"response_code": "200", "data": data}
-        response["data"]["runoff_data"] = oggm_bindings.get_aggregate_runoff(data=response["data"]["glacier_data"])
-    
+        response["data"]["runoff_data"] = oggm_bindings.get_aggregate_runoff(
+            data=response["data"]["glacier_data"]
+        )
+
     elif query.query == "select_glacier":
         data = oggm_bindings.get_user_subregion(
             region_name=query.region_name,
