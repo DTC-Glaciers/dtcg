@@ -18,15 +18,17 @@ limitations under the License.
 Plotting utilities for the frontend.
 """
 
+import matplotlib.dates
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 import xarray as xr
 from matplotlib.ticker import FormatStrFormatter
-import matplotlib.dates
-import seaborn as sns
-import pandas as pd
 
 
-def get_title(title: str, suffix: str = ""):
+def get_title(title: str, suffix: str = "") -> str:
+    """Get a concatenated title."""
     if suffix:
         title = f"{title} for {suffix}"
     return title
@@ -46,12 +48,16 @@ def get_colour_palette(name: str) -> tuple:
 
 
 def set_time_constraint(dataset, nyears: int = 20):
+    """Set a dataset's time period to a specific number of years."""
     if isinstance(dataset, (xr.DataArray, xr.Dataset)):
         if len(dataset) > nyears:
             dataset = dataset.isel(time=slice(-nyears, None))
     elif isinstance(dataset, (pd.DataFrame, pd.Series, list, tuple)):
         if len(dataset) > nyears:
             dataset = dataset.iloc[-nyears:]
+    elif isinstance(dataset, np.ndarray):
+        if len(dataset) > nyears:
+            dataset = dataset[-nyears:]
     else:
         raise TypeError(f"{type(dataset)} not supported.")
 
@@ -59,19 +65,32 @@ def set_time_constraint(dataset, nyears: int = 20):
 
 
 def plot_annual_runoff(runoff: xr.Dataset, name: str = "", nyears=20, ax=None):
+    """Plot the annual runoff of a glacier or basin.
+
+    Parameters
+    ----------
+    runoff : xr.Dataset
+        Annual runoff data.
+    name : str
+        Glacier or basin name.
+    nyears : int
+        Number of years to plot from present.
+    """
     if not ax:
         fig, ax = plt.subplots(figsize=(10, 6))
     else:
         fig = plt.gcf()
     # fig, ax = plt.subplots(figsize=(10, 3.5), sharex=True)
     runoff = set_time_constraint(dataset=runoff, nyears=nyears).sum(axis=1)
-    ax = runoff.plot(ax=ax)
+    ax = runoff.plot(ax=ax, color="k", lw=0.8)
     ax.set_ylabel("Runoff (Mt)")
     ax.set_xlabel("Years")
     ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
 
     title = get_title(title="Total Annual Runoff", suffix=name)
     ax.set_title(title)
+    ax.margins(x=0)
+
     return fig, ax
 
 
@@ -88,11 +107,18 @@ def plot_monthly_runoff(
     else:
         fig = plt.gcf()
     runoff = set_time_constraint(dataset=runoff, nyears=nyears)
+    cmap = plt.cm.get_cmap("jet_r")(np.linspace(0, 1, 2))
+    ax.set_prop_cycle("color", list(cmap))
     runoff.sel(time=[runoff_year_max, runoff_year_min]).plot(
-        hue="time", label=[runoff_year_max, runoff_year_min], lw=0.8, ax=ax
+        hue="time",
+        label=[f"Maximum: {runoff_year_max}", f"Minimum: {runoff_year_min}"],
+        lw=0.8,
+        ax=ax,
     )
     mean_runoff = runoff.mean(dim="time")
-    mean_runoff.plot(label=["20-yr mean"], color="black", ls="--", lw=0.8, ax=ax)
+    mean_runoff.plot(
+        label=[f"{nyears}-year mean"], color="black", ls="--", lw=0.8, ax=ax
+    )
 
     title = get_title(title="Mean Monthly Runoff Cycle", suffix=name)
     ax.set_title(title)
@@ -102,6 +128,7 @@ def plot_monthly_runoff(
     # ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b" ))
     ax.legend()
     ax.set_ylabel("Runoff (Mt)")
+    ax.margins(x=0)
 
     fig = plt.gcf()
     return fig, ax
@@ -116,13 +143,14 @@ def plot_runoff_partitioning(
         fig = plt.gcf()
     runoff = set_time_constraint(dataset=runoff, nyears=nyears)
 
-    runoff.plot.area(ax=ax, color=sns.color_palette("rocket"))
+    runoff.plot.area(ax=ax, color=sns.color_palette("Paired"))
     ax.set_xlabel("Years")
     ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
     ax.set_ylabel("Runoff (Mt)")
     title = get_title(title="Annual Runoff", suffix=name)
     ax.set_title(title)
-    ax.legend(loc="lower left")
+    ax.margins(x=0)
+    ax.legend(loc="lower left", framealpha=1)
 
     return fig, ax
 
@@ -158,7 +186,7 @@ def plot_basin_selection(basin_shapefile, glacier_data, subregion_name: str, ax=
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f N"))
 
     fig = plt.gcf()
-    fig.suptitle(f"Dashboard for {region_name}")
+    fig.suptitle(f"Dashboard for {region_name}", fontsize=24)
     return fig, ax
 
 
@@ -176,6 +204,31 @@ def plot_glacier_highlight(glacier_data, name: str, ax):
     return fig, ax
 
 
+def plot_mass_balance(
+    mass_balance, observations, ax=None, nyears: int = 20, name: str = ""
+):
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    observations = set_time_constraint(observations, nyears=nyears)
+    mass_balance = set_time_constraint(mass_balance, nyears=nyears)
+    ax.plot(observations.index, mass_balance, label="OGGM", color="r", lw=0.8)
+    ax.plot(
+        observations.ANNUAL_BALANCE / 1000, label="WGMS", color="k", lw=0.8, ls="--"
+    )
+    ax.legend()
+    title = get_title("Specific Mass Balance", name)
+    ax.set_xlabel("Years")
+    ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
+    ax.set_ylabel("Specific Mass Balance (m w.e.)")
+    title = get_title(title="Mass Balance", suffix=name)
+    ax.set_title(title)
+    ax.margins(x=0)
+    ax.legend(loc="lower left", framealpha=1)
+
+    fig = plt.gcf()
+    return fig, ax
+
+
 def plot_runoff_dashboard(
     response,
     subregion_name,
@@ -184,9 +237,22 @@ def plot_runoff_dashboard(
     monthly_runoff,
     min_runoff_year,
     max_runoff_year,
+    observations=None,
+    mass_balance=None,
     name: str = "",
 ):
-    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
+
+    if observations is not None and mass_balance is not None:
+        fig, axes = plt.subplots(3, 2, figsize=(20, 18))
+        plot_mass_balance(
+            mass_balance=mass_balance,
+            observations=observations,
+            ax=axes[2][0],
+            name=name,
+        )
+
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=(20, 12))
     plot_annual_runoff(runoff=annual_runoff, name=name, ax=axes[0][0])
     plot_runoff_partitioning(runoff=annual_runoff, name=name, ax=axes[1][0])
     plot_monthly_runoff(
@@ -199,5 +265,7 @@ def plot_runoff_dashboard(
         ax=axes[0][1],
     )
     if name:
+        fig.suptitle(f"Dashboard for {name}", fontsize=24)
         plot_glacier_highlight(glacier_data=response, name=name, ax=axes[0][1])
+
     return fig, axes

@@ -263,13 +263,35 @@ def get_shapefile_from_web(shapefile_name: str) -> gpd.GeoDataFrame:
     return shapefile
 
 
-def set_subregion_constraints(region, subregion, subregion_name: str = ""):
+def set_subregion_constraints(
+    region: gpd.GeoDataFrame, subregion: gpd.GeoDataFrame, subregion_name: str = ""
+) -> gpd.GeoDataFrame:
     if region.crs != subregion.crs:
         subregion = subregion.to_crs(region.crs)
 
     if subregion_name:
         subregion = subregion[subregion["id"] == subregion_name]
     return subregion
+
+
+def get_compiled_run_output(
+    gdir, keys: list = None, input_filesuffix: str = "_spinup_historical_hydro"
+) -> xr.Dataset:
+    ds = utils.compile_run_output(gdir, input_filesuffix=input_filesuffix)
+    if keys:
+        ds = ds[keys]
+    return ds
+
+
+def get_specific_mass_balance(ds, rgi_id):
+    volume = ds.loc[{"rgi_id": rgi_id}].volume.values
+    area = ds.loc[{"rgi_id": rgi_id}].area.values
+    smb = (volume[1:] - volume[:-1]) / area[1:] * cfg.PARAMS["ice_density"] / 1000
+    return smb
+    # volume = ds.volume_m3.values
+    # area = ds.area_m2.values
+    # smb = (volume[1:] - volume[:-1]) / area[1:] * cfg.PARAMS['ice_density'] / 1000
+    # return smb
 
 
 def get_glaciers_in_subregion(
@@ -372,10 +394,6 @@ def get_glacier_directories(glaciers: list, base_url=DEFAULT_BASE_URL):
     return gdirs
 
 
-def plot_glacier_domain(gdirs):
-    graphics.plot_domain(gdirs, figsize=(6, 5))
-
-
 def get_gdir_by_name(data: list, name: str):
     rgi_ids = get_glacier_by_name(data=data, name=name)
     gdirs = workflow.init_glacier_directories(
@@ -438,7 +456,21 @@ def get_annual_runoff(ds: xr.Dataset):
     return df_runoff
 
 
-def get_min_max_runoff_years(annual_runoff: pd.Series, nyears=20) -> tuple:
+def get_min_max_runoff_years(annual_runoff: pd.Series, nyears: int = 20) -> tuple:
+    """Get the years with minimum and maximum runoff.
+
+    Parameters
+    ----------
+    annual_runoff : pd.Series
+        Time series of annual runoff.
+    nyears : int
+        Length of time period from most recent time index. Default 20.
+
+    Returns
+    -------
+    tuple[int]
+        The years with minimum and maximum runoff.
+    """
     if len(annual_runoff) > nyears:
         annual_runoff = annual_runoff.iloc[-nyears:]
     runoff = annual_runoff.sum(axis=1)
@@ -448,7 +480,21 @@ def get_min_max_runoff_years(annual_runoff: pd.Series, nyears=20) -> tuple:
     return runoff_year_min, runoff_year_max
 
 
-def get_monthly_runoff(ds: xr.Dataset, nyears=20):
+def get_monthly_runoff(ds: xr.Dataset, nyears: int = 20) -> xr.Dataset:
+    """Get the monthly glacier runoff.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Glacier climatology.
+    nyears : int
+        Length of time period from most recent time index. Default 20.
+
+    Returns
+    -------
+    xr.Dataset
+        Monthly runoff.
+    """
     monthly_runoff = (
         ds["melt_off_glacier_monthly"]
         + ds["melt_on_glacier_monthly"]
@@ -458,20 +504,53 @@ def get_monthly_runoff(ds: xr.Dataset, nyears=20):
     if len(monthly_runoff > nyears):
         monthly_runoff = monthly_runoff.isel(time=slice(nyears, None))
     monthly_runoff *= 1e-9
+
     return monthly_runoff
 
 
-def get_climatology(data, name: str = ""):
+def get_climatology(data: gpd.GeoDataFrame, name: str = "") -> tuple:
+    """Get climatological data for a glacier.
+
+    Parameters
+    ----------
+    data : gpd.GeoDataFrame
+        Contains data for one or more glaciers.
+    name : str
+        Name of glacier
+
+    Returns
+    -------
+    tuple[xr.Dataset,np.ndarray]
+        Climatological data and specific mass balance for a glacier.
+    """
     glacier = get_gdir_by_name(data=data, name=name)
     climatology = get_hydro_climatology(gdir=glacier)
-    return climatology
+
+    try:
+        mass_balance = get_compiled_run_output(
+            gdir=glacier,
+            # keys=["volume", "area"],
+            input_filesuffix="_spinup_historical_hydro",
+        )
+        mass_balance = get_specific_mass_balance(ds=mass_balance, rgi_id=glacier.rgi_id)
+        ref_data = glacier.get_ref_mb_data()
+
+    except RuntimeError:
+        ref_data = None
+        mass_balance = None
+    return climatology, ref_data, mass_balance
 
 
 def get_aggregate_runoff(data: gpd.GeoDataFrame) -> dict:
+
     annual_runoff = []
     monthly_runoff = []
+    mass_balance = []
+    observations = []
     for rgi_id in data["RGIId"]:
-        climatology = get_climatology(data=data, name=rgi_id)
+        climatology, ref_data, specific_mb = get_climatology(data=data, name=rgi_id)
+        mass_balance.append(specific_mb)
+        observations.append(ref_data)
         annual_runoff.append(get_annual_runoff(ds=climatology))
         monthly_runoff.append(get_monthly_runoff(ds=climatology))
     total_annual_runoff = sum(annual_runoff)
@@ -482,19 +561,26 @@ def get_aggregate_runoff(data: gpd.GeoDataFrame) -> dict:
         "monthly_runoff": total_monthly_runoff,
         "runoff_year_min": min_year,
         "runoff_year_max": max_year,
+        "mass_balance": mass_balance,
+        "wgms": observations,
     }
     return runoff_data
 
 
-def get_runoff(data: xr.Dataset) -> dict:
-    annual_runoff = get_annual_runoff(ds=data)
+def get_runoff(data: xr.Dataset, name: str) -> dict:
+
+    climatology, observations, mass_balance = get_climatology(data=data, name=name)
+    annual_runoff = get_annual_runoff(ds=climatology)
+    monthly_runoff = get_monthly_runoff(ds=climatology)
     min_year, max_year = get_min_max_runoff_years(annual_runoff=annual_runoff)
-    monthly_runoff = get_monthly_runoff(ds=data)
+
     runoff_data = {
         "annual_runoff": annual_runoff,
         "monthly_runoff": monthly_runoff,
         "runoff_year_min": min_year,
         "runoff_year_max": max_year,
+        "mass_balance": mass_balance,
+        "wgms": observations,
     }
     return runoff_data
 
