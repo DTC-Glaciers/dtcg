@@ -72,6 +72,21 @@ class TestOGGMBindings:
             isinstance(i, str) for i in itertools.chain.from_iterable(region_codes)
         )
 
+    @pytest.mark.parametrize("arg_name", ["Illegal name"])
+    def test_get_rgi_region_codes_missing(self, arg_name):
+        msg = f"No regions or subregion matching {arg_name}"
+
+        with pytest.raises((KeyError, TypeError, AttributeError), match=msg) as excinfo:
+            integration_ob.get_rgi_region_codes(subregion_name=arg_name)
+        assert str(arg_name) in str(excinfo.value)
+
+    @pytest.mark.parametrize("arg_name", ["", None, 127831])
+    def test_get_rgi_region_codes_incorrect_type(self, arg_name):
+        msg = f"{arg_name} is not a string."
+        with pytest.raises((TypeError), match=msg) as excinfo:
+            integration_ob.get_rgi_region_codes(subregion_name=arg_name)
+        # assert str(arg_name) in str(excinfo.value)
+
     @pytest.mark.parametrize("arg_name", ["alps", "Alps"])
     def test_get_matching_region_codes(self, arg_name):
         compare_region = integration_ob.get_matching_region_codes(
@@ -90,15 +105,15 @@ class TestOGGMBindings:
     def test_get_matching_region_codes_missing(self, arg_name):
         msg = f"No region found for {arg_name}"
 
-        with pytest.raises((KeyError, TypeError, AttributeError), match=msg) as excinfo:
+        with pytest.raises((KeyError, AttributeError), match=msg) as excinfo:
             integration_ob.get_matching_region_codes(subregion_name=arg_name)
         assert str(arg_name) in str(excinfo.value)
 
     @pytest.mark.parametrize("arg_name", ["", None])
-    def test_get_rgi_region_codes_incorrect_type(self, arg_name):
+    def test_get_matching_region_codes_incorrect_type(self, arg_name):
         msg = "No valid region or subregion name supplied."
-        with pytest.raises((ValueError), match=msg) as excinfo:
-            integration_ob.get_rgi_region_codes(subregion_name=arg_name)
+        with pytest.raises((ValueError, TypeError), match=msg) as excinfo:
+            integration_ob.get_matching_region_codes(subregion_name=arg_name)
         # assert str(arg_name) in str(excinfo.value)
 
     def test_get_rgi_files_from_subregion(self, class_case_dir):

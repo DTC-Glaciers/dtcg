@@ -64,11 +64,11 @@ def get_rgi_region_codes(region_name: str = "", subregion_name: str = "") -> tup
             region_name=region_name, subregion_name=subregion_name
         )
     except KeyError as e:
-        raise KeyError(
-            f"No regions or subregion matching {', '.join(region_name, subregion_name)}."
-        )
-    except (TypeError, AttributeError) as e:
-        raise TypeError(f"{subregion_name} is not a string.")
+        region_names = ", ".join(filter(None, (region_name, subregion_name)))
+        raise KeyError(f"No regions or subregion matching {region_names}.")
+    except (TypeError, ValueError, AttributeError) as e:
+        region_names = ", ".join(filter(None, (region_name, subregion_name)))
+        raise TypeError(f"{region_names} is not a string.")
 
     return rgi_codes
 
