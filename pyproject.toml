@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -35,7 +35,13 @@ classifiers = [
 dependencies = [
     "numpy",
     "matplotlib",
-    "geopandas"
+    "geopandas",
+    "bokeh",
+    "holoviews",
+    "geoviews",
+    "seaborn",
+    "xarray",
+    "geopandas",
 ]
 
 [project.optional-dependencies]

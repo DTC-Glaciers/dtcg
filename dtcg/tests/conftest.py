@@ -23,7 +23,7 @@ For generating objects within a test function's scope, call a fixture
 directly:
 
     .. code-block:: python
-        
+
         def test_foobar(self, conftest_mock_grid):
             grid_object = conftest_mock_grid
             grid_object.set_foo(foo=bar)

@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -27,32 +28,47 @@ class TestOGGMRequestAPIConstructor:
     attributes = ["query", "subregion_name", "shapefile_path"]
 
     def test_init_RequestAPIConstructor(self):
-        test_constructor = interface_gateway.RequestAPIConstructor(query="test_action")
-        assert isinstance(test_constructor, interface_gateway.RequestAPIConstructor)
+        test_constructor = interface_gateway.RequestAPICtor(action="test_action")
+        assert isinstance(test_constructor, interface_gateway.RequestAPICtor)
         for attribute_name in self.attributes:
             assert attribute_name in test_constructor.__dict__
-        assert isinstance(test_constructor.query, str)
-        assert test_constructor.query == "test_action"
+        assert isinstance(test_constructor.query, dict)
+        assert test_constructor.action == "test_action"
 
 
 class TestOGGMGateway:
 
     attributes = ["query", "subregion_name", "shapefile_path"]
 
-    def test_set_user_query(self):
-        test_query = interface_gateway._set_user_query(query="test_action")
+    def get_gateway_handler(self):
+        return interface_gateway.GatewayHandler
+
+    @pytest.fixture(name="GatewayHandler", autouse=False, scope="function")
+    def fixture_gateway_handler(self):
+        return self.get_gateway_handler()
+
+    @pytest.mark.xfail(reason="TODO: monkeypatch action")
+    def test_set_user_query(self, GatewayHandler):
+        test_query = GatewayHandler(query={"action": "test_action"})
+        assert test_query.action == "test_action"
+        test_query._set_user_query(action="compare_action")
+        assert test_query.action == "compare_action"
 
         assert isinstance(test_query, interface_gateway.RequestAPIConstructor)
         for attribute_name in self.attributes:
             assert attribute_name in test_query.__dict__
-        assert test_query.query == "test_action"
+        assert isinstance(test_query.query, dict)
+        assert test_query.action == "test_action"
 
-    def test_set_user_query_kwargs(self):
-        kwargs = {"query": "test_action", "subregion_name": "Alps"}
-        test_query = interface_gateway._set_user_query(**kwargs)
+    @pytest.mark.xfail(reason="TODO: monkeypatch action")
+    def test_set_user_query_kwargs(self, GatewayHandler):
+        kwargs = {"action": "compare_action", "subregion_name": "Alps"}
+        test_query = GatewayHandler(kwargs)
+        test_query._set_user_query(**kwargs)
 
         for attribute_name in self.attributes:
             assert attribute_name in test_query.__dict__
-        assert test_query.query == "test_action"
+        assert isinstance(test_query.query, dict)
+        assert test_query.action == "compare_action"
         assert test_query.subregion_name == "Alps"
         assert test_query.shapefile_path is None

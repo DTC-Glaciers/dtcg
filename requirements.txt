@@ -3,3 +3,10 @@ matplotlib
 pytest
 coverage
 coveralls
+bokeh
+geoviews
+holoviews
+pandas
+seaborn
+xarray
+geopandas

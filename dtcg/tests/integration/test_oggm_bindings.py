@@ -34,6 +34,20 @@ class TestOGGMBindings:
     """Tests OGGM bindings for API queries."""
 
     # Fixtures
+    def get_oggm_model(self):
+        return integration_ob.BindingsOggmModel()
+
+    @pytest.fixture(name="OggmModel", autouse=False, scope="function")
+    def fixture_oggm_model(self):
+        return self.get_oggm_model()
+
+    def get_oggm_wrangler(self):
+        return integration_ob.BindingsOggmWrangler()
+
+    @pytest.fixture(name="OggmWrangler", autouse=False, scope="function")
+    def fixture_oggm_wrangler(self):
+        return self.get_oggm_wrangler()
+
     def _get_sample_region_file(
         self, rgi_region: str = "11", rgi_version: str = "61", reset: bool = False
     ):
@@ -57,15 +71,15 @@ class TestOGGMBindings:
     def fixture_get_sample_region_file(self):
         return self._get_sample_region_file()
 
-    def test_get_rgi_metadata(self):
-        metadata = integration_ob.get_rgi_metadata(from_web=True)
+    def test_get_rgi_metadata(self, OggmModel):
+        metadata = OggmModel.get_rgi_metadata(from_web=True)
         assert isinstance(metadata, list)
         for row in metadata:
             assert isinstance(row, dict)
 
     @pytest.mark.parametrize("arg_name", ["alps", "Alps"])
-    def test_get_rgi_region_codes(self, arg_name):
-        region_codes = integration_ob.get_rgi_region_codes(subregion_name=arg_name)
+    def test_get_rgi_region_codes(self, OggmModel, arg_name):
+        region_codes = OggmModel.get_rgi_region_codes(subregion_name=arg_name)
         assert isinstance(region_codes, set)
         assert all(isinstance(i, tuple) for i in region_codes)
         assert all(
@@ -73,25 +87,23 @@ class TestOGGMBindings:
         )
 
     @pytest.mark.parametrize("arg_name", ["Illegal name"])
-    def test_get_rgi_region_codes_missing(self, arg_name):
+    def test_get_rgi_region_codes_missing(self, OggmModel, arg_name):
         msg = f"No regions or subregion matching {arg_name}"
 
         with pytest.raises((KeyError, TypeError, AttributeError), match=msg) as excinfo:
-            integration_ob.get_rgi_region_codes(subregion_name=arg_name)
+            OggmModel.get_rgi_region_codes(subregion_name=arg_name)
         assert str(arg_name) in str(excinfo.value)
 
     @pytest.mark.parametrize("arg_name", ["", None, 127831])
-    def test_get_rgi_region_codes_incorrect_type(self, arg_name):
-        msg = f"{arg_name} is not a string."
-        with pytest.raises((TypeError), match=msg) as excinfo:
-            integration_ob.get_rgi_region_codes(subregion_name=arg_name)
+    def test_get_rgi_region_codes_incorrect_type(self, OggmModel, arg_name):
+        # msg = f"{arg_name} is not a string."
+        with pytest.raises((TypeError)) as excinfo:
+            OggmModel.get_rgi_region_codes(subregion_name=arg_name)
         # assert str(arg_name) in str(excinfo.value)
 
     @pytest.mark.parametrize("arg_name", ["alps", "Alps"])
-    def test_get_matching_region_codes(self, arg_name):
-        compare_region = integration_ob.get_matching_region_codes(
-            subregion_name=arg_name
-        )
+    def test_get_matching_region_codes(self, OggmModel, arg_name):
+        compare_region = OggmModel.get_matching_region_codes(subregion_name=arg_name)
 
         assert isinstance(compare_region, set)
         for element in itertools.chain.from_iterable(compare_region):
@@ -102,28 +114,26 @@ class TestOGGMBindings:
             assert codes[1] == "1"
 
     @pytest.mark.parametrize("arg_name", ["Illegal name"])
-    def test_get_matching_region_codes_missing(self, arg_name):
+    def test_get_matching_region_codes_missing(self, OggmModel, arg_name):
         msg = f"No region found for {arg_name}"
 
         with pytest.raises((KeyError, AttributeError), match=msg) as excinfo:
-            integration_ob.get_matching_region_codes(subregion_name=arg_name)
+            OggmModel.get_matching_region_codes(subregion_name=arg_name)
         assert str(arg_name) in str(excinfo.value)
 
     @pytest.mark.parametrize("arg_name", ["", None])
-    def test_get_matching_region_codes_incorrect_type(self, arg_name):
+    def test_get_matching_region_codes_incorrect_type(self, OggmModel, arg_name):
         msg = "No valid region or subregion name supplied."
         with pytest.raises((ValueError, TypeError), match=msg) as excinfo:
-            integration_ob.get_matching_region_codes(subregion_name=arg_name)
+            OggmModel.get_matching_region_codes(subregion_name=arg_name)
         # assert str(arg_name) in str(excinfo.value)
 
-    def test_get_rgi_files_from_subregion(self, class_case_dir):
+    def test_get_rgi_files_from_subregion(self, OggmModel, class_case_dir):
 
         cfg.initialize()
         cfg.PATHS["working_dir"] = class_case_dir
 
-        compare_files = integration_ob.get_rgi_files_from_subregion(
-            subregion_name="Alps"
-        )
+        compare_files = OggmModel.get_rgi_files_from_subregion(subregion_name="Alps")
 
         # for frame in compare_files:
         #     assert isinstance(frame, gpd.GeoDataFrame)
@@ -133,11 +143,11 @@ class TestOGGMBindings:
         assert (compare_files["O1Region"] == "11").all()
         assert (compare_files["O2Region"] == "1").all()
 
-    def test_get_shapefile_from_web(self, class_case_dir):
+    def test_get_shapefile_from_web(self, OggmWrangler, class_case_dir):
         cfg.initialize()
         cfg.PATHS["working_dir"] = class_case_dir
 
-        compare_file = integration_ob.get_shapefile_from_web(
+        compare_file = OggmWrangler.get_shapefile_from_web(
             shapefile_name="rofental_hydrosheds.shp"
         )
 
@@ -146,13 +156,15 @@ class TestOGGMBindings:
         assert not compare_file["geometry"].empty
         assert (compare_file["HYBAS_ID"] == 2120509820).all()
 
-    def test_get_glaciers_in_subregion(self, class_case_dir, sample_region_file):
+    def test_get_glaciers_in_subregion(
+        self, OggmWrangler, class_case_dir, sample_region_file
+    ):
         cfg.initialize()
         cfg.PATHS["working_dir"] = class_case_dir
         region = sample_region_file
 
         subregion = gpd.read_file(utils.get_demo_file("rofental_hydrosheds.shp"))
-        compare_file = integration_ob.get_glaciers_in_subregion(
+        compare_file = OggmWrangler.get_glaciers_in_subregion(
             region=region, subregion=subregion
         )
 

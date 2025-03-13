@@ -20,10 +20,9 @@ through here.
 """
 
 import dtcg.integration.oggm_bindings as oggm_bindings
-import dtcg.interface.plotting as plotting
 
 
-class RequestAPIConstructor:
+class RequestAPICtor:
     """Mock API request. Placeholder for API query until the backend is
     set up.
 
@@ -37,18 +36,24 @@ class RequestAPIConstructor:
         The subregion selected by the user. Default None.
     shapefile_path : str
         Path to a shapefile selected/uploaded by the user. Default None.
+    glacier_name : str
+        The glacier selected by the user. Default None.
+    oggm_params : dict
+        OGGM model parameters. Default None.
     """
 
     def __init__(
         self,
-        query: str,
+        action: str,
         region_name: str = None,
         subregion_name: str = None,
         glacier_name: str = None,
         shapefile_path: str = None,
         oggm_params: dict = None,
     ):
-        self.query = query
+        super().__init__()
+
+        self.action = action
         self.region_name = region_name
         self.subregion_name = subregion_name
         self.glacier_name = glacier_name
@@ -58,64 +63,78 @@ class RequestAPIConstructor:
         else:
             self.oggm_params = {}
 
+        self.query = self.get_query()
+
     def get_query(self) -> dict:
-        return self.__dict__
+        # return self.__dict__
+        query = {}
+        for attribute in self.__dict__.keys():
+            if attribute[:2] != "__" and attribute != "query":
+                value = getattr(self, attribute)
+                if not callable(value):
+                    query[attribute] = value
+        return query
 
 
-def _set_user_query(query: str, **kwargs) -> RequestAPIConstructor:
-    """Create a user query."""
+class GatewayHandler:
+    def __init__(self, query: dict):
+        super().__init__()
 
-    user_query = RequestAPIConstructor(query, **kwargs)
-    return user_query
+        self._set_user_query(query)
+        self.response = self.get_response()
 
+    def _set_user_query(self, query: dict, **kwargs):
+        """Create a user query."""
+        self.query = RequestAPICtor(**query, **kwargs)
 
-def get_query_response(query: RequestAPIConstructor) -> dict:
-    """Get response to API query."""
+    def get_response(self) -> dict:
+        """Get response to API query."""
 
-    # This should eventually link to ``dtcg.api.external``.
-    response = _get_query_handler(query=query)
-    return response
+        # This should eventually link to ``dtcg.api.external``.
+        response = self._get_query_handler(query=self.query)
+        return response
 
+    def _get_query_handler(self, query: RequestAPICtor) -> dict:
+        """Redirect query to appropriate binding.
 
-def _get_query_handler(query: RequestAPIConstructor) -> dict:
-    """Redirect query to appropriate binding.
+        This currently links directly to the binding. This should eventually
+        be replaced by calling the binding via ``dtcg.api``.
+        """
 
-    Currently this links directly to the binding. This should eventually
-    be replaced by calling the binding via ``dtcg.api``.
-    """
-
-    # Currently we link directly to the bindings until the internal API is set up (dtcg.api)
-    if query.query == "select_subregion":
-        data = oggm_bindings.get_user_subregion(
-            region_name=query.region_name,
-            subregion_name=query.subregion_name,
-            shapefile_path=query.shapefile_path,
-            **query.oggm_params,
-        )
-        response = {"response_code": "200", "data": data}
-        response["data"]["runoff_data"] = oggm_bindings.get_aggregate_runoff(
-            data=response["data"]["glacier_data"]
-        )
-
-    elif query.query == "select_glacier":
-        data = oggm_bindings.get_user_subregion(
-            region_name=query.region_name,
-            subregion_name=query.subregion_name,
-            shapefile_path=query.shapefile_path,
-            **query.oggm_params,
-        )
-        response = {"response_code": "200", "data": data}
-        if (
-            query.glacier_name
-            in response["data"]["glacier_data"]["Name"].dropna().values
-        ):
-            response["data"]["runoff_data"] = oggm_bindings.get_runoff(
-                data=response["data"]["glacier_data"], name=query.glacier_name
+        # Currently we link directly to the bindings until the internal API is set up (dtcg.api)
+        if query.action == "select_subregion":
+            binder = oggm_bindings.BindingsHydro()
+            data = binder.get_user_subregion(
+                region_name=query.region_name,
+                subregion_name=query.subregion_name,
+                shapefile_path=query.shapefile_path,
+                **query.oggm_params,
             )
-    else:
-        response = {"response_code": "422"}
-        raise NotImplementedError(f"{query.query} is not yet implemented.")
-    return response
+            response = {"response_code": "200", "data": data}
+            response["data"]["runoff_data"] = binder.get_aggregate_runoff(
+                data=response["data"]["glacier_data"]
+            )
+
+        elif query.action == "select_glacier":
+            binder = oggm_bindings.BindingsHydro()
+            data = binder.get_user_subregion(
+                region_name=query.region_name,
+                subregion_name=query.subregion_name,
+                shapefile_path=query.shapefile_path,
+                **query.oggm_params,
+            )
+            response = {"response_code": "200", "data": data}
+            if (
+                query.glacier_name
+                in response["data"]["glacier_data"]["Name"].dropna().values
+            ):
+                response["data"]["runoff_data"] = binder.get_runoff(
+                    data=response["data"]["glacier_data"], name=query.glacier_name
+                )
+        else:
+            response = {"response_code": "422"}
+            raise NotImplementedError(f"{query.action} is not yet implemented.")
+        return response
 
 
 def main():
