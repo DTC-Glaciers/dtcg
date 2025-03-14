@@ -680,14 +680,7 @@ class BokehGraph(BokehFigureFormat):
             observations = observations[0]
         if isinstance(mass_balance, list):
             mass_balance = mass_balance[0]
-        print(type(observations))
-        print(observations)
-        # print(observations[0].index.values)
-        # print(observations[1].index.values)
         index = [datetime.date(i, 1, 1) for i in observations.index.values]
-        print(index)
-        print(type(index))
-        print(mass_balance)
         title = self.get_title(title="Mass Balance", suffix=name)
 
         defaults = self.defaults
@@ -761,23 +754,16 @@ class HoloviewsDashboard(BokehFigureFormat):
             A sequence of figures.
         """
         # columns = len(figures)
-        print("start layout")
-        print(type(figures))
-
         if isinstance(figures, list):
             layout = figures[0]
-            print("finished first layout")
             if len(figures) > 1:
                 for i in figures[1:]:
                     layout += i
-            print("added layouts")
             layout = hv.Layout(layout).cols(2)
         else:
             layout = hv.Layout([figures])
 
-        print("added cols")
         layout = layout.opts(sizing_mode="stretch_width")
-        print(type(layout))
 
         return layout
 
@@ -819,8 +805,6 @@ class HoloviewsDashboard(BokehFigureFormat):
         hv.Layout
             Dashboard showing a map of the subregion and runoff data.
         """
-        print("start plot")
-
         fig_basin_selection = self.plot_map.plot_subregion_with_glacier(
             shapefile=data["shapefile"],
             glacier_data=data["glacier_data"],
@@ -828,10 +812,8 @@ class HoloviewsDashboard(BokehFigureFormat):
             glacier_name=glacier_name,
         )
         self.figures = fig_basin_selection
-        print("finished map")
-
+        
         if "runoff_data" in data.keys():
-            print("runoff_data")
             runoff_data = data["runoff_data"]
             if runoff_data is not None:
                 # fig_annual_runoff = self.plot_graph.plot_annual_runoff(
@@ -864,7 +846,5 @@ class HoloviewsDashboard(BokehFigureFormat):
                 #     self.figures[1].append(fig_mass_balance)
 
         self.set_dashboard_title()
-        print("finished title")
         self.set_dashboard(figures=self.figures)
-        print("finished dash")
         return self.dashboard
