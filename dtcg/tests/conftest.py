@@ -29,7 +29,7 @@ directly:
             grid_object.set_foo(foo=bar)
             ...
 """
-
+import os
 from types import ModuleType
 from typing import Any
 from unittest.mock import patch
@@ -38,6 +38,12 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+
+
+@pytest.fixture
+def test_inputs_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "test_inputs")
 
 
 # Function patches

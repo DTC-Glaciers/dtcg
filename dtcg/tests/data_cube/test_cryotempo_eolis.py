@@ -2,7 +2,6 @@ import os
 from unittest.mock import MagicMock, patch
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
 import pytest
 import rioxarray
@@ -39,8 +38,8 @@ def dataframe_3d():
 
 @pytest.fixture
 def oggm_dataset(test_inputs_path):
-    ds = rioxarray.open_rasterio(os.path.join(test_inputs_path, "oggm_shop.tif"))
-    print(ds)
+    ds = rioxarray.open_rasterio(
+        os.path.join(test_inputs_path, "oggm_shop.tif"))
     return ds
 
 
@@ -61,7 +60,8 @@ def test_retrieve_data_from_specklia(mock_specklia_class):
 
     gdf, meta, info = cryotempo_eolis_utils.retrieve_data_from_specklia(
         query_polygon=box(0, 0, 1, 1),
-        specklia_data_set_name='CryoTEMPO-EOLIS Processed Elevation Change Maps',
+        specklia_data_set_name='CryoTEMPO-EOLIS Processed Elevation Change '
+                               'Maps',
         specklia_api_key='dummy-key'
     )
 
@@ -75,15 +75,16 @@ def test_convert_gridded_dataframe_to_array(is_3d, dataframe_2d, dataframe_3d):
     df = dataframe_3d if is_3d else dataframe_2d
     t_col = 'timestamp' if is_3d else None
 
-    output, grid, t_axis = cryotempo_eolis_utils.convert_gridded_dataframe_to_array(
-        gridded_df=df,
-        value_column_names=['elevation_change', 'standard_error'],
-        x_coordinate_column='x',
-        y_coordinate_column='y',
-        spatial_resolution=1.0,
-        xy_projection=XY_PROJ,
-        t_coordinate_column=t_col
-    )
+    output, grid, t_axis = \
+        cryotempo_eolis_utils.convert_gridded_dataframe_to_array(
+            gridded_df=df,
+            value_column_names=['elevation_change', 'standard_error'],
+            x_coordinate_column='x',
+            y_coordinate_column='y',
+            spatial_resolution=1.0,
+            xy_projection=XY_PROJ,
+            t_coordinate_column=t_col
+        )
 
     assert isinstance(output, dict)
     assert 'elevation_change' in output
@@ -109,7 +110,8 @@ def test_prepare_eolis_metadata(preliminary):
             'geospatial_x_min': 0
         }
     }]
-    result = cryotempo_eolis_utils.prepare_eolis_metadata(source, preliminary_dataset=preliminary)
+    result = cryotempo_eolis_utils.prepare_eolis_metadata(
+        source, preliminary_dataset=preliminary)
     assert isinstance(result, dict)
     if not preliminary:
         assert 'product_attributes' in result
@@ -135,8 +137,10 @@ def test_retrieve_prepare_eolis_gridded_data(mock_retrieve, oggm_dataset):
             'standard_error': [0.1, 0.2, 0.4, 0.5]
         }),
         [{'source_information': {'xy_cols_proj4': XY_PROJ}}],
-        {'columns': [{'name': 'elevation_change', 'unit': 'm', 'description': 'Elevation change'},
-                     {'name': 'standard_error', 'unit': 'm', 'description': 'Error'}]}
+        {'columns': [{'name': 'elevation_change', 'unit': 'm',
+                      'description': 'Elevation change'},
+                     {'name': 'standard_error', 'unit': 'm',
+                      'description': 'Error'}]}
     )
     print(oggm_dataset.shape)
     grid = Grid(
@@ -147,7 +151,8 @@ def test_retrieve_prepare_eolis_gridded_data(mock_retrieve, oggm_dataset):
         x0y0=(oggm_dataset.x[0], oggm_dataset.y[0]),
         pixel_ref='center')
 
-    result = cryotempo_eolis_utils.retrieve_prepare_eolis_gridded_data(oggm_dataset, grid)
+    result = cryotempo_eolis_utils.retrieve_prepare_eolis_gridded_data(
+        oggm_dataset, grid)
     assert isinstance(result, xr.Dataset)
     assert 'eolis_gridded_elevation_change' in result
     assert 'eolis_gridded_standard_error' in result

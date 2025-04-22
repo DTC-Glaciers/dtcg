@@ -6,9 +6,10 @@ name: Pytest & Coverage
 
 on:
   push:
-    branches: ["master", "release-**", "add-eolis-module"]
+    branches: ["master", "release-**"]
   pull_request:
-    branches: ["master", "release-**", "add-eolis-module"]
+    branches: ["master", "release-**"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -51,8 +52,8 @@ jobs:
           # stop if Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings
-          # This ignores a bunch of linting errors
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics --ignore=E226,E231,E265,E501,E265,W291,W293
+          # This ignores a bunch of linting errors (including the max line length check - E501)
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics --ignore=E226,E231,E265,E501,W291,W293
       - name: Test with pytest and get coverage
         run: |
           coverage run --rcfile .coveragerc -m pytest && coverage report
