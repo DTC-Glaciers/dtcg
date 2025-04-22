@@ -6,9 +6,9 @@ name: Pytest & Coverage
 
 on:
   push:
-    branches: ["master", "release-**"]
+    branches: ["master", "release-**", "add-eolis-module"]
   pull_request:
-    branches: ["master", "release-**"]
+    branches: ["master", "release-**", "add-eolis-module"]
 
 permissions:
   contents: read
