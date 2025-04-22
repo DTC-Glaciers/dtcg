@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "dtcg"
 version = "0.0.3"
 authors = [
-    { name = "DTCG Contributors", email = "carolyn.michael@earthwave.co.uk" },
+    { name = "DTCG Contributors", email = "" },
 ]
 description = "DTCG API"
 readme = "README.md"
