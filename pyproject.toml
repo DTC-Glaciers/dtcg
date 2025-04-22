@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "dtcg"
 version = "0.0.3"
 authors = [
-    { name = "DTCG Contributors", email = "" },
+    { name = "DTCG Contributors", email = "carolyn.michael@earthwave.co.uk" },
 ]
 description = "DTCG API"
 readme = "README.md"
@@ -32,16 +32,25 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
+
 dependencies = [
-    "numpy",
+    "numpy<2.0",
     "matplotlib",
-    "geopandas",
     "bokeh",
     "holoviews",
     "geoviews",
     "seaborn",
     "xarray",
     "geopandas",
+    "specklia",
+    "oggm",
+    "tables",
+    "pyproj",
+    "rasterio",
+    "rioxarray",
+    "salem",
+    "pandas",
+    "shapely",
 ]
 
 [project.optional-dependencies]
@@ -69,15 +78,6 @@ dev = [
 "Bug Tracker" = "https://github.com/DTC-Glaciers/dtcg/issues"
 "Documentation" = "https://dtc-glaciers.github.io"
 
-# [tool.pytest.ini_options]
-# addopts = [
-#     "--import-mode=importlib",
-# ]
-
-# [project.scripts]
-# run-dtcg = "main:main"
-# dtcg-run = "main:main"
-
 [tool.hatch.build.targets.sdist]
 packages = ["dtcg"]
 exclude = [
@@ -93,3 +93,6 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["dtcg"]
+
+[tool.hatch.envs.default]
+env-vars-file = ".env"
