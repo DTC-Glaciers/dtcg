@@ -28,20 +28,24 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Environment :: Console",
     "Topic :: Database",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
+    "oggm@git+https://github.com/OGGM/oggm.git",
     "numpy",
-    "matplotlib",
+    "pandas",
+    "xarray",
+    "shapely",
     "geopandas",
     "bokeh",
-    "holoviews",
     "geoviews",
+    "holoviews",
+    "matplotlib",
     "seaborn",
-    "xarray",
-    "geopandas",
+    "ipywidgets",
 ]
 
 [project.optional-dependencies]
@@ -93,3 +97,6 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["dtcg"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

@@ -1,12 +1,15 @@
+oggm @ git+https://github.com/OGGM/oggm
 numpy
-matplotlib
-pytest
-coverage
-coveralls
+pandas
+xarray
+shapely
+geopandas
 bokeh
 geoviews
 holoviews
-pandas
+matplotlib
 seaborn
-xarray
-geopandas
+ipywidgets
+pytest
+coverage
+coveralls
