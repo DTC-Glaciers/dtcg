@@ -17,16 +17,14 @@ limitations under the License.
 import itertools
 import logging
 
-import pytest
-
-logger = logging.getLogger(__name__)
-
 import geopandas as gpd
 import numpy as np
+import pytest
 from oggm import GlacierDirectory, cfg, utils
 
 import dtcg.integration.oggm_bindings as integration_ob
 
+logger = logging.getLogger(__name__)
 pytest_plugins = "oggm.tests.conftest"
 
 
@@ -53,8 +51,9 @@ class TestOGGMBindings:
     ):
         """Get a sample region file."""
 
-        file = utils.get_rgi_region_file(rgi_region, version=rgi_version, reset=reset)
-        sample_gdirs = gpd.read_file(file)
+        sample_gdirs = gpd.read_file(
+            utils.get_rgi_region_file(rgi_region, version=rgi_version, reset=reset)
+        )
 
         return sample_gdirs
 
