@@ -49,19 +49,18 @@ class TestOGGMBindings:
         return self.get_oggm_wrangler()
 
     def _get_sample_region_file(
-        self, rgi_region: str = "11", rgi_version: str = "61", reset: bool = False
+        self, rgi_region: str = "11", rgi_version: str = "62", reset: bool = False
     ):
         """Get a sample region file."""
 
-        sample_gdirs = gpd.read_file(
-            utils.get_rgi_region_file(rgi_region, version=rgi_version, reset=reset)
-        )
+        file = utils.get_rgi_region_file(rgi_region, version=rgi_version, reset=reset)
+        sample_gdirs = gpd.read_file(file)
 
         return sample_gdirs
 
     def test_get_sample_region_file(self):
         rgi_file = self._get_sample_region_file(
-            rgi_region="11", rgi_version="61", reset=False
+            rgi_region="11", rgi_version="62", reset=False
         )
 
         assert isinstance(rgi_file, gpd.GeoDataFrame)
