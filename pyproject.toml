@@ -28,20 +28,24 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Environment :: Console",
     "Topic :: Database",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
+    "oggm @ git+https://github.com/gampnico/oggm@feat-dtcg",
     "numpy",
-    "matplotlib",
+    "pandas",
+    "xarray",
+    "shapely",
     "geopandas",
     "bokeh",
-    "holoviews",
     "geoviews",
+    "holoviews",
+    "matplotlib",
     "seaborn",
-    "xarray",
-    "geopandas",
+    "ipywidgets",
 ]
 
 [project.optional-dependencies]
@@ -50,12 +54,34 @@ tests = [
     "coverage",
     "coveralls",
 ]
+oggm = [
+    "scipy",
+    "Pillow",
+    "netcdf4",
+    "scikit-image",
+    "scikit-learn",
+    "configobj",
+    "dask",
+    "bottleneck",
+    "pyproj",
+    "cartopy",
+    "rasterio",
+    "rioxarray",
+    "seaborn",
+    "tables",  # pytables
+    "salem",
+    "motionless",
+    "ipython",
+    "joblib",
+    "progressbar2",
+    "pytest-mpl @ git+https://github.com/OGGM/pytest-mpl",
+]
 docs = [
     "sphinx",
     "sphinx-rtd-theme >= 1.1",
 ]
 dev = [
-    "dtcg[tests,docs]",
+    "dtcg[tests,docs,oggm]",
     "hatchling >= 1.12",
     "build >= 0.7",
     "pylint >= 2.16.1",
@@ -93,3 +119,6 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["dtcg"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
