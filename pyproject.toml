@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
 description = "DTCG API"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 keywords = [
@@ -28,29 +28,27 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Environment :: Console",
     "Topic :: Database",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 
 dependencies = [
-    "numpy<2.0",
-    "matplotlib",
-    "bokeh",
-    "holoviews",
-    "geoviews",
-    "seaborn",
-    "xarray",
-    "geopandas",
-    "specklia",
-    "oggm",
-    "tables",
-    "pyproj",
-    "rasterio",
-    "rioxarray",
-    "salem",
+    "oggm @ git+https://github.com/gampnico/oggm@feat-dtcg",
+    "numpy",
     "pandas",
+    "xarray",
     "shapely",
+    "geopandas",
+    "bokeh",
+    "geoviews",
+    "holoviews",
+    "matplotlib",
+    "seaborn",
+    "specklia",
+    "shapely",
+    "ipywidgets",
 ]
 
 [project.optional-dependencies]
@@ -59,12 +57,34 @@ tests = [
     "coverage",
     "coveralls",
 ]
+oggm = [
+    "scipy",
+    "Pillow",
+    "netcdf4",
+    "scikit-image",
+    "scikit-learn",
+    "configobj",
+    "dask",
+    "bottleneck",
+    "pyproj",
+    "cartopy",
+    "rasterio",
+    "rioxarray",
+    "seaborn",
+    "tables",  # pytables
+    "salem",
+    "motionless",
+    "ipython",
+    "joblib",
+    "progressbar2",
+    "pytest-mpl @ git+https://github.com/OGGM/pytest-mpl",
+]
 docs = [
     "sphinx",
     "sphinx-rtd-theme >= 1.1",
 ]
 dev = [
-    "dtcg[tests,docs]",
+    "dtcg[tests,docs,oggm]",
     "hatchling >= 1.12",
     "build >= 0.7",
     "pylint >= 2.16.1",
@@ -96,3 +116,6 @@ packages = ["dtcg"]
 
 [tool.hatch.envs.default]
 env-vars-file = ".env"
+
+[tool.hatch.metadata]
+allow-direct-references = true
