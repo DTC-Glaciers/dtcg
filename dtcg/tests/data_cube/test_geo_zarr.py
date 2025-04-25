@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-import rioxarray
+import rioxarray  # noqa: F401
 import xarray as xr
 import zarr
 

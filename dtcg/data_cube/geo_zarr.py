@@ -81,7 +81,6 @@ class GeoZarrWriter:
                 raise ValueError(
                     f"Coordinate variable for dimension '{dim}' is missing in "
                     "the dataset.")
-        
 
     def _add_cf_metadata(self):
         if 'standard_name' not in self.ds['x'].attrs:
