@@ -45,10 +45,12 @@ dependencies = [
     "geoviews",
     "holoviews",
     "matplotlib",
+    "numcodecs",
     "seaborn",
     "specklia",
     "shapely",
     "ipywidgets",
+    "zarr"
 ]
 
 [project.optional-dependencies]
