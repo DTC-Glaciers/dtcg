@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import geopandas as gpd
 import pandas as pd
 import pytest
-import rioxarray
+import numpy as np
 import xarray as xr
 from pyproj import Proj
 from salem import Grid
@@ -12,7 +12,7 @@ from shapely.geometry import box
 
 import dtcg.data_cube.cryotempo_eolis as cryotempo_eolis_utils
 
-XY_PROJ = Proj(3413)
+XY_PROJ = Proj(3057)
 
 
 @pytest.fixture
@@ -38,8 +38,7 @@ def dataframe_3d():
 
 @pytest.fixture
 def oggm_dataset(test_inputs_path):
-    ds = rioxarray.open_rasterio(
-        os.path.join(test_inputs_path, "oggm_shop.tif"))
+    ds = xr.open_dataset(os.path.join(test_inputs_path, "oggm_data.nc"))
     return ds
 
 
@@ -125,16 +124,21 @@ def test_create_query_polygon(oggm_dataset):
                               64.63902233874501)
 
 
-@pytest.mark.skip
 @patch("dtcg.data_cube.cryotempo_eolis.retrieve_data_from_specklia")
 def test_retrieve_prepare_eolis_gridded_data(mock_retrieve, oggm_dataset):
+    xs, ys = np.meshgrid(
+        np.array(np.arange(566000, 614000, 2000)),
+        np.array(np.arange(388000, 460000, 2000))
+    )
+    n_coords = len(xs.flatten())
+    np.random.seed(21)
     mock_retrieve.return_value = (
         pd.DataFrame({
-            'x': [-23469.592, -23269.592, -23069.592, -22869.592],
-            'y': [7168181., 7167981., 7167781., 7167581.],
-            'timestamp': [1, 1, 2, 2],
-            'elevation_change': [1.0, 2.0, 4.0, 8.0],
-            'standard_error': [0.1, 0.2, 0.4, 0.5]
+            'x': xs.flatten(),
+            'y': ys.flatten(),
+            'timestamp': np.ones(n_coords),
+            'elevation_change': np.random.rand(n_coords),
+            'standard_error': np.random.rand(n_coords)
         }),
         [{'source_information': {'xy_cols_proj4': XY_PROJ}}],
         {'columns': [{'name': 'elevation_change', 'unit': 'm',
@@ -142,7 +146,9 @@ def test_retrieve_prepare_eolis_gridded_data(mock_retrieve, oggm_dataset):
                      {'name': 'standard_error', 'unit': 'm',
                       'description': 'Error'}]}
     )
-    print(oggm_dataset.shape)
+
+    oggm_dataset.rio.write_crs(oggm_dataset.pyproj_srs, inplace=True)
+
     grid = Grid(
         proj=Proj(oggm_dataset.pyproj_srs),
         nxny=(len(oggm_dataset.x), len(oggm_dataset.y)),
@@ -153,6 +159,20 @@ def test_retrieve_prepare_eolis_gridded_data(mock_retrieve, oggm_dataset):
 
     result = cryotempo_eolis_utils.retrieve_prepare_eolis_gridded_data(
         oggm_dataset, grid)
+
     assert isinstance(result, xr.Dataset)
+
+    expected_dims = {'x', 'y', 't'}
+    # Assert that all expected dimensions exist
+    assert expected_dims.issubset(result.dims), \
+        f"Missing dimensions: {expected_dims - set(result.dims)}"
+
+    # check eolis data was added
     assert 'eolis_gridded_elevation_change' in result
     assert 'eolis_gridded_standard_error' in result
+    assert np.count_nonzero(
+        np.isfinite(result['eolis_gridded_elevation_change'])) == 480
+    np.testing.assert_almost_equal(
+        np.nanmean(result['eolis_gridded_elevation_change']),
+        0.3771391
+    )
