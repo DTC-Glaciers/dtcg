@@ -3,7 +3,6 @@ change data."""
 import logging
 import os
 from time import perf_counter
-from typing import Union
 
 import geopandas as gpd
 import numpy as np
@@ -77,7 +76,7 @@ def convert_gridded_dataframe_to_array(
     xy_projection: Proj,
     y_affine_negative: bool = True,
     t_coordinate_column: str = None,
-) -> tuple[dict[str, np.ndarray], Grid, Union[np.ndarray, None]]:
+) -> tuple[dict[str, np.ndarray], Grid, np.ndarray | None]:
     """Resolve arrays from sparse gridded data stored in a dataframe.
 
     For each column name specified, an array (either 2d, or 3d if a time
