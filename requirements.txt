@@ -1,4 +1,4 @@
-oggm @ git+https://github.com/OGGM/oggm
+oggm @ git+https://github.com/gampnico/oggm@feat-dtcg
 numpy
 pandas
 xarray
@@ -9,6 +9,8 @@ geoviews
 holoviews
 matplotlib
 seaborn
+specklia
+shapely
 ipywidgets
 pytest
 coverage
