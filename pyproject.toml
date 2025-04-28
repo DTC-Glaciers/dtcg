@@ -44,7 +44,6 @@ dependencies = [
     "geoviews",
     "holoviews",
     "matplotlib",
-    "numcodecs",
     "seaborn",
     "specklia",
     "shapely",

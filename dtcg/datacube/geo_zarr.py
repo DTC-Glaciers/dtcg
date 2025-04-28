@@ -1,7 +1,6 @@
 import xarray as xr
 import numpy as np
 import zarr
-from numcodecs import Blosc
 from typing import Optional
 from enum import Enum
 
@@ -47,8 +46,8 @@ class GeoZarrWriter:
         self.storage_type = storage_type
         self.storage_directory = storage_directory
         self.target_chunk_mb = target_chunk_mb
-        self.compressor = compressor or Blosc(
-            cname='zstd', clevel=3, shuffle=Blosc.BITSHUFFLE)
+        self.compressor = compressor or zarr.codecs.BloscCodec(
+            cname='zstd', clevel=3, shuffle=zarr.codecs.BloscShuffle.bitshuffle)
         self.overwrite = overwrite
         self.chunk_sizes = {}
         self.encoding = {}
@@ -135,7 +134,7 @@ class GeoZarrWriter:
                 shape=da.shape,
                 dtype=da.dtype,
                 chunks=chunks,
-                compressor=self.compressor,
+                compressors=self.compressor,
                 overwrite=self.overwrite
             )
             z.attrs.update(da.attrs)
@@ -150,7 +149,7 @@ class GeoZarrWriter:
                     shape=coord_da.shape,
                     dtype=coord_da.dtype,
                     chunks=(coord_da.shape[0],),
-                    compressor=self.compressor,
+                    compressors=self.compressor,
                     overwrite=self.overwrite
                 )
                 z.attrs.update(coord_da.attrs)
