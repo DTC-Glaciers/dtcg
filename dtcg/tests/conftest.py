@@ -29,7 +29,8 @@ directly:
             grid_object.set_foo(foo=bar)
             ...
 """
-import os
+
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 from unittest.mock import patch
@@ -40,10 +41,18 @@ import numpy as np
 import pytest
 
 
-@pytest.fixture
-def test_inputs_path():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "test_inputs")
+@pytest.fixture(name="sample_data_path", autouse=True)
+def conftest_sample_data_path(pytestconfig):
+    """Yield path to sample data.
+
+    Yields
+    ------
+    Generator[Path]
+        Path to sample data.
+    """
+    test_data_path = Path(pytestconfig.rootpath / "dtcg/tests/sample_data/")
+    assert test_data_path.is_dir()
+    yield test_data_path
 
 
 # Function patches
