@@ -1,8 +1,10 @@
-import xarray as xr
-import numpy as np
-import zarr
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
+import numpy as np
+import xarray as xr
+import zarr
+from numcodecs import Blosc
 
 
 class ZarrStorage(Enum):
@@ -46,8 +48,8 @@ class GeoZarrWriter:
         self.storage_type = storage_type
         self.storage_directory = storage_directory
         self.target_chunk_mb = target_chunk_mb
-        self.compressor = compressor or zarr.codecs.BloscCodec(
-            cname='zstd', clevel=3, shuffle=zarr.codecs.BloscShuffle.bitshuffle)
+        self.compressor = compressor or Blosc(
+            cname='zstd', clevel=3, shuffle=Blosc.BITSHUFFLE)
         self.overwrite = overwrite
         self.chunk_sizes = {}
         self.encoding = {}
@@ -122,7 +124,7 @@ class GeoZarrWriter:
 
     def write(self):
         mode = 'w' if self.overwrite else 'a'
-        root = zarr.open_group(store=self.store, mode=mode)
+        root = zarr.open_group(store=self.store, mode=mode, zarr_version=2)
         root.attrs['_ARRAY_DIMENSIONS'] = list(self.ds.dims)
         root.attrs['MAP_PROJECTION'] = self.ds.rio.crs.to_wkt()
 
