@@ -56,13 +56,23 @@ class TestDataCubeCryoTempoEolis:
 
     XY_PROJ = Proj(3057)
 
+    def get_datacube_cryotempo_eolis(self):
+        return cryotempo_eolis_utils.DatacubeCryotempoEolis()
+
+    @pytest.fixture(name="DatacubeCryotempoEolis", autouse=False,
+                    scope="function")
+    def fixture_datacube_cryotempo_eolis(self):
+        return self.get_datacube_cryotempo_eolis()
+
     @patch("dtcg.datacube.cryotempo_eolis.Specklia")
-    def test_retrieve_data_from_specklia(self, mock_specklia_class):
+    def test_retrieve_data_from_specklia(
+            self, mock_specklia_class, DatacubeCryotempoEolis):
         mock_client = MagicMock()
         mock_client.list_datasets.return_value = pd.DataFrame(
             [
                 {
-                    "dataset_name": "CryoTEMPO-EOLIS Processed Elevation Change Maps",
+                    "dataset_name":
+                    "CryoTEMPO-EOLIS Processed Elevation Change Maps",
                     "dataset_id": "abc123",
                     "min_timestamp": pd.Timestamp(0),
                     "max_timestamp": pd.Timestamp(100),
@@ -75,7 +85,7 @@ class TestDataCubeCryoTempoEolis:
         )
         mock_specklia_class.return_value = mock_client
 
-        gdf, meta, info = cryotempo_eolis_utils.retrieve_data_from_specklia(
+        gdf, meta, info = DatacubeCryotempoEolis.retrieve_data_from_specklia(
             query_polygon=box(0, 0, 1, 1),
             specklia_data_set_name="CryoTEMPO-EOLIS Processed Elevation Change Maps",
             specklia_api_key="dummy-key",
@@ -87,20 +97,21 @@ class TestDataCubeCryoTempoEolis:
 
     @pytest.mark.parametrize("is_3d", [False, True])
     def test_convert_gridded_dataframe_to_array(
-        self, is_3d, dataframe_2d, dataframe_3d
+        self, is_3d, dataframe_2d, dataframe_3d, DatacubeCryotempoEolis
     ):
         df = dataframe_3d if is_3d else dataframe_2d
         t_col = "timestamp" if is_3d else None
 
-        output, grid, t_axis = cryotempo_eolis_utils.convert_gridded_dataframe_to_array(
-            gridded_df=df,
-            value_column_names=["elevation_change", "standard_error"],
-            x_coordinate_column="x",
-            y_coordinate_column="y",
-            spatial_resolution=1.0,
-            xy_projection=self.XY_PROJ,
-            t_coordinate_column=t_col,
-        )
+        output, grid, t_axis = \
+            DatacubeCryotempoEolis.convert_gridded_dataframe_to_array(
+                gridded_df=df,
+                value_column_names=["elevation_change", "standard_error"],
+                x_coordinate_column="x",
+                y_coordinate_column="y",
+                spatial_resolution=1.0,
+                xy_projection=self.XY_PROJ,
+                t_coordinate_column=t_col
+                )
 
         assert isinstance(output, dict)
         assert "elevation_change" in output
@@ -114,7 +125,7 @@ class TestDataCubeCryoTempoEolis:
             assert t_axis is None
 
     @pytest.mark.parametrize("preliminary", [True, False])
-    def test_prepare_eolis_metadata(self, preliminary):
+    def test_prepare_eolis_metadata(self, preliminary, DatacubeCryotempoEolis):
         source = [
             {
                 "source_information": {
@@ -127,15 +138,15 @@ class TestDataCubeCryoTempoEolis:
                 }
             }
         ]
-        result = cryotempo_eolis_utils.prepare_eolis_metadata(
+        result = DatacubeCryotempoEolis.prepare_eolis_metadata(
             source, preliminary_dataset=preliminary
         )
         assert isinstance(result, dict)
         if not preliminary:
             assert "product_attributes" in result
 
-    def test_create_query_polygon(self, oggm_dataset):
-        polygon = cryotempo_eolis_utils.create_query_polygon(oggm_dataset)
+    def test_create_query_polygon(self, oggm_dataset, DatacubeCryotempoEolis):
+        polygon = DatacubeCryotempoEolis.create_query_polygon(oggm_dataset)
         assert polygon.bounds == (
             -17.634867503383262,
             64.59053260897588,
@@ -143,8 +154,9 @@ class TestDataCubeCryoTempoEolis:
             64.63902233874501,
         )
 
-    @patch("dtcg.datacube.cryotempo_eolis.retrieve_data_from_specklia")
-    def test_retrieve_prepare_eolis_gridded_data(self, mock_retrieve, oggm_dataset):
+    @patch("dtcg.datacube.cryotempo_eolis.DatacubeCryotempoEolis.retrieve_data_from_specklia")
+    def test_retrieve_prepare_eolis_gridded_data(
+            self, mock_retrieve, oggm_dataset, DatacubeCryotempoEolis):
         xs, ys = np.meshgrid(
             np.array(np.arange(566000, 614000, 2000)),
             np.array(np.arange(388000, 460000, 2000)),
@@ -169,7 +181,8 @@ class TestDataCubeCryoTempoEolis:
                         "unit": "m",
                         "description": "Elevation change",
                     },
-                    {"name": "standard_error", "unit": "m", "description": "Error"},
+                    {"name": "standard_error", "unit": "m",
+                     "description": "Error"},
                 ]
             },
         )
@@ -187,7 +200,7 @@ class TestDataCubeCryoTempoEolis:
             pixel_ref="center",
         )
 
-        result = cryotempo_eolis_utils.retrieve_prepare_eolis_gridded_data(
+        result = DatacubeCryotempoEolis.retrieve_prepare_eolis_gridded_data(
             oggm_dataset, grid
         )
 
@@ -203,7 +216,8 @@ class TestDataCubeCryoTempoEolis:
         assert "eolis_gridded_elevation_change" in result
         assert "eolis_gridded_standard_error" in result
         assert (
-            np.count_nonzero(np.isfinite(result["eolis_gridded_elevation_change"]))
+            np.count_nonzero(
+                np.isfinite(result["eolis_gridded_elevation_change"]))
             == 480
         )
         np.testing.assert_almost_equal(
