@@ -30,6 +30,7 @@ directly:
             ...
 """
 
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 from unittest.mock import patch
@@ -38,6 +39,20 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+
+
+@pytest.fixture(name="sample_data_path", autouse=True)
+def conftest_sample_data_path(pytestconfig):
+    """Yield path to sample data.
+
+    Yields
+    ------
+    Generator[Path]
+        Path to sample data.
+    """
+    test_data_path = Path(pytestconfig.rootpath / "dtcg/tests/sample_data/")
+    assert test_data_path.is_dir()
+    yield test_data_path
 
 
 # Function patches
