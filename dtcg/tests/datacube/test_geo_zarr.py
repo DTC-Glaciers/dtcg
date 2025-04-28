@@ -4,7 +4,7 @@ import rioxarray  # noqa: F401
 import xarray as xr
 import zarr
 
-from dtcg.data_cube.geo_zarr import GeoZarrWriter, ZarrStorage
+from dtcg.datacube.geo_zarr import GeoZarrWriter, ZarrStorage
 
 
 def create_test_dataset():
