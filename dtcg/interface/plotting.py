@@ -21,16 +21,14 @@ Plotting utilities for the frontend.
 import datetime
 
 import bokeh.models
-import bokeh.palettes
 import bokeh.plotting
-import bokeh.transform
 import geoviews as gv
 import holoviews as hv
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-from bokeh.models import NumeralTickFormatter
+from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 
 hv.extension("bokeh")
 
@@ -121,8 +119,7 @@ class BokehFigureFormat:
             compatible with Holoviews or Geoviews objects.
         """
         default_options = {
-            "min_width": 500,
-            "min_height": 500,
+            "aspect": 2,
             "active_tools": ["pan", "wheel_zoom"],
             # "fontsize": {"title": 18},
             "fontscale": 1.2,
@@ -133,6 +130,7 @@ class BokehFigureFormat:
             # "apply_hard_bounds":True,
             "show_frame": False,
             "margin": 0,
+            "border": 0,
         }
 
         return default_options
@@ -157,7 +155,10 @@ class BokehFigureFormat:
             "lines_jet_r": ("#ffffff", "#d62728", "#1f77b4"),
         }
         if name.lower() not in palettes.keys():
-            raise KeyError("{name} not found. Try:{'\n'.join(palettes.keys())}")
+            try:
+                palettes[name] = list(hv.Cycle.default_cycles[name])
+            except:
+                raise KeyError("{name} not found. Try:{'\n'.join(palettes.keys())}")
 
         return palettes[name]
 
@@ -229,6 +230,39 @@ class BokehFigureFormat:
             New key/value pairs which will overwrite the default options.
         """
         self.defaults.update(updated_options)
+
+    def get_help_button(
+        self, text: list, position: str = "right", add_colors=None
+    ) -> bokeh.models.HelpButton:
+        """Get an interactive help button from a list of fields
+
+        Parameters
+        ----------
+        text : list[str]
+            Help text.
+        position : str
+            Tooltip position.
+        add_colors : hv.Cycle, default None
+            Add coloured boxes next to text. Used for legend entries.
+
+        Returns
+        -------
+        bokeh.models.HelpButton
+            An interactive help button that displays text on hover and
+            click.
+        """
+        if add_colors:
+            text = [
+                f"<div style='color:{i};font-size:2em;display:inline'>&#9632;</div> {j}"
+                for i, j in zip(add_colors.values[: len(text)], text)
+            ]
+        help_text = "<br />".join([i for i in text])
+
+        help_text = bokeh.models.dom.HTML(help_text)
+        tooltip = bokeh.models.Tooltip(content=help_text, position=position)
+        help_button = bokeh.models.HelpButton(tooltip=tooltip)
+
+        return help_button
 
 
 class BokehMap(BokehFigureFormat):
@@ -334,9 +368,7 @@ class BokehMap(BokehFigureFormat):
             )
             .opts(**self.defaults)
             .opts(
-                # yformatter=NumeralTickFormatter(format="0.00"),
                 yformatter=yformat,
-                # yformatter=f"%.2f N",
                 title=title,
                 tools=[self.hover_tool],
             )
@@ -373,8 +405,6 @@ class BokehMap(BokehFigureFormat):
             fill_alpha=0.4,
             color_index=None,
         ).opts(
-            # yformatter=NumeralTickFormatter(format="0.00"),
-            # yformatter=f"%.2f N",
             **self.defaults,
             # scalebar=True,
             tools=[self.hover_tool],
@@ -440,9 +470,8 @@ class BokehGraph(BokehFigureFormat):
 
         self.set_defaults(
             {
-                "min_height": 200,
                 "ylabel": "Runoff (Mt)",
-                "yformatter": f"%d",
+                "yformatter": PrintfTickFormatter(format="%.2f"),
                 "padding": (0.1, (0, 0.1)),
                 "ylim": (0, None),
                 "autorange": "y",
@@ -562,9 +591,8 @@ class BokehGraph(BokehFigureFormat):
         index = [datetime.date(latest_year, i, 1) for i in mean_runoff.month_2d.values]
 
         title = self.get_title(
-            title="Mean Monthly Runoff Cycles",
-            location=name,
-            suffix=f"{int(runoff.time.values[0])} - {latest_year}",
+            title=f"Mean Monthly Runoff Cycles ({int(runoff.time.values[0])} - {latest_year})",
+            # timestamp=f"{int(runoff.time.values[0])} - {latest_year}",
         )
 
         overlay = (
@@ -591,11 +619,12 @@ class BokehGraph(BokehFigureFormat):
             )
             .opts(**self.defaults)
             .opts(
+                shared_axes=False,
                 title=title,
                 ylabel="Runoff (Mt)",
                 xlabel="Month",
                 xformatter=bokeh.models.DatetimeTickFormatter(months="%b"),
-                legend_position="top_left",
+                legend_position="top_right",
                 autorange="y",
                 tools=["xwheel_zoom", "xpan", self.hover_tool],
                 # tools=[self.hover_tool],
@@ -625,10 +654,40 @@ class BokehGraph(BokehFigureFormat):
             Stack plot of annual runoff split by source.
         """
         title = self.get_title(title="Annual Runoff", location=name)
+        palette = hv.Cycle(self.get_color_palette("Paired"))
         runoff = self.set_time_constraint(dataset=runoff, nyears=nyears)
 
+        legend_parser = {
+            "melt_off_glacier": (
+                "melt off-glacier",
+                "Snow melt on areas that are now glacier-free",
+            ),
+            "melt_on_glacier": (
+                "melt on-glacier",
+                "Ice and seasonal snow melt on the glacier",
+            ),
+            "liq_prcp_off_glacier": (
+                "precip off-glacier",
+                "Liquid precipitation off-glacier",
+            ),
+            "liq_prcp_on_glacier": (
+                "precip on-glacier",
+                "Liquid precipitation on glacier",
+            ),
+        }
+        help_button = self.get_help_button(
+            text=[i[1] for i in legend_parser.values()],
+            position="left",
+            add_colors=palette,
+        )
+
         overlay = hv.Overlay(
-            [hv.Area(runoff[key], label=key, group="runoff") for key in runoff.keys()]
+            [
+                hv.Area(runoff[key], label=legend_parser[key][0], group="runoff").opts(
+                    color=palette
+                )
+                for key in runoff.keys()
+            ]
         )
         overlay = (hv.Area.stack(overlay).opts(**self.defaults)).opts(
             title=title,
@@ -640,6 +699,11 @@ class BokehGraph(BokehFigureFormat):
             fixed_bounds=True,
             # apply_hard_bounds=True,
             # hooks = [self.plot_limits],
+            legend_opts={
+                "elements": [help_button],
+                "orientation": "vertical",
+                "css_variables": {"font-size": "1em", "display": "inline"},
+            },
         )
 
         return overlay
@@ -676,23 +740,28 @@ class BokehGraph(BokehFigureFormat):
         observations = self.set_time_constraint(observations, nyears=nyears)
         mass_balance = self.set_time_constraint(mass_balance, nyears=nyears)
 
-        if isinstance(observations, list):
-            observations = observations[0]
-        if isinstance(mass_balance, list):
-            mass_balance = mass_balance[0]
+        try:
+            if isinstance(observations, list):
+                observations = next(item for item in observations if item is not None)
+            if isinstance(mass_balance, list):
+                mass_balance = next(item for item in mass_balance if item is not None)
+        except StopIteration:
+            return None
         index = [datetime.date(i, 1, 1) for i in observations.index.values]
-        title = self.get_title(title="Mass Balance", suffix=name)
+        title = self.get_title(title="Mass Balance")
 
         defaults = self.defaults
         defaults.update({"ylim": (None, None)})
 
         overlay = (
             (
-                hv.Curve((index, mass_balance)).opts(
+                hv.Curve((index, mass_balance), label="OGGM").opts(
                     line_color=self.palette[1],
                     line_width=0.8,
                 )
-                * hv.Curve((index, observations.ANNUAL_BALANCE / 1000)).opts(
+                * hv.Curve(
+                    (index, observations.ANNUAL_BALANCE / 1000), label="WGMS"
+                ).opts(
                     line_color="black",
                     line_width=0.8,
                     line_dash="dashed",
@@ -701,12 +770,14 @@ class BokehGraph(BokehFigureFormat):
             )
             .opts(**defaults)
             .opts(
+                shared_axes=False,
                 title=title,
                 ylabel="Specific Mass Balance (m w.e.)",
                 xlabel="Year",
                 xformatter=bokeh.models.DatetimeTickFormatter(months="%Y"),
                 legend_position="bottom_left",
                 tools=[self.hover_tool],
+                legend_opts={"orientation": "vertical"},
             )
         )
 
@@ -739,9 +810,11 @@ class HoloviewsDashboard(BokehFigureFormat):
             location = f"{name} ({subregion_name})"
         elif subregion_name:
             location = subregion_name
+        elif name:
+            location = name
         else:
             location = ""
-        self.title = self.get_title(title="Dashboard", location=location)
+        self.title = self.get_title(title=location)
 
     def set_layout(self, figures: list) -> hv.Layout:
         """Compose Layout from a sequence of overlays or layouts.
@@ -757,13 +830,12 @@ class HoloviewsDashboard(BokehFigureFormat):
         if isinstance(figures, list):
             layout = figures[0]
             if len(figures) > 1:
-                for i in figures[1:]:
-                    layout += i
+                layout = figures
             layout = hv.Layout(layout).cols(2)
         else:
             layout = hv.Layout([figures])
 
-        layout = layout.opts(sizing_mode="stretch_width")
+        layout = layout.opts(sizing_mode="stretch_both")
 
         return layout
 
@@ -776,6 +848,7 @@ class HoloviewsDashboard(BokehFigureFormat):
             A sequence of figures.
         """
         self.dashboard = self.set_layout(figures=figures).opts(
+            shared_axes=False,
             title=self.title,
             fontsize={"title": 18},
             sizing_mode="scale_both",
@@ -812,7 +885,7 @@ class HoloviewsDashboard(BokehFigureFormat):
             glacier_name=glacier_name,
         )
         self.figures = fig_basin_selection
-        
+
         if "runoff_data" in data.keys():
             runoff_data = data["runoff_data"]
             if runoff_data is not None:
@@ -830,21 +903,23 @@ class HoloviewsDashboard(BokehFigureFormat):
                 )
 
                 self.figures = [
-                    [fig_basin_selection + fig_runoff_stack],
-                    [fig_monthly_runoff],
+                    fig_basin_selection,
+                    fig_runoff_stack,
+                    fig_monthly_runoff,
                 ]
             if "wgms" in runoff_data.keys():
                 observations = runoff_data["wgms"]
                 mass_balance = runoff_data["mass_balance"]
                 # TODO: Bug where different types get passed to Curve
-                # if observations is not None and mass_balance is not None:
-                #     fig_mass_balance = self.plot_graph.plot_mass_balance(
-                #         mass_balance=mass_balance,
-                #         observations=observations,
-                #         name=glacier_name,
-                #     )
-                #     self.figures[1].append(fig_mass_balance)
+                if observations is not None and mass_balance is not None:
+                    fig_mass_balance = self.plot_graph.plot_mass_balance(
+                        mass_balance=mass_balance,
+                        observations=observations,
+                        name=glacier_name,
+                    )
+                    self.figures.append(fig_mass_balance)
 
-        self.set_dashboard_title()
+        if glacier_name:
+            self.set_dashboard_title(name=glacier_name)
         self.set_dashboard(figures=self.figures)
         return self.dashboard
