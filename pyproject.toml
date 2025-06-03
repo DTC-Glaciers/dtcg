@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -45,10 +45,11 @@ dependencies = [
     "holoviews",
     "matplotlib",
     "seaborn",
-    "specklia",
+    "specklia >= 1.9.40",
     "shapely",
     "ipywidgets",
-    "zarr"
+    "zarr",
+    "schema"
 ]
 
 [project.optional-dependencies]

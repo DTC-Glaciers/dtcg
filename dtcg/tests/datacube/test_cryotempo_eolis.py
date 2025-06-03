@@ -1,3 +1,19 @@
+"""Copyright 2025 DTCG Contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+"""
+
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -111,7 +127,7 @@ class TestDataCubeCryoTempoEolis:
                 spatial_resolution=1.0,
                 xy_projection=self.XY_PROJ,
                 t_coordinate_column=t_col
-                )
+            )
 
         assert isinstance(output, dict)
         assert "elevation_change" in output
@@ -217,8 +233,7 @@ class TestDataCubeCryoTempoEolis:
         assert "eolis_gridded_standard_error" in result
         assert (
             np.count_nonzero(
-                np.isfinite(result["eolis_gridded_elevation_change"]))
-            == 480
+                np.isfinite(result["eolis_gridded_elevation_change"])) == 480
         )
         np.testing.assert_almost_equal(
             np.nanmean(result["eolis_gridded_elevation_change"]), 0.3771391
