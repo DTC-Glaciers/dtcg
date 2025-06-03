@@ -26,7 +26,7 @@ from datetime import datetime
 
 import xarray as xr
 import yaml
-from schema import Schema
+from schema import Optional, Schema
 
 
 class MetadataMapper:
@@ -61,6 +61,7 @@ class MetadataMapper:
             'standard_name': str,
             'long_name': str,
             'units': str,
+            Optional('author'): str,
             'institution': str,
             'source': str,
             'comment': str,

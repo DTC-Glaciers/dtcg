@@ -1,71 +1,90 @@
-# standard_name: https://cfconventions.org/Data/cf-standard-names/current/build/cf-standard-name-table.html
-# long_name: longer descriptive name of variable
-# units: consult https://doi.org/10.5065/D6KD1WN0 for standard units or the standard name table
-# institution: Specifies where the original data was produced.
-# source: The method of production of the original data. If it was model-generated, source should name the model and its version, as specifically as could be useful. If it is observational, source should characterize it (e.g., "surface observation" or "radiosonde").
-# comment: Miscellaneous information about the data or methods used to produce it.
-# references: Published or web-based references that describe the data or methods used to produce it.
-topo:
-  standard_name: surface_height_above_geopotential_datum
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
-topo_smoothed:
-  standard_name: surface_height_above_geopotential_datum
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
-topo_valid_mask:
-  standard_name: binary_mask
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
-glacier_mask:
-  standard_name: glacier_binary_mask
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
-glacier_ext:
-  standard_name: 
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
-itslive_vx:
-  standard_name: land_ice_surface_x_velocity
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
-itslive_vy:
-  standard_name: land_ice_surface_y_velocity
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
+# var_name:
+#   standard_name: https://cfconventions.org/Data/cf-standard-names/current/build/cf-standard-name-table.html
+#   long_name: longer descriptive name of variable
+#   units: consult https://doi.org/10.5065/D6KD1WN0 for standard units or the standard name table
+#   institution: Specifies where the original data was produced.
+#   source: The method of production of the original data. If it was model-generated, source should name the model and its version, as specifically as could be useful. If it is observational, source should characterize it (e.g., "surface observation" or "radiosonde").
+#   comment: Miscellaneous information about the data or methods used to produce it.
+#   references: Published or web-based references that describe the data or methods used to produce it.
+
 itslive_v:
   standard_name: magnitude_of_land_ice_surface_velocity
-  long_name:
-  units:
-  institution:
-  source:
-  comment:
-  references:
+  long_name: Ice surface velocity magnitude from ITS_LIVE
+  units: m yr-1
+  author: ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)
+  institution: NASA Jet Propulsion Laboratory (JPL), California Institute of Technology
+  source: Observational - optical feature tracking of Landsat image pairs (ITS_LIVE composite)
+  comment: Magnitude of the 1985-2018 average surface velocity, reprojected to glacier-specific grid and scaled to preserve ground units.
+  references: https://doi.org/10.5067/6II6VW8LLWJ7
+
+itslive_vx:
+  standard_name: land_ice_surface_x_velocity
+  long_name: Ice surface velocity in x-direction from ITS_LIVE
+  units: m yr-1
+  author: ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)
+  institution: NASA Jet Propulsion Laboratory (JPL), California Institute of Technology
+  source: Observational - optical feature tracking of Landsat image pairs (ITS_LIVE composite)
+  comment: x-component of 1985-2018 average surface velocity, reprojected to glacier-specific grid and scaled to preserve ground units.
+  references: https://doi.org/10.5067/6II6VW8LLWJ7
+
+itslive_vy:
+  standard_name: land_ice_surface_y_velocity
+  long_name: Ice surface velocity in y-direction from ITS_LIVE
+  units: m yr-1
+  author: ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)
+  institution: NASA Jet Propulsion Laboratory (JPL), California Institute of Technology
+  source: Observatishoponal - optical feature tracking of Landsat image pairs (ITS_LIVE composite)
+  comment: y-component of 1985-2018 average surface velocity, reprojected to glacier-specific grid and scaled to preserve ground units.
+  references: https://doi.org/10.5067/6II6VW8LLWJ7
+
+# topo can vary depending on oggm shop query - can we stick to COP within DTC Glaciers?
+topo:
+  standard_name: surface_altitude
+  long_name: Surface elevation from digital elevation model (DEM)
+  units: m
+  institution: (NASA, ESA)
+  source: Observational - digital elevation model from satellite-based remote sensing
+  comment: Elevation data reprojected to glacier-specific grid. No-data values and values ≤ -999 are set to NaN.
+  references: 
+    - NASADEM: https://doi.org/10.5067/MEASURES/NASADEM/NASADEM_HGT.001
+    - Copernicus DEM: https://doi.org/10.5270/ESA-c5d3d65
+
+topo_smoothed:
+  standard_name: surface_altitude
+  long_name: Smoothed surface elevation from digital elevation model (DEM)
+  units: m
+  institution: (NASA, ESA), post-processed by OGGM
+  source: DEM data processed with Gaussian blur
+  comment: Smoothed version of the DEM using a Gaussian filter with user-defined window.
+  references: 
+    - NASADEM: https://doi.org/10.5067/MEASURES/NASADEM/NASADEM_HGT.001
+    - Copernicus DEM: https://doi.org/10.5270/ESA-c5d3d65
+
+topo_valid_mask:
+  standard_name: surface_altitude_quality_flag
+  long_name: Validity mask of surface elevation from digital elevation model (DEM)
+  units: '1'
+  institution: (NASA, ESA), post-processed by OGGM
+  source: Validity mask derived from DEM
+  comment: 1 indicates valid DEM data; 0 indicates missing or invalid values.
+  references: 
+    - NASADEM: https://doi.org/10.5067/MEASURES/NASADEM/NASADEM_HGT.001
+    - Copernicus DEM: https://doi.org/10.5270/ESA-c5d3d65
+
+glacier_mask:
+  standard_name: land_ice_binary_mask
+  long_name: Glacier mask derived from Randolph Glacier Inventory (RGI)
+  units: '1'
+  institution: RGI Consortium
+  source: Rasterized glacier extent from RGI. RGI definitions are manually and semi-automatically delineated glacier outlines from satellite imagery.
+  comment: 1 indicates glacier-covered pixel; 0 indicates no ice.
+  references: https://doi.org/10.7265/4m1f-gd79
+
+glacier_ext:
+  standard_name: land_ice_boundary_binary_mask
+  long_name: Glacier boundary derived from Randolph Glacier Inventory (RGI)
+  units: '1'
+  institution: RGI Consortium
+  source: Rasterized glacier boundary from RGI. RGI definitions are manually and semi-automatically delineated glacier outlines from satellite imagery.
+  comment: Marks the boundary pixels of the glacier outline, excluding nunataks.
+  references: https://doi.org/10.7265/4m1f-gd79
