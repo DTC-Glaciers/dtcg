@@ -24,6 +24,7 @@ import os
 import warnings
 from datetime import datetime
 
+import rioxarray  # noqa: F401
 import xarray as xr
 import yaml
 from schema import Optional, Schema
@@ -42,13 +43,13 @@ class MetadataMapper:
     """
 
     def __init__(self: MetadataMapper,
-                 metadata_mapping_file_path: os.PathLike = None):
+                 metadata_mapping_file_path: str = None):
         """
         Initialise MetadataMapper with a given or default mapping file.
 
         Parameters
         ----------
-        metadata_mapping_file_path : os.PathLike, optional
+        metadata_mapping_file_path : str, optional
             Path to the YAML file containing variable metadata mappings.
             If None, defaults to 'metadata_mapping.yaml' in the current
             directory.
@@ -91,7 +92,7 @@ class MetadataMapper:
             self.METADATA_SCHEMA.validate(metadata)
 
         self.metadata_mappings = config_dict
-    
+
     def _update_shared_metadata(self: MetadataMapper,
                                 dataset: xr.Dataset) -> None:
         """
@@ -126,6 +127,27 @@ class MetadataMapper:
 
         dataset.attrs.update(shared_metadata)
 
+        # update coordinate metadata
+        dataset['x'].attrs.update({
+            'standard_name': 'projection_x_coordinate',
+            'long_name': 'x coordinate of projection',
+            'units': 'm'
+        })
+
+        dataset['y'].attrs.update({
+            'standard_name': 'projection_y_coordinate',
+            'long_name': 'y coordinate of projection',
+            'units': 'm'
+        })
+
+        if 't' in dataset.dims:
+            # assuming unix epoch
+            dataset['t'].attrs.update({
+                'standard_name': 'time',
+                'long_name': 'time since the unix epoch',
+                'units': 'seconds since 1970-01-01 00:00:00'
+            })
+
     def update_metadata(self: MetadataMapper,
                         dataset: xr.Dataset) -> xr.Dataset:
         """
@@ -152,7 +174,7 @@ class MetadataMapper:
         Missing variable mappings are reported as warnings, not errors.
         """
         # check there are mappings for all variables in the dataset
-        difference = set(dataset.variables) - set(self.metadata_mappings.keys())
+        difference = set(dataset.data_vars) - set(self.metadata_mappings.keys())
         if difference:
             warnings.warn(
                 "Metadata mapping is missing for the following variables: "
@@ -162,7 +184,8 @@ class MetadataMapper:
 
         # simple function to apply metadata to all layers in an xarray dataset
         for data_name, metadata in self.metadata_mappings.items():
-            dataset[data_name].attrs.update(metadata)
+            if data_name in dataset.data_vars:
+                dataset[data_name].attrs.update(metadata)
 
         self._update_shared_metadata(dataset)
 

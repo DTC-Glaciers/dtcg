@@ -45,9 +45,7 @@ topo:
   institution: (NASA, ESA)
   source: Observational - digital elevation model from satellite-based remote sensing
   comment: Elevation data reprojected to glacier-specific grid. No-data values and values ≤ -999 are set to NaN.
-  references: 
-    - NASADEM: https://doi.org/10.5067/MEASURES/NASADEM/NASADEM_HGT.001
-    - Copernicus DEM: https://doi.org/10.5270/ESA-c5d3d65
+  references: https://doi.org/10.5270/ESA-c5d3d65
 
 topo_smoothed:
   standard_name: surface_altitude
@@ -56,9 +54,7 @@ topo_smoothed:
   institution: (NASA, ESA), post-processed by OGGM
   source: DEM data processed with Gaussian blur
   comment: Smoothed version of the DEM using a Gaussian filter with user-defined window.
-  references: 
-    - NASADEM: https://doi.org/10.5067/MEASURES/NASADEM/NASADEM_HGT.001
-    - Copernicus DEM: https://doi.org/10.5270/ESA-c5d3d65
+  references: https://doi.org/10.5270/ESA-c5d3d65
 
 topo_valid_mask:
   standard_name: surface_altitude_quality_flag
@@ -67,9 +63,7 @@ topo_valid_mask:
   institution: (NASA, ESA), post-processed by OGGM
   source: Validity mask derived from DEM
   comment: 1 indicates valid DEM data; 0 indicates missing or invalid values.
-  references: 
-    - NASADEM: https://doi.org/10.5067/MEASURES/NASADEM/NASADEM_HGT.001
-    - Copernicus DEM: https://doi.org/10.5270/ESA-c5d3d65
+  references: https://doi.org/10.5270/ESA-c5d3d65
 
 glacier_mask:
   standard_name: land_ice_binary_mask

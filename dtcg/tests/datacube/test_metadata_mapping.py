@@ -68,7 +68,8 @@ class TestMetadataMapper:
         assert "var1" in mapper.metadata_mappings
         assert isinstance(mapper.metadata_mappings["var1"], dict)
 
-    def test_apply_metadata_to_variables(self, temp_metadata_file, test_dataset):
+    def test_apply_metadata_to_variables(
+            self, temp_metadata_file, test_dataset):
         mapper = MetadataMapper(temp_metadata_file)
         result = mapper.update_metadata(test_dataset)
 
@@ -91,9 +92,9 @@ class TestMetadataMapper:
 
     def test_warns_on_unmapped_variables(self, temp_metadata_file):
         ds = xr.Dataset({
-            "var1": (["x"], [1.0, 2.0, 3.0]),
-            "var2": (["x"], [4.0, 5.0, 6.0]),
-            "var3": (["x"], [4.0, 5.0, 6.0])},
+            "var1": (["x", "y"], [[1.0, 2.0], [3.0, 4.0]]),
+            "var2": (["x", "y"], [[4.0, 5.0], [6.0, 2.0]]),
+            "var3": (["x", "y"], [[4.0, 5.0], [6.0, 3.0]])},
             attrs={'pyproj_srs': CRS(3413).to_proj4()})
 
         mapper = MetadataMapper(temp_metadata_file)
