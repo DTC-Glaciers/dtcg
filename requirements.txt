@@ -15,3 +15,5 @@ ipywidgets
 pytest
 coverage
 coveralls
+numcodecs
+zarr
