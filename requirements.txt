@@ -8,6 +8,7 @@ bokeh
 geoviews
 holoviews
 matplotlib
+schema
 seaborn
 specklia
 shapely
