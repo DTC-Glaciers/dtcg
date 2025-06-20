@@ -59,20 +59,19 @@ class TestDataCubeCryoTempoEolis:
     def get_datacube_cryotempo_eolis(self):
         return cryotempo_eolis_utils.DatacubeCryotempoEolis()
 
-    @pytest.fixture(name="DatacubeCryotempoEolis", autouse=False,
-                    scope="function")
+    @pytest.fixture(name="DatacubeCryotempoEolis", autouse=False, scope="function")
     def fixture_datacube_cryotempo_eolis(self):
         return self.get_datacube_cryotempo_eolis()
 
     @patch("dtcg.datacube.cryotempo_eolis.Specklia")
     def test_retrieve_data_from_specklia(
-            self, mock_specklia_class, DatacubeCryotempoEolis):
+        self, mock_specklia_class, DatacubeCryotempoEolis
+    ):
         mock_client = MagicMock()
         mock_client.list_datasets.return_value = pd.DataFrame(
             [
                 {
-                    "dataset_name":
-                    "CryoTEMPO-EOLIS Processed Elevation Change Maps",
+                    "dataset_name": "CryoTEMPO-EOLIS Processed Elevation Change Maps",
                     "dataset_id": "abc123",
                     "min_timestamp": pd.Timestamp(0),
                     "max_timestamp": pd.Timestamp(100),
@@ -102,7 +101,7 @@ class TestDataCubeCryoTempoEolis:
         df = dataframe_3d if is_3d else dataframe_2d
         t_col = "timestamp" if is_3d else None
 
-        output, grid, t_axis = \
+        output, grid, t_axis = (
             DatacubeCryotempoEolis.convert_gridded_dataframe_to_array(
                 gridded_df=df,
                 value_column_names=["elevation_change", "standard_error"],
@@ -110,8 +109,9 @@ class TestDataCubeCryoTempoEolis:
                 y_coordinate_column="y",
                 spatial_resolution=1.0,
                 xy_projection=self.XY_PROJ,
-                t_coordinate_column=t_col
-                )
+                t_coordinate_column=t_col,
+            )
+        )
 
         assert isinstance(output, dict)
         assert "elevation_change" in output
@@ -154,9 +154,12 @@ class TestDataCubeCryoTempoEolis:
             64.63902233874501,
         )
 
-    @patch("dtcg.datacube.cryotempo_eolis.DatacubeCryotempoEolis.retrieve_data_from_specklia")
+    @patch(
+        "dtcg.datacube.cryotempo_eolis.DatacubeCryotempoEolis.retrieve_data_from_specklia"
+    )
     def test_retrieve_prepare_eolis_gridded_data(
-            self, mock_retrieve, oggm_dataset, DatacubeCryotempoEolis):
+        self, mock_retrieve, oggm_dataset, DatacubeCryotempoEolis
+    ):
         xs, ys = np.meshgrid(
             np.array(np.arange(566000, 614000, 2000)),
             np.array(np.arange(388000, 460000, 2000)),
@@ -181,8 +184,7 @@ class TestDataCubeCryoTempoEolis:
                         "unit": "m",
                         "description": "Elevation change",
                     },
-                    {"name": "standard_error", "unit": "m",
-                     "description": "Error"},
+                    {"name": "standard_error", "unit": "m", "description": "Error"},
                 ]
             },
         )
@@ -216,8 +218,7 @@ class TestDataCubeCryoTempoEolis:
         assert "eolis_gridded_elevation_change" in result
         assert "eolis_gridded_standard_error" in result
         assert (
-            np.count_nonzero(
-                np.isfinite(result["eolis_gridded_elevation_change"]))
+            np.count_nonzero(np.isfinite(result["eolis_gridded_elevation_change"]))
             == 480
         )
         np.testing.assert_almost_equal(
