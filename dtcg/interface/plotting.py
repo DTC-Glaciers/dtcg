@@ -18,7 +18,8 @@ limitations under the License.
 Plotting utilities for the frontend.
 """
 
-import datetime
+import sys
+from datetime import datetime
 
 import bokeh.models
 import bokeh.plotting
@@ -29,6 +30,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
+from dateutil.tz import UTC
 
 hv.extension("bokeh")
 
@@ -44,6 +46,10 @@ class BokehFigureFormat:
         self.defaults = self.get_default_opts()
         self.tooltips = []
         self.hover_tool = bokeh.models.HoverTool()
+
+    def check_holoviews(self):
+        if "holoviews" not in sys.modules:
+            raise SystemError("Holoviews is not installed.")
 
     def initialise_formatting(
         self, figure: bokeh.plotting.figure
@@ -782,6 +788,239 @@ class BokehGraph(BokehFigureFormat):
         )
 
         return overlay
+
+
+class BokehCryotempo(BokehFigureFormat):
+    """Wrangle data and plot with Bokeh.
+
+    Attributes
+    ----------
+
+    defaults : dict
+        Default options for all Bokeh figures.
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
+    hover_tool : bokeh.models.HoverTool
+        Hover tool for Bokeh figures.
+    palette : tuple
+        Colour palette.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.set_defaults(
+            {
+                "ylabel": "Runoff (Mt)",
+                "yformatter": PrintfTickFormatter(format="%.2f"),
+                "padding": (0.1, (0, 0.1)),
+                "ylim": (0, None),
+                "autorange": "y",
+            }
+        )
+        self.tooltips = [
+            ("Runoff", "$y{%.2f Mt}"),
+        ]
+        self.set_hover_tool(mode="vline")
+        self.palette = self.get_color_palette("lines_jet_r")
+
+    def get_date_mask(self, dataframe: pd.DataFrame, start_date: str, end_date: str):
+        date_mask = (
+            datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC)
+            <= dataframe.index
+        ) & (
+            dataframe.index
+            <= datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=UTC)
+        )
+        return date_mask
+
+    def get_mean_by_doy(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        return (
+            dataframe.groupby([dataframe.index.day_of_year])
+            .mean()
+            .rename_axis(index=["doy"])
+        )
+
+    def add_curve_to_figures(
+        self,
+        figures: list,
+        data: dict,
+        key: str,
+        label: str = "",
+        line_width=0.8,
+        **kwargs,
+    ) -> list:
+        if not label:
+            label = self.get_label_from_key(key)
+        curve = hv.Curve(data[key], label=label).opts(line_width=line_width, **kwargs)
+        figures.append(curve)
+        return figures
+
+    def get_label_from_key(self, key: str) -> str:
+
+        key_split = key.split("_")
+        model_name = key_split[0]
+        if "Sfc" in model_name:
+            model_name = f"{model_name.removesuffix('Sfc')}, Tracking"
+        label = f"{model_name}, {key_split[1]}"
+
+        if len(key_split) > 4:
+            if key_split[2] != "month":
+                label = f"{label} ({key_split[2]})"
+        else:
+            years = [i.split("-")[0] for i in key_split[-2:]]
+            geo_period = "-".join(years)
+            label = f"{label} ({geo_period})"
+        return label
+
+    def get_eolis_dates(self, ds):
+        return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
+
+    def get_eolis_mean_dh(self, ds):
+        mean_time_series = [
+            np.nanmean(elevation_change_map.where(ds.glacier_mask == 1))
+            for elevation_change_map in ds.eolis_gridded_elevation_change
+        ]
+        return np.array(mean_time_series)
+
+    def plot_mb_comparison(
+        self,
+        smb: dict,
+        years=None,
+        glacier_name: str = "",
+        geodetic_period: str = "2000-01-01_2020-01-01",
+        ref_year: int = 2015,
+        datacube=None,
+        gdir=None,
+        resample: bool = False,
+    ):
+        """Plot daily SMB for a specific year and geodetic mean.
+
+        Parameters
+        ----------
+        smb : dict
+            Specific mass balance data for various OGGM models.
+        years : list, default None
+            OGGM output years.
+        glacier_name : str, default empty string
+            Name of glacier.
+        geodetic_period : str, default "2000-01-01_2020-01-01"
+            Period over which to take the mean daily specific mass balance.
+        ref_year : int, default 2015
+            Reference year.
+        datacube : xr.DataArray, default None
+            CryoTEMPO-EOLIS observations for elevation change.
+        gdir : GlacierDirectory, default None
+            Glacier of interest.
+        resample : bool, default False
+            If True, resample observations to begin on the first day of the
+            month.
+        """
+        self.check_holoviews()
+
+        plot_data = {}
+        figures = []
+
+        if years is None:
+            years = np.arange(1979, 2020)
+        geodetic_period = geodetic_period.split("_")
+        start_year = geodetic_period[0][:4]
+        end_year = geodetic_period[1][:4]
+
+        plot_dates_day = pd.date_range(
+            f"{years[0]}-01-01", f"{years[-1]}-12-31", freq="1D", tz=UTC
+        )
+
+        if datacube:
+            if not gdir:
+                raise ValueError("Provide a glacier directory.")
+            cryotempo_dates = self.get_eolis_dates(datacube)
+            cryotempo_dh = self.get_eolis_mean_dh(datacube)
+
+            df = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
+            if resample:
+                df = df.resample("1MS").mean()
+
+            date_mask = self.get_date_mask(
+                df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+            )
+            df = df[date_mask]
+            if not df.empty:
+                df["smb"] = (
+                    1000 * (df["smb"] - df["smb"].iloc[0]) * 850 / gdir.rgi_area_km2
+                )
+
+                df_daily_mean = self.get_mean_by_doy(df)
+                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+                plot_data["CryoTEMPO-EOLIS Observations"] = df_daily_mean["smb"] / 30
+
+                label = f"CryoTEMPO-EOLIS Observations ({ref_year})"
+                curve = hv.Curve(
+                    plot_data["CryoTEMPO-EOLIS Observations"], label=label
+                ).opts(line_width=1.0, color="grey", line_dash="dotted")
+                figures.append(curve)
+
+        for k, v in smb.items():
+            if "Daily" in k:
+                label = self.get_label_from_key(k)
+
+                df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
+
+                geodetic_mask = self.get_date_mask(df, *geodetic_period)
+
+                df_daily_mean = self.get_mean_by_doy(df[geodetic_mask])
+                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+                plot_data[k] = df_daily_mean["smb"]
+
+                label = f"{start_year}-{end_year} Mean"
+                figures = self.add_curve_to_figures(
+                    data=plot_data, key=k, figures=figures, line_color="k", label=label
+                )
+
+                date_mask = self.get_date_mask(
+                    df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+                )
+
+                df_daily_mean = self.get_mean_by_doy(df[date_mask])
+                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+                plot_data[k] = df_daily_mean["smb"]
+                label = f"{ref_year}"
+                figures = self.add_curve_to_figures(
+                    data=plot_data,
+                    key=k,
+                    figures=figures,
+                    line_color="#d62728",
+                    label=label,
+                )
+
+        default_opts = self.get_default_opts()
+        if glacier_name:
+            glacier_name = f"{glacier_name}, "
+        overlay = (
+            hv.Overlay(figures)
+            .opts(**default_opts)
+            .opts(
+                aspect=4,
+                ylabel="Daily SMB (mm w.e.)",
+                title=f"Daily Specific Mass Balance\n {glacier_name}{start_year}-{end_year}",
+                xlabel="Month",
+                # xformatter=f"%j",
+                xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
+                tools=["xwheel_zoom", "xpan"],
+                active_tools=["xwheel_zoom"],
+                legend_position="top",
+                legend_opts={
+                    "orientation": "vertical",
+                    "css_variables": {"font-size": "1em", "display": "inline"},
+                },
+            )
+        )
+        layout = (
+            hv.Layout([overlay])
+            .cols(1)
+            .opts(sizing_mode="stretch_width", shared_axes=False)
+        )
+        return layout
 
 
 class HoloviewsDashboard(BokehFigureFormat):
