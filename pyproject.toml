@@ -63,7 +63,7 @@ oggm = [
     "scikit-image",
     "scikit-learn",
     "configobj",
-    "dask < 2025.1",
+    "dask >= 2025.5",
     "bottleneck",
     "pyproj",
     "cartopy",
