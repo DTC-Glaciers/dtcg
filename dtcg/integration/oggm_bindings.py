@@ -21,13 +21,16 @@ Executes an OGGM-API request.
 """
 
 import csv
-from pathlib import Path
+import os
 
 import geopandas as gpd
 import pandas as pd
 import shapely.geometry as shpg
 import xarray as xr
-from oggm import DEFAULT_BASE_URL, cfg, graphics, tasks, utils, workflow
+from oggm import cfg, tasks, utils, workflow
+from oggm.shop import its_live, w5e5
+import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
+import dtcg.integration.calibration
 
 # TODO: Link to DTCG instead.
 # DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
@@ -49,12 +52,19 @@ class BindingsOggmModel:
         Temporary working directory.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
+        working_dir: str = "",
+        oggm_params: dict = None,
+    ):
         super().__init__()
-        self.DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
-        self.SHAPEFILE_PATH = "https://cluster.klima.uni-bremen.de/~dtcg/test_files/case_study_regions/austria"
-        self.WORKING_DIR = None
-        self.oggm_params = {}
+        self.DEFAULT_BASE_URL = base_url
+        self.WORKING_DIR = utils.gettempdir(working_dir)
+        if oggm_params is None:
+            self.oggm_params = {}
+        else:
+            self.oggm_params = oggm_params
 
     def set_oggm_params(self, **new_params: dict) -> None:
         self.oggm_params.update(new_params)
@@ -89,7 +99,7 @@ class BindingsOggmModel:
         """
 
         cfg.initialize(logging_level="CRITICAL")
-        cfg.PARAMS["border"] = 80
+        cfg.PARAMS["border"] = kwargs.get("border", 80)
         self.WORKING_DIR = utils.gettempdir(dirname)  # already handles empty strings
         utils.mkdir(
             self.WORKING_DIR, reset=True
@@ -263,31 +273,71 @@ class BindingsOggmModel:
             raise KeyError(f"No glaciers found for {subregion_name}.")
         return rgi_files
 
-    def get_glacier_directories(self, glaciers: list):
+    def get_glacier_directories(
+        self,
+        rgi_ids: list,
+        base_url: str = "",
+        prepro_level: int = 4,
+        prepro_border: int = 80,
+        **kwargs,
+    ):
         """Get OGGM glacier directories.
+
+        Parameters
+        ----------
+        rgi_ids : list
+            RGI IDs of glaciers.
+        base_url : str, default empty string
+            URL to OGGM data. If empty, uses the ``DEFAULT_BASE_URL``
+            attribute.
+        prepro_level : int, default 4
+            File preprocessing level.
+        prepro_border : int, default 80
+            Grid border buffer around the glacier.
+        **kwargs
+            Extra arguments to ``workflow.init_glacier_directories``.
 
         Returns
         -------
-        glaciers : list
+        list
             :py:class:`oggm.GlacierDirectory` objects for the
             initialised glacier directories.
         """
 
+        if not base_url:
+            base_url = self.DEFAULT_BASE_URL
         gdirs = workflow.init_glacier_directories(
-            glaciers,
-            from_prepro_level=4,
-            prepro_border=80,
-            prepro_base_url=self.DEFAULT_BASE_URL,
+            rgi_ids,
+            prepro_base_url=base_url,
+            from_prepro_level=prepro_level,
+            prepro_border=prepro_border,
+            **kwargs,
         )
 
         return gdirs
+
+    def set_flowlines(self, gdir) -> None:
+        """Compute glacier flowlines if missing from glacier directory."""
+        if not os.path.exists(gdir.get_filepath("inversion_flowlines")):
+            if not os.path.exists(gdir.get_filepath("elevation_band_flowline")):
+                tasks.elevation_band_flowline(gdir=gdir, preserve_totals=True)
+            tasks.fixed_dx_elevation_band_flowline(gdir, preserve_totals=True)
 
 
 class BindingsOggmWrangler(BindingsOggmModel):
     """Wrangles input data for OGGM workflows."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(
+        self,
+        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
+        working_dir: str = "",
+        oggm_params: dict = None,
+        shapefile_path: str = "https://cluster.klima.uni-bremen.de/~dtcg/test_files/case_study_regions/austria",
+    ):
+        super().__init__(
+            base_url=base_url, working_dir=working_dir, oggm_params=oggm_params
+        )
+        self.SHAPEFILE_PATH = shapefile_path
 
     def get_shapefile(self, path: str) -> gpd.GeoDataFrame:
         """Get shapefile from user path.
@@ -423,7 +473,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
 
         return merge
 
-    def get_gdir_by_name(self, data: gpd.GeoDataFrame, name: str):
+    def get_gdir_by_name(self, data: gpd.GeoDataFrame, name: str, **kwargs):
         """Get glacier directory from a glacier's name or RGI ID.
 
         Parameters
@@ -432,14 +482,11 @@ class BindingsOggmWrangler(BindingsOggmModel):
             Glacier data.
         name : str
             Name or RGI ID of glacier.
+        **kwargs
+            Additional arguments passed to ``workflow.init_glacier_directories``.
         """
         glacier = self.get_glacier_by_name(data=data, name=name)
-        gdirs = workflow.init_glacier_directories(
-            glacier,
-            from_prepro_level=5,
-            prepro_border=160,
-            prepro_base_url="https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup",
-        )
+        gdirs = self.get_glacier_directories(glaciers=[glacier], **kwargs)
 
         return gdirs[0]
 
@@ -571,9 +618,17 @@ class BindingsHydro(BindingsOggmWrangler):
         Output directory name.
     """
 
-    def __init__(self):
-        super().__init__()
-        self.hydro_location = "_spinup_historical_hydro"
+    def __init__(
+        self,
+        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
+        working_dir: str = "",
+        oggm_params: dict = None,
+        hydro_location: str = "_spinup_historical_hydro",
+    ):
+        super().__init__(
+            base_url=base_url, working_dir=working_dir, oggm_params=oggm_params
+        )
+        self.hydro_location = hydro_location
 
     def get_compiled_run_output(
         self,
@@ -698,7 +753,13 @@ class BindingsHydro(BindingsOggmWrangler):
         tuple[xr.Dataset,np.ndarray]
             Climatological data and specific mass balance for a glacier.
         """
-        glacier = self.get_gdir_by_name(data=data, name=name)
+        glacier = self.get_gdir_by_name(
+            data=data,
+            name=name,
+            from_prepro_level=5,
+            prepro_border=160,
+            prepro_base_url="https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup",
+        )
         climatology = self.get_hydro_climatology(gdir=glacier)
 
         try:
@@ -764,3 +825,61 @@ class BindingsHydro(BindingsOggmWrangler):
             "wgms": observations,
         }
         return runoff_data
+
+
+class BindingsCryotempo(BindingsOggmWrangler):
+    """Bindings for interacting with CryoTEMPO-EOLIS data.
+
+    Attributes
+    ----------
+    hydro_location : str
+        Output directory name.
+    """
+
+    def __init__(
+        self,
+        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/exps/dtcg/halslon_v1/",
+        working_dir: str = "",
+        oggm_params: dict = {"border": 10, "store_model_geometry": True},
+    ):
+        super().__init__(
+            base_url=base_url, working_dir=working_dir, oggm_params=oggm_params
+        )
+        self.datacube_manager = cryotempo_eolis.DatacubeCryotempoEolis()
+        self.calibrator = dtcg.integration.calibration.CalibratorCryotempo()
+
+    def init_oggm(self, dirname="", **kwargs):
+        return super().init_oggm(dirname, **kwargs)
+
+    def get_glacier_directories(
+        self,
+        rgi_ids: list,
+        base_url: str = "",
+        prepro_level: int = 1,
+        prepro_border: int = 10,
+        **kwargs,
+    ):
+        return super().get_glacier_directories(
+            rgi_ids, base_url, prepro_level, prepro_border, **kwargs
+        )
+
+    def get_glacier_data(self, gdirs: list) -> None:
+        """Add velocity data, monthly and daily W5E5 data."""
+        workflow.execute_entity_task(tasks.glacier_masks, gdirs)
+        workflow.execute_entity_task(its_live.itslive_velocity_to_gdir, gdirs)
+
+        # monthly data needed to prevent silent failures
+        workflow.execute_entity_task(gdirs=gdirs, task=w5e5.process_w5e5_data)
+        workflow.execute_entity_task(
+            gdirs=gdirs, task=w5e5.process_w5e5_data, daily=True
+        )
+
+    def get_eolis_data(self, gdir):
+        """Get gridded data enhanced with CryoTEMPO-EOLIS data."""
+        with xr.open_dataset(gdir.get_filepath("gridded_data")) as datacube:
+            datacube = datacube.load()
+
+        self.datacube_manager.retrieve_prepare_eolis_gridded_data(
+            oggm_ds=datacube, grid=gdir.grid
+        )
+        return gdir, datacube
