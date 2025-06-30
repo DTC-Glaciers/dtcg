@@ -5,7 +5,7 @@ Python API for DTC-Glaciers access and analysis.
 
 ## Installation
 
-Supports Python 3.10 - 3.12.
+Supports Python 3.11 and 3.12.
 
 If you already installed OGGM's dependencies:
 
