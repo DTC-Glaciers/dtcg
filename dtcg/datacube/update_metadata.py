@@ -15,7 +15,7 @@ limitations under the License.
 
 =====
 
-Functionality for ensuring metadata is CF complaint: https://cfconventions.org/.
+Functionality for ensuring metadata is CF compliant: https://cfconventions.org/.
 """
 
 from __future__ import annotations
@@ -31,8 +31,7 @@ from schema import Optional, Schema
 
 
 class MetadataMapper:
-    """
-    Class for applying CF-compliant metadata to xarray Datasets.
+    """Class for applying CF-compliant metadata to xarray Datasets.
 
     Attributes
     ----------
@@ -42,10 +41,10 @@ class MetadataMapper:
         Dictionary of metadata mappings loaded from a YAML file.
     """
 
-    def __init__(self: MetadataMapper,
-                 metadata_mapping_file_path: str = None):
-        """
-        Initialise MetadataMapper with a given or default mapping file.
+    metadata_mappings: dict  # as this is not explicitly passed to __init__().
+
+    def __init__(self: MetadataMapper, metadata_mapping_file_path: str = None):
+        """Initialise MetadataMapper with a given or default mapping file.
 
         Parameters
         ----------
@@ -54,26 +53,29 @@ class MetadataMapper:
             If None, defaults to 'metadata_mapping.yaml' in the current
             directory.
         """
+
         if metadata_mapping_file_path is None:
             metadata_mapping_file_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                'metadata_mapping.yaml')
-        self.METADATA_SCHEMA = Schema({
-            'standard_name': str,
-            'long_name': str,
-            'units': str,
-            Optional('author'): str,
-            'institution': str,
-            'source': str,
-            'comment': str,
-            'references': str
-        })
-        self.load_metadata_mappings(metadata_mapping_file_path)
+                os.path.dirname(os.path.abspath(__file__)), "metadata_mapping.yaml"
+            )
+        self.METADATA_SCHEMA = Schema(
+            {
+                "standard_name": str,
+                "long_name": str,
+                "units": str,
+                Optional("author"): str,
+                "institution": str,
+                "source": str,
+                "comment": str,
+                "references": str,
+            }
+        )
+        self.read_metadata_mappings(metadata_mapping_file_path)
 
-    def load_metadata_mappings(self: MetadataMapper,
-                               metadata_mapping_file_path: str) -> None:
-        """
-        Load and validate metadata mappings from a YAML file.
+    def read_metadata_mappings(
+        self: MetadataMapper, metadata_mapping_file_path: str
+    ) -> None:
+        """Load and validate metadata mappings from a YAML file.
 
         Parameters
         ----------
@@ -93,21 +95,21 @@ class MetadataMapper:
 
         self.metadata_mappings = config_dict
 
-    def _update_shared_metadata(self: MetadataMapper,
-                                dataset: xr.Dataset) -> None:
-        """
-        Add shared metadata attributes to the dataset and ensure CRS is set.
+    @staticmethod
+    def _update_shared_metadata(dataset: xr.Dataset) -> None:
+        """Add shared metadata attributes to the dataset and ensure CRS is set.
 
         Parameters
         ----------
         dataset : xarray.Dataset
-            The dataset to which shared metadata and CRS should be applied.
+            The dataset to which shared metadata and CRS should be
+            applied.
 
         Notes
         -----
-        If a CRS is not present, it is set from the dataset's `pyproj_srs`
-        attribute. Shared metadata includes CF conventions, title, and
-        summary.
+        If a CRS is not present, it is set from the dataset's
+        `pyproj_srs` attribute. Shared metadata includes CF conventions,
+        title, and summary.
         """
         # create a spatial_ref layer in the dataset
         if not dataset.rio.crs:
@@ -117,46 +119,48 @@ class MetadataMapper:
         shared_metadata = {
             "Conventions": "CF-1.12",
             "title": "Datacube of Glacier-domain variables.",
-            "summary": "Resampled Glacier-domain variables from multiple "
-            "sources. Generated as part of the DTC-Glaciers project.",
-            "comment": "The DTC-Glaciers project is developed under the "
-            "European Space Agency's Digital Twin Earth initiative, as part of "
-            "the Digital Twin Components (DTC) Early Development Actions.",
-            "date_created": datetime.now().isoformat()
+            "summary": (
+                "Resampled Glacier-domain variables from multiple sources. "
+                "Generated as part of the DTC-Glaciers project."
+            ),
+            "comment": (
+                "The DTC-Glaciers project is developed under the European Space "
+                "Agency's Digital Twin Earth initiative, as part of the Digital Twin "
+                "Components (DTC) Early Development Actions."
+            ),
+            "date_created": datetime.now().isoformat(),
         }
 
         dataset.attrs.update(shared_metadata)
 
         # update coordinate metadata
-        dataset['x'].attrs.update({
-            'standard_name': 'projection_x_coordinate',
-            'long_name': 'x coordinate of projection',
-            'units': 'm'
+        dataset["x"].attrs.update({
+            "standard_name": "projection_x_coordinate",
+            "long_name": "x coordinate of projection",
+            "units": "m",
         })
 
-        dataset['y'].attrs.update({
-            'standard_name': 'projection_y_coordinate',
-            'long_name': 'y coordinate of projection',
-            'units': 'm'
+        dataset["y"].attrs.update({
+            "standard_name": "projection_y_coordinate",
+            "long_name": "y coordinate of projection",
+            "units": "m",
         })
 
-        if 't' in dataset.dims:
+        if "t" in dataset.dims:
             # assuming unix epoch
-            dataset['t'].attrs.update({
-                'standard_name': 'time',
-                'long_name': 'time since the unix epoch',
-                'units': 'seconds since 1970-01-01 00:00:00'
+            dataset["t"].attrs.update({
+                "standard_name": "time",
+                "long_name": "time since the unix epoch",
+                "units": "seconds since 1970-01-01 00:00:00",
             })
 
-    def update_metadata(self: MetadataMapper,
-                        dataset: xr.Dataset) -> xr.Dataset:
-        """
-        Apply variable and shared metadata to an xarray Dataset.
+    def update_metadata(self: MetadataMapper, dataset: xr.Dataset) -> xr.Dataset:
+        """Apply variable and shared metadata to an xarray Dataset.
 
         Parameters
         ----------
         dataset : xarray.Dataset
-            Dataset to which metadata should be applied.
+            Dataset to which the metadata should be applied.
 
         Returns
         -------
@@ -180,7 +184,8 @@ class MetadataMapper:
                 "Metadata mapping is missing for the following variables: "
                 f"{sorted(difference)}. The metadata for these variables might "
                 "not be compliant with Climate and Forecast conventions "
-                "https://cfconventions.org/.")
+                "https://cfconventions.org/."
+            )
 
         # simple function to apply metadata to all layers in an xarray dataset
         for data_name, metadata in self.metadata_mappings.items():

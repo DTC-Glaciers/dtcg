@@ -12,6 +12,7 @@ schema
 seaborn
 specklia
 shapely
+pyyaml
 ipywidgets
 pytest
 coverage

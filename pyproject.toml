@@ -48,7 +48,8 @@ dependencies = [
     "specklia >= 1.9.40",
     "shapely",
     "ipywidgets",
-    "schema"
+    "schema",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]

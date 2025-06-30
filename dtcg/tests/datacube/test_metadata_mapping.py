@@ -44,11 +44,10 @@ class TestMetadataMapper:
                 "institution": "Test Institute",
                 "source": "Simulated",
                 "comment": "Sample comment",
-                "references": "http://example.com"
+                "references": "http://example.com",
             }
         }
-        with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".yaml", mode='w') as f:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml", mode="w") as f:
             yaml.dump(metadata, f)
             return f.name
 
@@ -83,8 +82,7 @@ class TestMetadataMapper:
         mapper = MetadataMapper(temp_metadata_file)
         result = mapper.update_metadata(test_dataset)
 
-        for attr in ["Conventions", "title", "summary", "comment",
-                     "date_created"]:
+        for attr in ["Conventions", "title", "summary", "comment", "date_created"]:
             assert attr in result.attrs
 
         assert result.rio.crs is not None
@@ -95,7 +93,7 @@ class TestMetadataMapper:
             "var1": (["x", "y"], [[1.0, 2.0], [3.0, 4.0]]),
             "var2": (["x", "y"], [[4.0, 5.0], [6.0, 2.0]]),
             "var3": (["x", "y"], [[4.0, 5.0], [6.0, 3.0]])},
-            attrs={'pyproj_srs': CRS(3413).to_proj4()})
+            attrs={"pyproj_srs": CRS(3413).to_proj4()})
 
         mapper = MetadataMapper(temp_metadata_file)
 
