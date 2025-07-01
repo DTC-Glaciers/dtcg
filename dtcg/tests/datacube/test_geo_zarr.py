@@ -16,7 +16,6 @@ limitations under the License.
 import os
 import numpy as np
 import pytest
-import rioxarray  # noqa: F401
 import xarray as xr
 import zarr
 import yaml
@@ -40,22 +39,23 @@ class TestGeoZarrWriter:
                 y=("y", np.linspace(0, 2000, 100)),
                 t=("t", np.linspace(1e5, 1e6, 100)),
             ),
+            attrs={"pyproj_srs": "+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 "
+                   "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"}
         )
-        ds.rio.write_crs("EPSG:3413", inplace=True)
 
         metadata_mapping = {
-            'temperature': {
-                'standard_name': 'bond',
-                'long_name': 'james bond',
-                'units': '007',
-                'institution': 'mi6',
-                'source': 'wibble',
-                'comment': 'wobble',
-                'references': 'moneypenny'
+            "temperature": {
+                "standard_name": "bond",
+                "long_name": "james bond",
+                "units": "007",
+                "institution": "mi6",
+                "source": "wibble",
+                "comment": "wobble",
+                "references": "moneypenny"
             }
         }
-        metadata_path = os.path.join(tmp_path, 'meta.yaml')
-        with open(metadata_path, 'w') as f:
+        metadata_path = os.path.join(tmp_path, "meta.yaml")
+        with open(metadata_path, "w") as f:
             yaml.dump(metadata_mapping, f)
 
         return ds, metadata_path
@@ -86,27 +86,27 @@ class TestGeoZarrWriter:
                   r"\['precipitation'\]"):
             writer.write()
 
-        root = zarr.open_group(store=writer.store, mode='r')
+        root = zarr.open_group(store=writer.store, mode="r")
 
-        assert 'spatial_ref' in root
-        assert 'crs_wkt' in root['spatial_ref'].attrs
+        assert "spatial_ref" in root
+        assert "crs_wkt" in root["spatial_ref"].attrs
 
-        for param in ['temperature', 'precipitation']:
+        for param in ["temperature", "precipitation"]:
             assert param in root
-            assert '_ARRAY_DIMENSIONS' in root[param].attrs
-            assert root[param].attrs['grid_mapping'] == 'spatial_ref'
-            if param == 'temperature':
-                assert root[param].attrs['standard_name'] == 'bond'
-                assert root[param].attrs['references'] == 'moneypenny'
+            assert "_ARRAY_DIMENSIONS" in root[param].attrs
+            assert root[param].attrs["grid_mapping"] == "spatial_ref"
+            if param == "temperature":
+                assert root[param].attrs["standard_name"] == "bond"
+                assert root[param].attrs["references"] == "moneypenny"
 
-        for coord in ['x', 'y', 't']:
+        for coord in ["x", "y", "t"]:
             assert coord in root
-            assert root[coord].attrs['_ARRAY_DIMENSIONS'] == [coord]
+            assert root[coord].attrs["_ARRAY_DIMENSIONS"] == [coord]
 
     def test_missing_required_dims_raises(self, test_dataset):
         """Test that missing required dimensions raises ValueError."""
         ds, _ = test_dataset
-        ds = ds.drop_dims('x')
+        ds = ds.drop_dims("x")
 
         with pytest.raises(ValueError,
                            match="Dataset must have at least dimensions"):
@@ -122,13 +122,16 @@ class TestGeoZarrWriter:
             ds=ds,
             storage_type=ZarrStorage.memory_store,
             overwrite=True,
-            target_chunk_mb=0.01
+            target_chunk_mb=1
         )
         with pytest.warns(UserWarning, match="Metadata mapping is missing"):
             writer.write()
 
-        root = zarr.open_group(store=writer.store, mode='r')
-        temp_chunks = root['temperature'].chunks
+        root = zarr.open_group(store=writer.store, mode="r")
+        temp_chunks = root["temperature"].chunks
+        precip_chunks = root["precipitation"].chunks
 
         assert isinstance(temp_chunks, tuple)
-        assert temp_chunks == (1, 36, 36)
+        assert temp_chunks == (100, 36, 36)
+        assert isinstance(precip_chunks, tuple)
+        assert precip_chunks == (100, 100)

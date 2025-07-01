@@ -47,8 +47,7 @@ class GeoZarrWriter(MetadataMapper):
         overwrite: bool = True,
         metadata_mapping_file_path: str = None
     ):
-        """
-        Initialise a GeoZarrWriter object.
+        """Initialise a GeoZarrWriter object.
 
         Parameters
         ----------
@@ -79,7 +78,7 @@ class GeoZarrWriter(MetadataMapper):
         self.storage_directory = storage_directory
         self.target_chunk_mb = target_chunk_mb
         self.compressor = compressor or Blosc(
-            cname='zstd', clevel=3, shuffle=Blosc.BITSHUFFLE)
+            cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE)
         self.overwrite = overwrite
         self.encoding = {}
 
@@ -88,8 +87,7 @@ class GeoZarrWriter(MetadataMapper):
         self._define_encodings()
 
     def _set_store(self: GeoZarrWriter) -> None:
-        """
-        Set the Zarr storage backend based on the selected storage type.
+        """Set the Zarr storage backend based on the selected storage type.
 
         Raises
         ------
@@ -110,8 +108,7 @@ class GeoZarrWriter(MetadataMapper):
                 "ZarrStorage.memory_store.")
 
     def _validate_dataset(self: GeoZarrWriter) -> None:
-        """
-        Validate the input dataset to ensure it includes required dimensions
+        """Validate the input dataset to ensure it includes required dimensions
         and associated coordinate variables.
 
         Raises
@@ -120,7 +117,7 @@ class GeoZarrWriter(MetadataMapper):
         - If 'x' or 'y' dimensions are missing.
         - If any dimension does not have an associated coordinate variable.
         """
-        required_dims = {'x', 'y'}
+        required_dims = {"x", "y"}
         if not required_dims.issubset(self.ds.dims):
             raise ValueError(
                 f"Dataset must have at least dimensions {required_dims}")
@@ -131,8 +128,7 @@ class GeoZarrWriter(MetadataMapper):
                     "the dataset.")
 
     def _calculate_chunk_sizes(self: GeoZarrWriter, var: xr.DataArray) -> None:
-        """
-        Calculate chunk sizes for a given variable to match the target chunk
+        """Calculate chunk sizes for a given variable to match the target chunk
         size in megabytes.
 
         Parameters
@@ -148,20 +144,31 @@ class GeoZarrWriter(MetadataMapper):
             't'.
         """
         target_bytes = self.target_chunk_mb * 1024 * 1024
-        x_size = self.ds.sizes['x']
-        y_size = self.ds.sizes['y']
-        total_elements_target = target_bytes // var.dtype.itemsize
-        side_length = int(np.sqrt(total_elements_target))
+        x_size = var.sizes["x"]
+        y_size = var.sizes["y"]
+        t_size = var.sizes.get("t", 1)  # Defaults to 1 if no 't' dimension
+
+        # Calculate the number of elements allowed per chunk
+        # After accounting for a full 't' slice
+        elements_per_t_slice = target_bytes // (var.dtype.itemsize * t_size)
+
+        # Determine side length based on remaining budget
+        side_length = int(np.sqrt(elements_per_t_slice))
+
         chunk_x = min(x_size, side_length)
         chunk_y = min(y_size, side_length)
-        chunk_sizes = {'x': chunk_x, 'y': chunk_y}
-        if 't' in self.ds.dims:
-            chunk_sizes['t'] = 1
+
+        chunk_sizes = {"x": chunk_x, "y": chunk_y}
+
+        if "t" in var.dims:
+            # Use the full length of 't' - this allows more efficient loading,
+            # assuming the user is always interested in the full time series
+            chunk_sizes["t"] = t_size
+
         return chunk_sizes
 
     def _define_encodings(self: GeoZarrWriter) -> None:
-        """
-        Define encoding settings for each data variable in the dataset,
+        """Define encoding settings for each data variable in the dataset,
         including chunking and compression.
 
         Notes
@@ -173,13 +180,12 @@ class GeoZarrWriter(MetadataMapper):
             chunk_sizes = self._calculate_chunk_sizes(self.ds[var])
             chunks = tuple(chunk_sizes.get(dim) for dim in self.ds[var].dims)
             self.encoding[var] = {
-                'chunks': chunks,
-                'compressor': self.compressor
+                "chunks": chunks,
+                "compressor": self.compressor
             }
 
     def write(self: GeoZarrWriter, zarr_format: int = 2) -> None:
-        """
-        Write the dataset to GeoZarr format.
+        """Write the dataset to GeoZarr format.
 
         Parameters
         ----------
@@ -197,7 +203,7 @@ class GeoZarrWriter(MetadataMapper):
             self.ds[var].attrs["grid_mapping"] = "spatial_ref"
         ds_metadata_updated.to_zarr(
             self.store,
-            mode='w' if self.overwrite else 'a',
+            mode="w" if self.overwrite else "a",
             consolidated=True,
             zarr_format=zarr_format,
             encoding=self.encoding)
