@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -39,6 +39,7 @@ dependencies = [
     "pandas",
     "xarray",
     "shapely",
+    "rioxarray",
     "geopandas",
     "bokeh",
     "geoviews",
@@ -46,10 +47,10 @@ dependencies = [
     "matplotlib",
     "seaborn",
     "specklia >= 1.9.40",
-    "shapely",
     "ipywidgets",
     "zarr",
-    "schema"
+    "schema",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
@@ -70,7 +71,6 @@ oggm = [
     "pyproj",
     "cartopy",
     "rasterio",
-    "rioxarray",
     "seaborn",
     "tables",  # pytables
     "salem",

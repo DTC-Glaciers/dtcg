@@ -20,7 +20,6 @@ import warnings
 
 import numpy as np
 import pytest
-import rioxarray  # noqa: F401
 import xarray as xr
 import yaml
 from pyproj import CRS
@@ -44,11 +43,10 @@ class TestMetadataMapper:
                 "institution": "Test Institute",
                 "source": "Simulated",
                 "comment": "Sample comment",
-                "references": "http://example.com"
+                "references": "http://example.com",
             }
         }
-        with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".yaml", mode='w') as f:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml", mode="w") as f:
             yaml.dump(metadata, f)
             return f.name
 
@@ -58,9 +56,10 @@ class TestMetadataMapper:
         data = np.random.rand(3, 3)
         ds = xr.Dataset(
             {"var1": (["y", "x"], data)},
-            coords={"x": np.arange(3), "y": np.arange(3)}
+            coords={"x": np.arange(3), "y": np.arange(3)},
+            attrs={
+                "pyproj_srs": "+proj=longlat +datum=WGS84 +no_defs +type=crs"}
         )
-        ds.rio.write_crs("EPSG:4326", inplace=True)
         return ds
 
     def test_load_metadata(self, temp_metadata_file):
@@ -83,19 +82,19 @@ class TestMetadataMapper:
         mapper = MetadataMapper(temp_metadata_file)
         result = mapper.update_metadata(test_dataset)
 
-        for attr in ["Conventions", "title", "summary", "comment",
-                     "date_created"]:
+        for attr in ["Conventions", "title", "summary", "comment", "date_created"]:
             assert attr in result.attrs
 
         assert result.rio.crs is not None
-        assert CRS.from_user_input(result.rio.crs) == CRS.from_epsg(4326)
+        assert CRS.from_user_input(result.rio.crs).equals(
+            CRS(test_dataset.pyproj_srs))
 
     def test_warns_on_unmapped_variables(self, temp_metadata_file):
         ds = xr.Dataset({
             "var1": (["x", "y"], [[1.0, 2.0], [3.0, 4.0]]),
             "var2": (["x", "y"], [[4.0, 5.0], [6.0, 2.0]]),
             "var3": (["x", "y"], [[4.0, 5.0], [6.0, 3.0]])},
-            attrs={'pyproj_srs': CRS(3413).to_proj4()})
+            attrs={"pyproj_srs": CRS(3413).to_proj4()})
 
         mapper = MetadataMapper(temp_metadata_file)
 

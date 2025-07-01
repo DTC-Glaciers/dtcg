@@ -149,11 +149,9 @@ class DatacubeCryotempoEolis:
             - Optional array of sorted time coordinates (if time is used)
         """
         # Validate input
-        for col in [x_coordinate_column, y_coordinate_column] \
-                + value_column_names:
+        for col in [x_coordinate_column, y_coordinate_column] + value_column_names:
             if col not in gridded_df.columns:
-                raise ValueError(
-                    f"Missing required column '{col}' in gridded_df")
+                raise ValueError(f"Missing required column '{col}' in gridded_df")
 
         unique_x_points = np.sort(gridded_df[x_coordinate_column].unique())
         unique_y_points = np.sort(gridded_df[y_coordinate_column].unique())
@@ -178,8 +176,7 @@ class DatacubeCryotempoEolis:
         # time axis handling
         if t_coordinate_column is not None:
             desired_t_axis = np.sort(gridded_df[t_coordinate_column].unique())
-            t_idx = np.searchsorted(
-                desired_t_axis, gridded_df[t_coordinate_column])
+            t_idx = np.searchsorted(desired_t_axis, gridded_df[t_coordinate_column])
         else:
             desired_t_axis = None
 
@@ -201,16 +198,12 @@ class DatacubeCryotempoEolis:
         for column_name in value_column_names:
             if desired_t_axis is not None:
                 grid_arr = np.full(
-                    (len(desired_t_axis),
-                     len(desired_y_axis),
-                     len(desired_x_axis)),
+                    (len(desired_t_axis), len(desired_y_axis), len(desired_x_axis)),
                     np.nan,
                 )
                 grid_arr[t_idx, y_idx, x_idx] = gridded_df[column_name]
             else:
-                grid_arr = np.full(
-                    (len(desired_y_axis), len(desired_x_axis)), np.nan
-                )
+                grid_arr = np.full((len(desired_y_axis), len(desired_x_axis)), np.nan)
                 grid_arr[y_idx, x_idx] = gridded_df[column_name]
             if y_affine_negative:
                 grid_arr = np.flip(grid_arr, axis=-2)
@@ -229,7 +222,7 @@ class DatacubeCryotempoEolis:
     def prepare_eolis_metadata(
         self: DatacubeCryotempoEolis,
         specklia_source_data: list[dict],
-        preliminary_dataset: bool = True
+        preliminary_dataset: bool = True,
     ) -> dict:
         """Extract metadata from Specklia dataset source information.
 
@@ -253,16 +246,14 @@ class DatacubeCryotempoEolis:
             return first_source
 
         metadata = {
-            k: first_source.get(k) for k in self.EOLIS_STATIC_KEYS
-            if k in first_source
+            k: first_source.get(k) for k in self.EOLIS_STATIC_KEYS if k in first_source
         }
         product_attributes = {}
         for item in specklia_source_data:
             source_info = item.get("source_information", {})
             science_path = source_info.get("science_pds_path", "")
             file_name = (
-                os.path.basename(science_path)
-                if science_path else "unknown_file"
+                os.path.basename(science_path) if science_path else "unknown_file"
             )
             product_attributes[file_name] = {
                 ("original_" + k if "geospatial" in k else k): source_info[k]
@@ -273,8 +264,7 @@ class DatacubeCryotempoEolis:
         return metadata
 
     def create_query_polygon(
-        self: DatacubeCryotempoEolis,
-        oggm_ds: xr.Dataset
+        self: DatacubeCryotempoEolis, oggm_ds: xr.Dataset
     ) -> shapely.Polygon:
         """Create a WGS84-aligned polygon bounding box from the spatial extent
         of an OGGM dataset.
@@ -348,8 +338,7 @@ class DatacubeCryotempoEolis:
         ]
         if matching_dataset.empty:
             raise ValueError(
-                f"No dataset named '{specklia_data_set_name}' "
-                "found in Specklia."
+                f"No dataset named '{specklia_data_set_name}' " "found in Specklia."
             )
         specklia_dataset_info = matching_dataset.iloc[0]
 
