@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
 description = "DTCG API"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 keywords = [
@@ -39,15 +39,17 @@ dependencies = [
     "pandas",
     "xarray",
     "shapely",
+    "rioxarray",
     "geopandas",
     "bokeh",
     "geoviews",
     "holoviews",
     "matplotlib",
     "seaborn",
-    "specklia",
-    "shapely",
+    "specklia >= 1.9.40",
     "ipywidgets",
+    "schema",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
@@ -68,7 +70,6 @@ oggm = [
     "pyproj",
     "cartopy",
     "rasterio",
-    "rioxarray",
     "seaborn",
     "tables",  # pytables
     "salem",
