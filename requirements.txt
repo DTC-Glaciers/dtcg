@@ -2,6 +2,7 @@ oggm @ git+https://github.com/gampnico/oggm@feat-dtcg
 numpy
 pandas
 xarray
+rioxarray
 shapely
 geopandas
 bokeh
@@ -11,7 +12,6 @@ matplotlib
 schema
 seaborn
 specklia
-shapely
 pyyaml
 ipywidgets
 pytest

@@ -39,6 +39,7 @@ dependencies = [
     "pandas",
     "xarray",
     "shapely",
+    "rioxarray",
     "geopandas",
     "bokeh",
     "geoviews",
@@ -46,7 +47,6 @@ dependencies = [
     "matplotlib",
     "seaborn",
     "specklia >= 1.9.40",
-    "shapely",
     "ipywidgets",
     "schema",
     "pyyaml",
@@ -70,7 +70,6 @@ oggm = [
     "pyproj",
     "cartopy",
     "rasterio",
-    "rioxarray",
     "seaborn",
     "tables",  # pytables
     "salem",
