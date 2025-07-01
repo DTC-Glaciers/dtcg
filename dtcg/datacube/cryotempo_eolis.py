@@ -434,8 +434,7 @@ class DatacubeCryotempoEolis:
                     "units": column_info["unit"],
                     "long_name": f'EOLIS {col.replace("_", " ").title()}',
                     "description": column_info["description"],
-                }
-                | eolis_metadata,
+                } | eolis_metadata,
             )
 
             oggm_ds[data_name] = eolis_resampled_grids_xarr
