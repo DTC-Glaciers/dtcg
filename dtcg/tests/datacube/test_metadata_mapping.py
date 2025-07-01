@@ -20,7 +20,6 @@ import warnings
 
 import numpy as np
 import pytest
-import rioxarray  # noqa: F401
 import xarray as xr
 import yaml
 from pyproj import CRS
@@ -57,9 +56,10 @@ class TestMetadataMapper:
         data = np.random.rand(3, 3)
         ds = xr.Dataset(
             {"var1": (["y", "x"], data)},
-            coords={"x": np.arange(3), "y": np.arange(3)}
+            coords={"x": np.arange(3), "y": np.arange(3)},
+            attrs={
+                "pyproj_srs": "+proj=longlat +datum=WGS84 +no_defs +type=crs"}
         )
-        ds.rio.write_crs("EPSG:4326", inplace=True)
         return ds
 
     def test_load_metadata(self, temp_metadata_file):
@@ -86,7 +86,8 @@ class TestMetadataMapper:
             assert attr in result.attrs
 
         assert result.rio.crs is not None
-        assert CRS.from_user_input(result.rio.crs) == CRS.from_epsg(4326)
+        assert CRS.from_user_input(result.rio.crs).equals(
+            CRS(test_dataset.pyproj_srs))
 
     def test_warns_on_unmapped_variables(self, temp_metadata_file):
         ds = xr.Dataset({
