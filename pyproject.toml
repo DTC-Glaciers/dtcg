@@ -48,6 +48,7 @@ dependencies = [
     "seaborn",
     "specklia >= 1.9.40",
     "ipywidgets",
+    "zarr",
     "schema",
     "pyyaml",
 ]
