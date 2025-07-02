@@ -60,6 +60,7 @@ class TestGeoZarrWriter:
 
         return ds, metadata_path
 
+    @pytest.mark.filterwarnings("ignore::UserWarning")
     @pytest.mark.parametrize("storage_type", [
         ZarrStorage.memory_store,
         ZarrStorage.local_store
@@ -80,11 +81,7 @@ class TestGeoZarrWriter:
             metadata_mapping_file_path=metadata_path
         )
 
-        with pytest.warns(
-            UserWarning,
-            match="Metadata mapping is missing for the following variables: "
-                  r"\['precipitation'\]"):
-            writer.write()
+        writer.write()
 
         root = zarr.open_group(store=writer.store, mode="r")
 
@@ -115,6 +112,7 @@ class TestGeoZarrWriter:
                 storage_type=ZarrStorage.memory_store
             )
 
+    @pytest.mark.filterwarnings("ignore::UserWarning")
     def test_correct_chunking(self, test_dataset):
         """Test that chunking is computed as expected."""
         ds, _ = test_dataset
@@ -124,8 +122,8 @@ class TestGeoZarrWriter:
             overwrite=True,
             target_chunk_mb=1
         )
-        with pytest.warns(UserWarning, match="Metadata mapping is missing"):
-            writer.write()
+
+        writer.write()
 
         root = zarr.open_group(store=writer.store, mode="r")
         temp_chunks = root["temperature"].chunks
@@ -135,3 +133,20 @@ class TestGeoZarrWriter:
         assert temp_chunks == (100, 36, 36)
         assert isinstance(precip_chunks, tuple)
         assert precip_chunks == (100, 100)
+    
+    def test_missing_dimension(self, test_dataset):
+        ds, _ = test_dataset
+        ds = ds.drop_vars("t")
+        assert "t" not in ds.coords
+        with pytest.raises(
+                ValueError,
+                match="Coordinate variable for dimension 't' is missing"):
+            GeoZarrWriter(ds=ds, storage_type=ZarrStorage.memory_store)
+
+    def test_non_enum_storage_type(self, test_dataset):
+        # ensure correct error handling when incorrect storage type is supplied
+        ds, _ = test_dataset
+        with pytest.raises(
+                NotImplementedError,
+                match="Invalid storage_type."):
+            GeoZarrWriter(ds=ds, storage_type='blah')

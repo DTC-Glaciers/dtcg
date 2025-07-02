@@ -21,6 +21,7 @@ Functionality for exporting a GeoZarr file.
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -57,17 +58,18 @@ class GeoZarrWriter(MetadataMapper):
         storage_type : ZarrStorage, optional
             Enum to specify storage backend, either ZarrStorage.local_store
             or ZarrStorage.memory_store. Default is local store.
-        storage_directory : str or None, optional
+        storage_directory : str, optional
             Required if using local_store. Path to write the Zarr data.
         target_chunk_mb : float, optional
             Approximate chunk size in megabytes for efficient storage.
             Default is 5 MB.
-        compressor : Blosc or None, optional
-            Compressor to apply on arrays. If None, defaults to Blosc with zstd.
+        compressor : Blosc, optional
+            Compressor to apply on arrays. If None, the compression will be
+            Blosc with zstd.
         overwrite : bool, optional
             Whether to overwrite existing Zarr contents in the target location.
             Default is True.
-        metadata_mapping_file_path: Optional[str] = None
+        metadata_mapping_file_path: str, optional
             Path to the YAML file containing variable metadata mappings.
             If None, defaults to 'metadata_mapping.yaml' in the current
             directory.
@@ -92,7 +94,7 @@ class GeoZarrWriter(MetadataMapper):
         Raises
         ------
         TypeError
-            If `storage_directory` is not provided when using `local_store`.
+            If ``storage_directory`` is not provided when using ``local_store``.
         ValueError
             If an invalid `storage_type` is provided.
         """
@@ -100,10 +102,17 @@ class GeoZarrWriter(MetadataMapper):
             self.store = zarr.storage.MemoryStore()
         elif self.storage_type == ZarrStorage.local_store:
             if self.storage_directory is None:
-                raise TypeError("Enter a valid storage location")
+                raise ValueError(
+                    "The 'storage_directory' attribute must be specified.")
+            else:
+                dir_path = Path(self.storage_directory).parent
+                if not dir_path.exists():
+                    raise FileNotFoundError(
+                        "Base directory of 'storage_directory' does not exist: "
+                        + dir_path)
             self.store = self.storage_directory
         else:
-            raise ValueError(
+            raise NotImplementedError(
                 "Invalid storage_type. Must be ZarrStorage.local_store or "
                 "ZarrStorage.memory_store.")
 
@@ -127,7 +136,8 @@ class GeoZarrWriter(MetadataMapper):
                     f"Coordinate variable for dimension '{dim}' is missing in "
                     "the dataset.")
 
-    def _calculate_chunk_sizes(self: GeoZarrWriter, var: xr.DataArray) -> None:
+    def _calculate_chunk_sizes(
+            self: GeoZarrWriter, var: xr.DataArray) -> dict[str, int]:
         """Calculate chunk sizes for a given variable to match the target chunk
         size in megabytes.
 
@@ -139,7 +149,7 @@ class GeoZarrWriter(MetadataMapper):
 
         Returns
         -------
-        dict
+        dict[str, int]
             A dictionary of chunk sizes for dimensions 'x', 'y', and optionally
             't'.
         """
@@ -189,7 +199,7 @@ class GeoZarrWriter(MetadataMapper):
 
         Parameters
         ----------
-        zarr_format : int, optional
+        zarr_format : int, default 2
             Zarr format version to use (2 or 3). Default is 2.
 
         Notes
