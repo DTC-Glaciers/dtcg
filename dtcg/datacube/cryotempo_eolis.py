@@ -34,6 +34,7 @@ from affine import Affine
 from pandas import Timedelta
 from pyproj import Proj
 from salem.gis import Grid
+from scipy.spatial.distance import cdist
 from specklia import Specklia
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
@@ -445,3 +446,51 @@ class DatacubeCryotempoEolis:
         )
 
         return oggm_ds
+
+    def timeseries_uncertainty_propagation(
+            self, gdf, raster_resolution, glaciated_area_in_region_km2):
+        gdf.dropna(inplace=True)
+        grouped_data = gdf.groupby('timestamp', sort=True)
+        timestamps = [t[0] for t in grouped_data]
+        gridded_product_data_grouped = [t[1] for t in grouped_data]
+
+        elevation_change_timeseries = []
+        error_timeseries = []
+        for i in range(len(timestamps)):
+            gridded_data_this_timestamp = gridded_product_data_grouped[i].loc[
+                gridded_product_data_grouped[i]['elevation_difference'].notna()]
+            weighted_mean = (
+                np.sum(gridded_data_this_timestamp['elevation_difference']
+                    / gridded_data_this_timestamp['uncertainty']**2)
+                / np.sum(1 / gridded_data_this_timestamp['uncertainty']**2))
+            uncertainty = gridded_data_this_timestamp[
+                'uncertainty'].astype(float).to_numpy()  # shape (N,)
+            coords = gridded_data_this_timestamp[
+                ['x', 'y']].astype(float).to_numpy()  # shape (N, 2)
+
+            # Set a correlation length scale (in same units as coords)
+            L = 20000  # meters, for example
+
+            # Build correlation matrix (exponential decay kernel)
+            D = cdist(coords, coords)  # pairwise distances
+            correlation = np.exp(-D / L)
+
+            # Covariance matrix
+            C = np.outer(uncertainty, uncertainty) * correlation
+
+            # Inverse variance weights
+            weights = 1 / uncertainty**2
+            weights /= weights.sum()
+
+            # Compute variance of the weighted mean
+            var_mean = weights @ C @ weights
+            std_mean = np.sqrt(var_mean)
+
+            percentage_coverage = (
+                len(gridded_data_this_timestamp)
+                * raster_resolution / glaciated_area_in_region_km2)
+
+            elevation_change_timeseries.append(weighted_mean)
+            error_timeseries.append(
+                std_mean / (1 / percentage_coverage)**0.5)
+        return elevation_change_timeseries, error_timeseries
