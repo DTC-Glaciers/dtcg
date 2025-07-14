@@ -117,10 +117,8 @@ class TestGeoZarrWriter:
     def test_zarr_storage(self):
         """Test ZarrStorage has appropriate attributes."""
         for storage_type in ["memory_store", "local_store"]:
-            assert storage_type in ZarrStorage
+            assert ZarrStorage(storage_type)
             assert hasattr(ZarrStorage, storage_type)
-        storage_type = "wrong_store"
-        assert storage_type not in ZarrStorage
 
     @pytest.mark.filterwarnings("ignore:Metadata mapping is missing")
     def test_correct_chunking(self, test_dataset):
@@ -159,3 +157,5 @@ class TestGeoZarrWriter:
         ds, _ = test_dataset
         with pytest.raises(NotImplementedError, match="Invalid storage_type."):
             GeoZarrWriter(ds=ds, storage_type="blah")
+        with pytest.raises(ValueError, match="'blah' is not a valid ZarrStorage"):
+            ZarrStorage("blah")
