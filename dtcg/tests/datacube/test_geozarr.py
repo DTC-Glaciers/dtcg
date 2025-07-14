@@ -25,7 +25,7 @@ import xarray as xr
 import zarr
 import yaml
 
-from dtcg.datacube.geo_zarr import GeoZarrWriter, ZarrStorage
+from dtcg.datacube.geozarr import GeoZarrWriter, ZarrStorage
 
 
 class TestGeoZarrWriter:
