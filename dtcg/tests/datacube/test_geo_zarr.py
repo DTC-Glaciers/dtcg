@@ -11,6 +11,11 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+
+=====
+
+Tests for GeoZarr datacubes.
 """
 
 import os
@@ -39,8 +44,10 @@ class TestGeoZarrWriter:
                 y=("y", np.linspace(0, 2000, 100)),
                 t=("t", np.linspace(1e5, 1e6, 100)),
             ),
-            attrs={"pyproj_srs": "+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 "
-                   "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"}
+            attrs={
+                "pyproj_srs": "+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 "
+                "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+            },
         )
 
         metadata_mapping = {
@@ -51,7 +58,7 @@ class TestGeoZarrWriter:
                 "institution": "mi6",
                 "source": "wibble",
                 "comment": "wobble",
-                "references": "moneypenny"
+                "references": "moneypenny",
             }
         }
         metadata_path = os.path.join(tmp_path, "meta.yaml")
@@ -60,11 +67,10 @@ class TestGeoZarrWriter:
 
         return ds, metadata_path
 
-    @pytest.mark.filterwarnings("ignore::UserWarning")
-    @pytest.mark.parametrize("storage_type", [
-        ZarrStorage.memory_store,
-        ZarrStorage.local_store
-    ])
+    @pytest.mark.filterwarnings("ignore:Metadata mapping is missing")
+    @pytest.mark.parametrize(
+        "storage_type", [ZarrStorage.memory_store, ZarrStorage.local_store]
+    )
     def test_geozarr_attributes(self, tmp_path, test_dataset, storage_type):
         """Test that spatial_ref, metadata, and dimensions are correct."""
         ds, metadata_path = test_dataset
@@ -78,7 +84,7 @@ class TestGeoZarrWriter:
             storage_type=storage_type,
             storage_directory=store_dir,
             overwrite=True,
-            metadata_mapping_file_path=metadata_path
+            metadata_mapping_file_path=metadata_path,
         )
 
         writer.write()
@@ -105,14 +111,18 @@ class TestGeoZarrWriter:
         ds, _ = test_dataset
         ds = ds.drop_dims("x")
 
-        with pytest.raises(ValueError,
-                           match="Dataset must have at least dimensions"):
-            GeoZarrWriter(
-                ds=ds,
-                storage_type=ZarrStorage.memory_store
-            )
+        with pytest.raises(ValueError, match="Dataset must have at least dimensions"):
+            GeoZarrWriter(ds=ds, storage_type=ZarrStorage.memory_store)
 
-    @pytest.mark.filterwarnings("ignore::UserWarning")
+    def test_zarr_storage(self):
+        """Test ZarrStorage has appropriate attributes."""
+        for storage_type in ["memory_store", "local_store"]:
+            assert storage_type in ZarrStorage
+            assert hasattr(ZarrStorage, storage_type)
+        storage_type = "wrong_store"
+        assert storage_type not in ZarrStorage
+
+    @pytest.mark.filterwarnings("ignore:Metadata mapping is missing")
     def test_correct_chunking(self, test_dataset):
         """Test that chunking is computed as expected."""
         ds, _ = test_dataset
@@ -120,7 +130,7 @@ class TestGeoZarrWriter:
             ds=ds,
             storage_type=ZarrStorage.memory_store,
             overwrite=True,
-            target_chunk_mb=1
+            target_chunk_mb=1,
         )
 
         writer.write()
@@ -133,20 +143,19 @@ class TestGeoZarrWriter:
         assert temp_chunks == (100, 36, 36)
         assert isinstance(precip_chunks, tuple)
         assert precip_chunks == (100, 100)
-    
+
     def test_missing_dimension(self, test_dataset):
         ds, _ = test_dataset
+        assert "t" in ds.dims
         ds = ds.drop_vars("t")
         assert "t" not in ds.coords
         with pytest.raises(
-                ValueError,
-                match="Coordinate variable for dimension 't' is missing"):
+            ValueError, match="Coordinate variable for dimension 't' is missing"
+        ):
             GeoZarrWriter(ds=ds, storage_type=ZarrStorage.memory_store)
 
     def test_non_enum_storage_type(self, test_dataset):
         # ensure correct error handling when incorrect storage type is supplied
         ds, _ = test_dataset
-        with pytest.raises(
-                NotImplementedError,
-                match="Invalid storage_type."):
-            GeoZarrWriter(ds=ds, storage_type='blah')
+        with pytest.raises(NotImplementedError, match="Invalid storage_type."):
+            GeoZarrWriter(ds=ds, storage_type="blah")
