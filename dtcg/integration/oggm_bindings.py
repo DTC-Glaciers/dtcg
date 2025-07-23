@@ -30,6 +30,8 @@ import xarray as xr
 from oggm import cfg, tasks, utils, workflow
 from oggm.shop import its_live, w5e5
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
+from dtcg.datacube.update_metadata import MetadataMapper
+from dtcg.datacube.geozarr import GeoZarrWriter
 import dtcg.integration.calibration
 
 # TODO: Link to DTCG instead.
@@ -847,6 +849,7 @@ class BindingsCryotempo(BindingsOggmWrangler):
         )
         self.datacube_manager = cryotempo_eolis.DatacubeCryotempoEolis()
         self.calibrator = dtcg.integration.calibration.CalibratorCryotempo()
+        self.metadata_mapper = MetadataMapper()
 
     def init_oggm(self, dirname="", **kwargs):
         return super().init_oggm(dirname, **kwargs)
@@ -878,6 +881,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
         """Get gridded data enhanced with CryoTEMPO-EOLIS data."""
         with xr.open_dataset(gdir.get_filepath("gridded_data")) as datacube:
             datacube = datacube.load()
+
+        datacube = self.metadata_mapper.update_metadata(datacube)
 
         self.datacube_manager.retrieve_prepare_eolis_gridded_data(
             oggm_ds=datacube, grid=gdir.grid
