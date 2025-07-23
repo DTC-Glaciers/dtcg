@@ -20,7 +20,6 @@ Functionality for exporting a GeoZarr file.
 
 from __future__ import annotations
 
-from enum import Enum
 from pathlib import Path
 from typing import Optional
 
@@ -185,5 +184,5 @@ class GeoZarrHandler(MetadataMapper):
             mode="w" if overwrite else "a",
             consolidated=True,
             zarr_format=self.zarr_format,
-            encoding=self.encoding,
+            encoding=self.encoding
         )
