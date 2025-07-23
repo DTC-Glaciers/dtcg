@@ -184,3 +184,13 @@ class GeoZarrHandler(MetadataMapper):
             zarr_format=self.zarr_format,
             encoding=self.encoding
         )
+
+    def add_layer(self: GeoZarrHandler, new_layer: xr.Dataset):
+        # some validation of dataset attributes
+        self.METADATA_SCHEMA.validate(new_layer.attrs)
+
+        # # some functionality for adding the new layer to the existing
+        # # dataset
+        # # either a new var, or data tree, needs to handle different
+        # # dimensionality
+        # self.ds[new_layer] = new_layer
