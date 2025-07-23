@@ -32,20 +32,12 @@ from numcodecs import Blosc
 from dtcg.datacube.update_metadata import MetadataMapper
 
 
-class ZarrStorage(Enum):
-    local_store = "local_store"
-    memory_store = "memory_store"
-
-
-class GeoZarrWriter(MetadataMapper):
+class GeoZarrHandler(MetadataMapper):
     def __init__(
-        self: GeoZarrWriter,
+        self: GeoZarrHandler,
         ds: xr.Dataset,
-        storage_type: ZarrStorage = ZarrStorage.local_store,
-        storage_directory: Optional[str] = None,
         target_chunk_mb: float = 5.0,
         compressor: Optional[Blosc] = None,
-        overwrite: bool = True,
         metadata_mapping_file_path: str = None,
     ):
         """Initialise a GeoZarrWriter object.
@@ -55,20 +47,11 @@ class GeoZarrWriter(MetadataMapper):
         ds : xarray.Dataset
             Input dataset with dimensions ('x', 'y') or ('t', 'x', 'y').
             Must include coordinate variables.
-        storage_type : ZarrStorage, default ZarrStorage.local_store
-            Enum to specify storage backend, either
-            ``ZarrStorage.local_store`` or ``ZarrStorage.memory_store``.
-        storage_directory : str, optional
-            Required if using ``local_store``. Path to write the Zarr
-            data.
         target_chunk_mb : float, default 5.0
             Approximate chunk size in megabytes for efficient storage.
         compressor : Blosc, default None
             Compressor to apply on arrays. If None, the compression will
             be Blosc with zstd.
-        overwrite : bool, default True
-            Whether to overwrite existing Zarr contents in the target
-            location.
         metadata_mapping_file_path: str, default None
             Path to the YAML file containing variable metadata mappings.
             If None, defaults to 'metadata_mapping.yaml' in the current
@@ -76,50 +59,19 @@ class GeoZarrWriter(MetadataMapper):
         """
         super().__init__(metadata_mapping_file_path=metadata_mapping_file_path)
         self.ds = ds
-        self.storage_type = storage_type
-        self.storage_directory = storage_directory
         self.target_chunk_mb = target_chunk_mb
         self.compressor = compressor or Blosc(
             cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE
         )
-        self.overwrite = overwrite
         self.encoding = {}
+        self.memory_store = zarr.storage.MemoryStore()
 
-        self._set_store()
         self._validate_dataset()
         self._define_encodings()
+        self._update_metdata()
+        self._write(self.memory_store)
 
-    def _set_store(self: GeoZarrWriter) -> None:
-        """Set the Zarr storage backend based on the selected storage type.
-
-        Raises
-        ------
-        TypeError
-            If ``storage_directory`` is not provided when using
-            ``local_store``.
-        ValueError
-            If an invalid `storage_type` is provided.
-        """
-        if self.storage_type == ZarrStorage.memory_store:
-            self.store = zarr.storage.MemoryStore()
-        elif self.storage_type == ZarrStorage.local_store:
-            if self.storage_directory is None:
-                raise ValueError("The 'storage_directory' attribute must be specified.")
-            else:
-                dir_path = Path(self.storage_directory).parent
-                if not dir_path.exists():
-                    raise FileNotFoundError(
-                        "Base directory of 'storage_directory' does not exist: "
-                        + dir_path
-                    )
-            self.store = self.storage_directory
-        else:
-            raise NotImplementedError(
-                "Invalid storage_type. Must be ZarrStorage.local_store or "
-                "ZarrStorage.memory_store."
-            )
-
-    def _validate_dataset(self: GeoZarrWriter) -> None:
+    def _validate_dataset(self: GeoZarrHandler) -> None:
         """Validate the input dataset to ensure it includes required dimensions
         and associated coordinate variables.
 
@@ -141,7 +93,7 @@ class GeoZarrWriter(MetadataMapper):
                 )
 
     def _calculate_chunk_sizes(
-        self: GeoZarrWriter, var: xr.DataArray
+        self: GeoZarrHandler, var: xr.DataArray
     ) -> dict[str, int]:
         """Calculate chunk sizes for a given variable to match the
         target chunk size in megabytes.
@@ -182,7 +134,7 @@ class GeoZarrWriter(MetadataMapper):
 
         return chunk_sizes
 
-    def _define_encodings(self: GeoZarrWriter) -> None:
+    def _define_encodings(self: GeoZarrHandler) -> None:
         """Define encoding settings for each data variable in the
         dataset, including chunking and compression.
 
@@ -196,11 +148,53 @@ class GeoZarrWriter(MetadataMapper):
             chunks = tuple(chunk_sizes.get(dim) for dim in self.ds[var].dims)
             self.encoding[var] = {"chunks": chunks, "compressor": self.compressor}
 
-    def write(self: GeoZarrWriter, zarr_format: int = 2) -> None:
+    def _update_metdata(self) -> None:
+        """
+        Metadata is first updated using the ``update_metadata`` method.
+        Each data variable is tagged with the ``grid_mapping`` attribute
+        for spatial referencing.
+        """
+        self.ds = self.update_metadata(self.ds)
+        for var in self.ds.data_vars:
+            self.ds[var].attrs["grid_mapping"] = "spatial_ref"
+
+    def _write(self: GeoZarrHandler, store: str, zarr_format: int = 2) -> None:
         """Write the dataset to GeoZarr format.
 
         Parameters
         ----------
+        storage_directory : str
+            Required if using ``local_store``. Path to write the Zarr
+            data.
+        overwrite : bool, default True
+            Whether to overwrite existing Zarr contents in the target
+            location.
+        zarr_format : int, default 2
+            Zarr format version to use (2 or 3).
+        """
+        self.ds.to_zarr(
+            store,
+            mode="w" if self.overwrite else "a",
+            consolidated=True,
+            zarr_format=zarr_format,
+            encoding=self.encoding,
+        )
+
+    @property
+    def dataset(self):
+        """Load the written Zarr file as an xarray Dataset."""
+        return xr.open_zarr(self.memory_store)
+
+    def export(self: GeoZarrHandler, storage_directory: str) -> None:
+        """Write the dataset to GeoZarr format.
+
+        Parameters
+        ----------
+        storage_directory : str
+            Path to write the Zarr data.
+        overwrite : bool, default True
+            Whether to overwrite existing Zarr contents in the target
+            location.
         zarr_format : int, default 2
             Zarr format version to use (2 or 3).
 
@@ -210,13 +204,10 @@ class GeoZarrWriter(MetadataMapper):
         Each data variable is tagged with the ``grid_mapping`` attribute
         for spatial referencing.
         """
-        ds_metadata_updated = self.update_metadata(self.ds)
-        for var in self.ds.data_vars:
-            self.ds[var].attrs["grid_mapping"] = "spatial_ref"
-        ds_metadata_updated.to_zarr(
-            self.store,
-            mode="w" if self.overwrite else "a",
-            consolidated=True,
-            zarr_format=zarr_format,
-            encoding=self.encoding,
-        )
+        dir_path = Path(storage_directory).parent
+        if not dir_path.exists():
+            raise FileNotFoundError(
+                "Base directory of 'storage_directory' does not exist: "
+                + dir_path
+            )
+        self._write(storage_directory)

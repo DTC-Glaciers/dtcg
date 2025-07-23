@@ -25,7 +25,7 @@ import xarray as xr
 import zarr
 import yaml
 
-from dtcg.datacube.geozarr import GeoZarrWriter, ZarrStorage
+from dtcg.datacube.geozarr import GeoZarrHandler, ZarrStorage
 
 
 class TestGeoZarrWriter:
@@ -79,7 +79,7 @@ class TestGeoZarrWriter:
         if storage_type == ZarrStorage.local_store:
             store_dir = tmp_path / "geozarr_store"
 
-        writer = GeoZarrWriter(
+        writer = GeoZarrHandler(
             ds=ds,
             storage_type=storage_type,
             storage_directory=store_dir,
@@ -87,7 +87,7 @@ class TestGeoZarrWriter:
             metadata_mapping_file_path=metadata_path,
         )
 
-        writer.write()
+        writer._write()
 
         root = zarr.open_group(store=writer.store, mode="r")
 
@@ -112,7 +112,7 @@ class TestGeoZarrWriter:
         ds = ds.drop_dims("x")
 
         with pytest.raises(ValueError, match="Dataset must have at least dimensions"):
-            GeoZarrWriter(ds=ds, storage_type=ZarrStorage.memory_store)
+            GeoZarrHandler(ds=ds, storage_type=ZarrStorage.memory_store)
 
     def test_zarr_storage(self):
         """Test ZarrStorage has appropriate attributes."""
@@ -124,14 +124,14 @@ class TestGeoZarrWriter:
     def test_correct_chunking(self, test_dataset):
         """Test that chunking is computed as expected."""
         ds, _ = test_dataset
-        writer = GeoZarrWriter(
+        writer = GeoZarrHandler(
             ds=ds,
             storage_type=ZarrStorage.memory_store,
             overwrite=True,
             target_chunk_mb=1,
         )
 
-        writer.write()
+        writer._write()
 
         root = zarr.open_group(store=writer.store, mode="r")
         temp_chunks = root["temperature"].chunks
@@ -150,12 +150,12 @@ class TestGeoZarrWriter:
         with pytest.raises(
             ValueError, match="Coordinate variable for dimension 't' is missing"
         ):
-            GeoZarrWriter(ds=ds, storage_type=ZarrStorage.memory_store)
+            GeoZarrHandler(ds=ds, storage_type=ZarrStorage.memory_store)
 
     def test_non_enum_storage_type(self, test_dataset):
         # ensure correct error handling when incorrect storage type is supplied
         ds, _ = test_dataset
         with pytest.raises(NotImplementedError, match="Invalid storage_type."):
-            GeoZarrWriter(ds=ds, storage_type="blah")
+            GeoZarrHandler(ds=ds, storage_type="blah")
         with pytest.raises(ValueError, match="'blah' is not a valid ZarrStorage"):
             ZarrStorage("blah")
