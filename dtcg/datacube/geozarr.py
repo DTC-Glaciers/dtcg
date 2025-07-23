@@ -25,7 +25,6 @@ from typing import Optional
 
 import numpy as np
 import xarray as xr
-import zarr
 from numcodecs import Blosc
 
 from dtcg.datacube.update_metadata import MetadataMapper
@@ -67,7 +66,6 @@ class GeoZarrHandler(MetadataMapper):
         )
         self.zarr_format = zarr_format
         self.encoding = {}
-        self.memory_store = zarr.storage.MemoryStore()
 
         self._validate_dataset()
         self._define_encodings()
