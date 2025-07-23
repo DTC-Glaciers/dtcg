@@ -188,7 +188,7 @@ class GeoZarrHandler(MetadataMapper):
     @property
     def dataset(self):
         """Load the written Zarr file as an xarray Dataset."""
-        return xr.open_zarr(self.memory_store)
+        return xr.open_zarr(self.memory_store, decode_cf=False)
 
     def export(self: GeoZarrHandler, storage_directory: str,
                overwrite: bool = True) -> None:
