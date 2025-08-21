@@ -37,7 +37,7 @@ class GeoZarrHandler(MetadataMapper):
         target_chunk_mb: float = 5.0,
         compressor: Optional[Blosc] = None,
         metadata_mapping_file_path: str = None,
-        zarr_format: int = 2
+        zarr_format: int = 2,
     ):
         """Initialise a GeoZarrWriter object.
 
@@ -72,8 +72,8 @@ class GeoZarrHandler(MetadataMapper):
         self._update_metadata()
 
     def _validate_dataset(self: GeoZarrHandler) -> None:
-        """Validate the input dataset to ensure it includes required dimensions
-        and associated coordinate variables.
+        """Validate the input dataset to ensure it includes required
+        dimensions and associated coordinate variables.
 
         Raises
         ------
@@ -159,8 +159,9 @@ class GeoZarrHandler(MetadataMapper):
         for var in self.ds.data_vars:
             self.ds[var].attrs["grid_mapping"] = "spatial_ref"
 
-    def export(self: GeoZarrHandler, storage_directory: str,
-               overwrite: bool = True) -> None:
+    def export(
+        self: GeoZarrHandler, storage_directory: str, overwrite: bool = True
+    ) -> None:
         """Write the dataset to GeoZarr format.
 
         Parameters
@@ -174,13 +175,12 @@ class GeoZarrHandler(MetadataMapper):
         dir_path = Path(storage_directory).parent
         if not dir_path.exists():
             raise FileNotFoundError(
-                "Base directory of 'storage_directory' does not exist: "
-                + dir_path
+                "Base directory of 'storage_directory' does not exist: " + dir_path
             )
         self.ds.to_zarr(
             storage_directory,
             mode="w" if overwrite else "a",
             consolidated=True,
             zarr_format=self.zarr_format,
-            encoding=self.encoding
+            encoding=self.encoding,
         )
