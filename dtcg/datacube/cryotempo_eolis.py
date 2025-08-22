@@ -403,7 +403,7 @@ class DatacubeCryotempoEolis:
         eolis_arrays, eolis_grid, time_coordinates = (
             self.convert_gridded_dataframe_to_array(
                 eolis_gridded_data,
-                ["elevation_change", "standard_error"],
+                ["elevation_change", "elevation_change_sigma"],
                 "x",
                 "y",
                 np.nanmin(np.abs(np.diff(eolis_gridded_data.x.unique()))),
@@ -417,7 +417,7 @@ class DatacubeCryotempoEolis:
 
         # add EOLIS elevation and uncertainty to OGGM data cube
         eolis_metadata = self.prepare_eolis_metadata(eolis_gridded_sources)
-        for col in ["elevation_change", "standard_error"]:
+        for col in ["elevation_change", "elevation_change_sigma"]:
             data_name = f"eolis_gridded_{col}"
             eolis_resampled_grid = grid.map_gridded_data(
                 eolis_arrays[col], eolis_grid, interp="linear"
