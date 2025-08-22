@@ -34,6 +34,7 @@ from affine import Affine
 from pandas import Timedelta
 from pyproj import Proj
 from salem.gis import Grid
+from scipy.ndimage import gaussian_filter
 from specklia import Specklia
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
@@ -55,7 +56,7 @@ class DatacubeCryotempoEolis:
 
     def __init__(self: DatacubeCryotempoEolis):
         self.SPECKLIA_DATASET_NAME_EOLIS_ELEVATION_CHANGE = (
-            "CryoTEMPO-EOLIS Processed Elevation Change Maps"
+            "CryoTEMPO-EOLIS Interpolated Elevation Change Maps"
         )
         self.EOLIS_STATIC_KEYS = [
             "Conventions",
@@ -368,6 +369,48 @@ class DatacubeCryotempoEolis:
 
         return gdf, source_info, specklia_dataset_info
 
+    def gaussian_filter_fill(
+            self: DatacubeCryotempoEolis, arr: np.ndarray,
+            sigma: float | tuple[float] = 3.0, **kwargs) -> np.ndarray:
+        """Fill NaN regions in an array using Gaussian filter.
+
+        The data and a validity mask are filtered separately and combined so
+        that only NaNs are replaced, while original values remain unchanged.
+
+        Parameters
+        ----------
+        arr : np.ndarray
+            Input array with NaNs.
+        sigma : float | tuple[float]
+            Standard deviation(s) for the Gaussian kernel, by default 3.0
+        **kwargs : dict
+            Additional arguments passed to scipy.ndimage.gaussian_filter.
+
+        Returns
+        -------
+        np.ndarray
+            Copy of arr with NaNs filled by Gaussian-smoothed neighbors.
+        """
+        # Mask: 1 where valid, 0 where NaN
+        mask = np.isfinite(arr)
+
+        # Replace NaNs with 0 for convolution
+        filled = np.nan_to_num(arr, nan=0.0)
+
+        # Apply filter to data and mask
+        filtered = gaussian_filter(filled, sigma=sigma, **kwargs)
+        norm = gaussian_filter(mask.astype(float), sigma=sigma, **kwargs)
+
+        # Avoid division by zero
+        with np.errstate(invalid="ignore", divide="ignore"):
+            result = filtered / norm
+
+        result[norm == 0] = np.nan
+
+        arr_filled = arr.copy()
+        arr_filled[~mask] = result[~mask]
+        return arr_filled
+
     def retrieve_prepare_eolis_gridded_data(
         self: DatacubeCryotempoEolis, oggm_ds: xr.Dataset, grid: Grid
     ) -> xr.Dataset:
@@ -403,7 +446,7 @@ class DatacubeCryotempoEolis:
         eolis_arrays, eolis_grid, time_coordinates = (
             self.convert_gridded_dataframe_to_array(
                 eolis_gridded_data,
-                ["elevation_change", "standard_error"],
+                ["elevation_change", "elevation_change_sigma"],
                 "x",
                 "y",
                 np.nanmin(np.abs(np.diff(eolis_gridded_data.x.unique()))),
@@ -417,10 +460,14 @@ class DatacubeCryotempoEolis:
 
         # add EOLIS elevation and uncertainty to OGGM data cube
         eolis_metadata = self.prepare_eolis_metadata(eolis_gridded_sources)
-        for col in ["elevation_change", "standard_error"]:
+        for col in ["elevation_change", "elevation_change_sigma"]:
             data_name = f"eolis_gridded_{col}"
+
+            # buffer eolis grid using gaussian filter to avoid data loss at
+            # the margins
+            buffered_eolis_array = self.gaussian_filter_fill(eolis_arrays[col])
             eolis_resampled_grid = grid.map_gridded_data(
-                eolis_arrays[col], eolis_grid, interp="linear"
+                buffered_eolis_array, eolis_grid, interp="linear"
             )
             column_info = [
                 d for d in eolis_gridded_dataset["columns"] if d["name"] == col
@@ -432,10 +479,12 @@ class DatacubeCryotempoEolis:
                 name=data_name,
                 attrs={
                     "units": column_info["unit"],
-                    "long_name": f'EOLIS {col.replace("_", " ").title()}',
-                    "description": column_info["description"],
-                } | eolis_metadata,
+                } | eolis_metadata[col],
             )
+            # mask to glacier
+            if "glacier_mask" in oggm_ds.variables:
+                eolis_resampled_grids_xarr = eolis_resampled_grids_xarr.where(
+                    oggm_ds.glacier_mask != 0)
 
             oggm_ds[data_name] = eolis_resampled_grids_xarr
 
