@@ -192,7 +192,10 @@ class TestDataCubeCryoTempoEolis:
                     "standard_error": np.random.rand(n_coords),
                 }
             ),
-            [{"source_information": {"xy_cols_proj4": self.XY_PROJ}}],
+            [{"source_information":
+              {"xy_cols_proj4": self.XY_PROJ,
+               "elevation_change": {"long_name": "Elevation Change"},
+               "standard_error": {"long_name": "Standard Error"}}}],
             {
                 "columns": [
                     {
@@ -240,3 +243,5 @@ class TestDataCubeCryoTempoEolis:
         np.testing.assert_almost_equal(
             np.nanmean(result["eolis_gridded_elevation_change"]), 0.3771391
         )
+        assert result.eolis_gridded_elevation_change.attrs == {
+            'units': 'm', 'long_name': 'Elevation Change'}

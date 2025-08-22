@@ -55,7 +55,7 @@ class DatacubeCryotempoEolis:
 
     def __init__(self: DatacubeCryotempoEolis):
         self.SPECKLIA_DATASET_NAME_EOLIS_ELEVATION_CHANGE = (
-            "CryoTEMPO-EOLIS Processed Elevation Change Maps"
+            "CryoTEMPO-EOLIS Interpolated Elevation Change Maps"
         )
         self.EOLIS_STATIC_KEYS = [
             "Conventions",
@@ -432,9 +432,7 @@ class DatacubeCryotempoEolis:
                 name=data_name,
                 attrs={
                     "units": column_info["unit"],
-                    "long_name": f'EOLIS {col.replace("_", " ").title()}',
-                    "description": column_info["description"],
-                } | eolis_metadata,
+                } | eolis_metadata[col],
             )
 
             oggm_ds[data_name] = eolis_resampled_grids_xarr
