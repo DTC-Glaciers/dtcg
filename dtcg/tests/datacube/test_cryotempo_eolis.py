@@ -241,10 +241,31 @@ class TestDataCubeCryoTempoEolis:
         assert "eolis_gridded_elevation_change_sigma" in result
         assert (
             np.count_nonzero(
-                np.isfinite(result["eolis_gridded_elevation_change"])) == 480
+                np.isfinite(result["eolis_gridded_elevation_change"])) == 142
         )
         np.testing.assert_almost_equal(
-            np.nanmean(result["eolis_gridded_elevation_change"]), 0.3771391
+            np.nanmean(result["eolis_gridded_elevation_change"]), 0.4906209
         )
         assert result.eolis_gridded_elevation_change.attrs == {
             'units': 'm', 'long_name': 'Elevation Change'}
+
+    def test_gaussian_filter_fill(self, DatacubeCryotempoEolis):
+        arr = np.array([
+            [1.0,  np.nan, 3.0],
+            [np.nan, np.nan, np.nan],
+            [7.0,  np.nan, 9.0]
+        ])
+
+        result = DatacubeCryotempoEolis.gaussian_filter_fill(
+            arr, sigma=1)
+
+        # Original finite values should be preserved
+        np.testing.assert_array_equal(result[np.isfinite(arr)],
+                                      arr[np.isfinite(arr)])
+        assert np.all(np.isfinite(result[np.isnan(arr)]))
+
+        # If input is all-NaN, output should stay all-NaN
+        all_nan = np.full((3, 3), np.nan)
+        all_nan_result = DatacubeCryotempoEolis.gaussian_filter_fill(
+            all_nan, sigma=1)
+        assert np.all(np.isnan(all_nan_result))
