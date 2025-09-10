@@ -51,6 +51,7 @@ dependencies = [
     "zarr",
     "schema",
     "pyyaml",
+    "aiohttp",
 ]
 
 [project.optional-dependencies]
