@@ -52,6 +52,10 @@ class Test_DatacubeDespERA5:
     }
     has_desp_access = _has_desp_access
 
+    @pytest.mark.skipif(
+        not has_desp_access,
+        reason="No access to DESP. Check your .netrc file has a valid API key.",
+    )
     def test_get_desp_datastream(self, conftest_boilerplate, monkeypatch):
         test_cube = desp_era5.DatacubeDespEra5()
         conftest_boilerplate.patch_variable(
