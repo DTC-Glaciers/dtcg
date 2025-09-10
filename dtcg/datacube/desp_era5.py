@@ -22,12 +22,10 @@ from __future__ import annotations
 import logging
 import os
 
-import numpy as np
-import oggm.shop.ecmwf
-import pandas as pd
 import pyproj
 import xarray as xr
-from oggm import cfg, utils
+from aiohttp.client_exceptions import ClientResponseError
+from oggm import cfg
 from oggm.exceptions import InvalidParamsError
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
@@ -64,12 +62,20 @@ class DatacubeDespEra5:
 
         dataset_name = f"{DESP_SERVER}{BASENAMES[dataset]}"
 
-        dataset = xr.open_dataset(
-            dataset_name,
-            storage_options={"client_kwargs": {"trust_env": True}},
-            chunks={},
-            engine="zarr",
-        )
+        try:
+            dataset = xr.open_dataset(
+                dataset_name,
+                storage_options={"client_kwargs": {"trust_env": True}},
+                chunks={},
+                engine="zarr",
+            )
+        except ClientResponseError as e:
+            if e.status == 401 or "401" in e.message:
+                raise SystemExit(
+                    "Access to DESP requires an API key. Check your .netrc file."
+                )
+            else:
+                raise SystemExit(e.message)
 
         return dataset
 

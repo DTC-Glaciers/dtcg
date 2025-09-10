@@ -14,21 +14,10 @@ limitations under the License.
 
 """
 
-import netrc
-import os
 from datetime import date
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import geopandas as gpd
-import numpy as np
-import pandas as pd
 import pytest
 import xarray as xr
-from pyproj import Proj
-from pytest import MonkeyPatch
-from salem import Grid
-from shapely.geometry import box
 
 import dtcg.datacube.desp_era5 as desp_era5
 
