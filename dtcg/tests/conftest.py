@@ -40,6 +40,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+pytest_plugins = "oggm.tests.conftest"
+
 
 @pytest.fixture(name="sample_data_path", autouse=True)
 def conftest_sample_data_path(pytestconfig):

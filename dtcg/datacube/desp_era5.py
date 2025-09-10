@@ -29,7 +29,7 @@ from oggm import cfg
 from oggm.exceptions import InvalidParamsError
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
-DESP_EDH_KEY = os.environ["DESP_EDH_KEY"]
+DESP_EDH_KEY = os.environ.get("DESP_EDH_KEY")
 logger = logging.getLogger(__name__)
 
 
