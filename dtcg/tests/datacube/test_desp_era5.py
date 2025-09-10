@@ -14,6 +14,7 @@ limitations under the License.
 
 """
 
+import netrc
 import os
 from datetime import date
 from pathlib import Path
@@ -34,6 +35,24 @@ import dtcg.datacube.desp_era5 as desp_era5
 pytest_plugins = "oggm.tests.conftest"  # for hef_gdir
 
 
+def check_desp_api_key():
+    """Check if user has access to DESP."""
+
+    try:
+        with xr.open_dataset(
+            f"{desp_era5.DESP_SERVER}era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
+            storage_options={"client_kwargs": {"trust_env": True}},
+            chunks={},
+            engine="zarr",
+        ) as ds:
+            return True
+    except:
+        return False
+
+
+_has_desp_access = check_desp_api_key()
+
+
 class Test_DatacubeDespERA5:
 
     basenames_patch = {
@@ -42,6 +61,7 @@ class Test_DatacubeDespERA5:
             "ERA5_DESP_hourly": "public/test-dataset-v0.zarr",
         }
     }
+    has_desp_access = _has_desp_access
 
     def test_get_desp_datastream(self, conftest_boilerplate, monkeypatch):
         test_cube = desp_era5.DatacubeDespEra5()
@@ -57,6 +77,10 @@ class Test_DatacubeDespERA5:
         with pytest.raises(ValueError):
             test_cube.get_desp_datastream("Wrong_Set")
 
+    @pytest.mark.skipif(
+        not has_desp_access,
+        reason="No access to DESP. Check your .netrc file has a valid API key.",
+    )
     @pytest.mark.parametrize("arg_dataset", ["ERA5_DESP"])
     @pytest.mark.parametrize(
         "arg_y0", [pytest.param(None, marks=pytest.mark.slow), 2023]

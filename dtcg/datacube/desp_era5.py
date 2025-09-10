@@ -34,7 +34,7 @@ os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
 logger = logging.getLogger(__name__)
 
 
-ECMWF_SERVER = "https://data.earthdatahub.destine.eu/"
+DESP_SERVER = "https://data.earthdatahub.destine.eu/"
 
 BASENAMES = {
     "ERA5_DESP": "era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
@@ -43,7 +43,7 @@ BASENAMES = {
 
 
 class DatacubeDespEra5:
-    def get_desp_datastream(self, dataset="ERA5_DESP"):
+    def get_desp_datastream(self, dataset: str = "ERA5_DESP") -> xr.Dataset:
         """Stream a DESP dataset.
 
         Parameters
@@ -53,16 +53,16 @@ class DatacubeDespEra5:
 
         Returns
         -------
-        xr.DataArray
+        xr.Dataset
             Streamed DESP data.
         """
 
         if dataset not in BASENAMES.keys():
             raise InvalidParamsError(
-                "ECMWF dataset {} not " "in {}".format(dataset, BASENAMES.keys())
+                "DESP dataset {} not " "in {}".format(dataset, BASENAMES.keys())
             )
 
-        dataset_name = f"{ECMWF_SERVER}{BASENAMES[dataset]}"
+        dataset_name = f"{DESP_SERVER}{BASENAMES[dataset]}"
 
         dataset = xr.open_dataset(
             dataset_name,
@@ -76,11 +76,11 @@ class DatacubeDespEra5:
     def process_desp_era5_data(
         self,
         gdir,
-        settings_filesuffix="",
-        dataset="ERA5_DESP",
-        y0=None,
-        y1=None,
-        output_filesuffix=None,
+        settings_filesuffix: str = "",
+        dataset: str = "ERA5_DESP",
+        y0: int = None,
+        y1: int = None,
+        output_filesuffix: str = None,
     ):
         """Processes and writes the ERA5 baseline climate data for this glacier.
 
