@@ -72,16 +72,15 @@ class Test_DatacubeDespERA5:
     )
     @pytest.mark.parametrize("arg_dataset", ["ERA5_DESP"])
     @pytest.mark.parametrize(
-        "arg_y0", [pytest.param(None, marks=pytest.mark.slow), 2023]
+        "arg_years", [(None, 1941), (2023, None), (2023, 2024), (None, None)]
     )
-    @pytest.mark.parametrize(
-        "arg_y1", [pytest.param(None, marks=pytest.mark.slow), 2024]
-    )
-    def test_process_desp_era5_data(self, arg_dataset, arg_y0, arg_y1, hef_gdir):
+    # @pytest.mark.parametrize("arg_y1", [None, 2024])
+    def test_process_desp_era5_data(self, arg_dataset, arg_years, hef_gdir):
 
         gdir = hef_gdir
         test_cube = desp_era5.DatacubeDespEra5()
 
+        arg_y0, arg_y1 = arg_years
         test_cube.process_desp_era5_data(
             gdir=gdir, dataset=arg_dataset, y0=arg_y0, y1=arg_y1
         )
