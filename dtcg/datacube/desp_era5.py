@@ -29,10 +29,14 @@ from oggm import cfg
 from oggm.exceptions import InvalidParamsError
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
+DESP_EDH_KEY = os.environ["DESP_EDH_KEY"]
 logger = logging.getLogger(__name__)
 
 
-DESP_SERVER = "https://data.earthdatahub.destine.eu/"
+if DESP_EDH_KEY:
+    DESP_SERVER = f"https://edh:{DESP_EDH_KEY}data.earthdatahub.destine.eu/"
+else:
+    DESP_SERVER = "https://data.earthdatahub.destine.eu/"
 
 BASENAMES = {
     "ERA5_DESP": "era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
