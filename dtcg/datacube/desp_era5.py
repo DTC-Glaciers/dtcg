@@ -22,9 +22,12 @@ from __future__ import annotations
 import logging
 import os
 
+import numpy as np
+import oggm.shop.ecmwf
+import pandas as pd
 import pyproj
 import xarray as xr
-from oggm import cfg
+from oggm import cfg, utils
 from oggm.exceptions import InvalidParamsError
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
@@ -34,119 +37,125 @@ logger = logging.getLogger(__name__)
 ECMWF_SERVER = "https://data.earthdatahub.destine.eu/"
 
 BASENAMES = {
-    "ERA5": "era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
-    "TEST": "public/test-dataset-v0.zarr",
+    "ERA5_DESP": "era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
+    "ERA5_DESP_hourly": "era5/reanalysis-era5-single-levels-v0.zarr",
 }
 
 
-def get_ecmwf_file(dataset="ERA5", var=None):
-    """Returns a path to the desired ECMWF baseline climate file.
+class DatacubeDespEra5:
+    def get_desp_datastream(self, dataset="ERA5_DESP"):
+        """Stream a DESP dataset.
 
-    If the file is not present, download it.
+        Parameters
+        ----------
+        dataset : str, default "ERA5_DESP"
+            Name of dataset, either "ERA5_DESP" or "ERA5_DESP_hourly"
 
-    Parameters
-    ----------
-    dataset : str
-        'ERA5', 'ERA5L', 'CERA', 'ERA5L-HMA', 'ERA5dr'
-    var : str
-        'inv' for invariant
-        'tmp' for temperature
-        'pre' for precipitation
+        Returns
+        -------
+        xr.DataArray
+            Streamed DESP data.
+        """
 
-    Returns
-    -------
-    str
-        path to the file
-    """
+        if dataset not in BASENAMES.keys():
+            raise InvalidParamsError(
+                "ECMWF dataset {} not " "in {}".format(dataset, BASENAMES.keys())
+            )
 
-    # Be sure input makes sense
+        dataset_name = f"{ECMWF_SERVER}{BASENAMES[dataset]}"
 
-    if dataset not in BASENAMES.keys():
-        raise InvalidParamsError(
-            "ECMWF dataset {} not " "in {}".format(dataset, BASENAMES.keys())
+        dataset = xr.open_dataset(
+            dataset_name,
+            storage_options={"client_kwargs": {"trust_env": True}},
+            chunks={},
+            engine="zarr",
         )
 
-    dataset_name = f"{ECMWF_SERVER}{BASENAMES[dataset]}"
-    dataset = xr.open_dataset(
-        dataset_name,
-        storage_options={"client_kwargs": {"trust_env": True}},
-        chunks={},
-        engine="zarr",
-    )
+        return dataset
 
-    return dataset
+    def process_desp_era5_data(
+        self,
+        gdir,
+        settings_filesuffix="",
+        dataset="ERA5_DESP",
+        y0=None,
+        y1=None,
+        output_filesuffix=None,
+    ):
+        """Processes and writes the ERA5 baseline climate data for this glacier.
 
+        Extracts the nearest timeseries and writes everything to a NetCDF file.
 
-def process_ecmwf_data(
-    gdir,
-    settings_filesuffix="",
-    dataset="ERA5",
-    y0=None,
-    y1=None,
-    output_filesuffix=None,
-):
-    """Processes and writes the ECMWF baseline climate data for this glacier.
+        Parameters
+        ----------
+        gdir : GlacierDirectory
+            the glacier directory to process
+        settings_filesuffix: str
+            You can use a different set of settings by providing a filesuffix. This
+            is useful for sensitivity experiments. Code-wise the settings_filesuffix
+            is set in the @entity-task decorater.
+        dataset : str, default ERA5_DESP
+            Dataset name.
+        y0 : int
+            the starting year of the timeseries to write. The default is to take
+            the entire time period available in the file, but with this kwarg
+            you can shorten it (to save space or to crop bad data).
+        y1 : int
+            the starting year of the timeseries to write. The default is to take
+            the entire time period available in the file, but with this kwarg
+            you can shorten it (to save space or to crop bad data).
+        output_filesuffix : str
+            add a suffix to the output file (useful to avoid overwriting
+            previous experiments).
+        """
 
-    Extracts the nearest timeseries and writes everything to a NetCDF file.
+        longitude = gdir.cenlon + 360 if gdir.cenlon < 0 else gdir.cenlon
+        latitude = gdir.cenlat
 
-    Parameters
-    ----------
-    gdir : :py:class:`oggm.GlacierDirectory`
-        the glacier directory to process
-    settings_filesuffix: str
-        You can use a different set of settings by providing a filesuffix. This
-        is useful for sensitivity experiments. Code-wise the settings_filesuffix
-        is set in the @entity-task decorater.
-    dataset : str, default ERA5
-        Dataset name.
-    y0 : int
-        the starting year of the timeseries to write. The default is to take
-        the entire time period available in the file, but with this kwarg
-        you can shorten it (to save space or to crop bad data).
-    y1 : int
-        the starting year of the timeseries to write. The default is to take
-        the entire time period available in the file, but with this kwarg
-        you can shorten it (to save space or to crop bad data).
-    output_filesuffix : str
-        add a suffix to the output file (useful to avoid overwriting
-        previous experiments).
-    """
+        with self.get_desp_datastream(dataset) as ds:
+            # DESTINE recommends spatial selection first
+            ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
+            yrs = ds["valid_time.year"]
 
-    longitude = gdir.cenlon + 360 if gdir.cenlon < 0 else gdir.cenlon
-    latitude = gdir.cenlat
+            y0 = yrs[0].astype("int").values if y0 is None else y0
+            y1 = yrs[-1].astype("int").values if y1 is None else y1
+            ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
+            # oggm.shop.ecmwf._check_ds_validity(ds)
 
-    with get_ecmwf_file(dataset) as ds:
-        # DESTINE recommends spatial selection first
-        ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
-        yrs = ds["valid_time.year"]
+            temperature = ds.t2m.astype("float32") - 273.15
+            precipitation = (
+                ds.tp.astype("float32") * 1000 * ds["valid_time.daysinmonth"]
+            )
 
-        y0 = yrs[0] if y0 is None else y0
-        y1 = yrs[-1] if y1 is None else y1
-        ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
-        # oggm._check_ds_validity(ds)
+            temperature = temperature.compute().data
+            precipitation = precipitation.compute().data
 
-        temperature = ds.t2m.astype("float32") - 273.15
-        precipitation = ds.tp.astype("float32") * 1000 * ds["valid_time.daysinmonth"]
-        hgt = ds.z.astype("float32") / cfg.G
-        temperature = temperature.compute().data
-        precipitation = precipitation.compute().data
-        hgt = hgt.compute().data
-        time = ds.valid_time.compute().data
+            time = ds.valid_time.compute().data
 
-        ref_lon = ds.longitude.astype("float32").compute()
-        ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
-        ref_lat = ds.latitude.astype("float32").compute()
+            ref_lon = ds.longitude.astype("float32").compute()
+            ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
+            ref_lat = ds.latitude.astype("float32").compute()
+
+        with self.get_desp_datastream("ERA5_DESP_hourly") as ds:
+            # height is not included in monthly data
+            ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
+            yrs = ds["valid_time.year"]
+
+            # don't recalculate years in case of mismatch
+            ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
+            hgt = ds.z.astype("float32") / cfg.G
+            hgt = hgt.compute().data
+
         temp_std = None
-
-    # OK, ready to write
-    gdir.write_climate_file(
-        time,
-        precipitation,
-        temperature,
-        hgt,
-        ref_lon,
-        ref_lat,
-        filesuffix=output_filesuffix,
-        temp_std=temp_std,
-        source=dataset,
-    )
+        # OK, ready to write
+        gdir.write_monthly_climate_file(
+            time,
+            precipitation,
+            temperature,
+            hgt,
+            ref_lon,
+            ref_lat,
+            filesuffix=output_filesuffix,
+            temp_std=temp_std,
+            source=dataset,
+        )
