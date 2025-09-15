@@ -146,7 +146,7 @@ class Calibrator:
         prcp_fac_min = utils.clip_scalar(prcp_fac * 0.8, mi, ma)
         prcp_fac_max = utils.clip_scalar(prcp_fac * 1.2, mi, ma)
 
-        if "DailySfc_Cryosat_2015" in calibration_filesuffix:
+        if "SfcType_Cryosat_2015" in calibration_filesuffix:
             calibration_parameters.update(
                 {
                     "calibrate_param1": "prcp_fac",
@@ -247,8 +247,8 @@ class CalibratorCryotempo(Calibrator):
 
     def set_model_matrix(
         self,
-        name: str = "DailySfc_Cryosat",
-        model=massbalance.DailySfcTIModel,
+        name: str = "SfcType_Cryosat",
+        model=massbalance.SfcTypeTIModel,
         geo_period: str = "2011-01-01_2020-01-01",
         daily: bool = True,
         source: str = "CryoTEMPO-EOLIS",

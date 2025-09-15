@@ -141,6 +141,22 @@ class BokehFigureFormat:
 
         return default_options
 
+    def get_all_palettes(self) -> dict:
+        """Get all valid preset colour palettes.
+
+        Returns
+        -------
+        dict
+            Preset colour palettes.
+        """
+        palettes = {
+            "brown_blue_pastel": ("#e0beb3", "#b3d5e0", "#beacf6"),
+            "brown_blue_vivid": ("#f6beac", "#ace4fc", "#beacf6"),
+            "hillshade_glacier": ("#f6beac", "#ffffff", "#33b5cb"),
+            "lines_jet_r": ("#ffffff", "#d62728", "#1f77b4"),
+        }
+        return palettes
+
     def get_color_palette(self, name: str) -> tuple:
         """Get a preset palette.
 
@@ -154,17 +170,12 @@ class BokehFigureFormat:
         tuple[str]
             Palette of hex colours.
         """
-        palettes = {
-            "brown_blue_pastel": ("#e0beb3", "#b3d5e0", "#beacf6"),
-            "brown_blue_vivid": ("#f6beac", "#ace4fc", "#beacf6"),
-            "hillshade_glacier": ("#f6beac", "#ffffff", "#33b5cb"),
-            "lines_jet_r": ("#ffffff", "#d62728", "#1f77b4"),
-        }
+        palettes = self.get_all_palettes()
         if name.lower() not in palettes.keys():
             try:
                 palettes[name] = list(hv.Cycle.default_cycles[name])
             except:
-                raise KeyError("{name} not found. Try:{'\n'.join(palettes.keys())}")
+                raise KeyError(f"{name} not found. Try: {'\n'.join(palettes.keys())}")
 
         return palettes[name]
 
@@ -1008,8 +1019,8 @@ class BokehCryotempo(BokehFigureFormat):
 
         key_split = key.split("_")
         model_name = key_split[0]
-        if "Sfc" in model_name:
-            model_name = f"{model_name.removesuffix('Sfc')}, Tracking"
+        if "SfcType" in model_name:
+            model_name = f"Daily {model_name.removesuffix('SfcType')}, Tracking"
         label = f"{model_name}, {key_split[1]}"
 
         if len(key_split) > 4:
@@ -1133,7 +1144,7 @@ class BokehCryotempo(BokehFigureFormat):
                 figures.append(curve)
 
         for k, v in smb.items():
-            if "Daily" in k:
+            if ("Daily" in k) or ("SfcType" in k):
                 if not cumulative:
 
                     df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
@@ -1351,7 +1362,7 @@ class BokehCryotempo(BokehFigureFormat):
                     figures.append(curve)
 
         for k, v in smb.items():
-            if "Daily" in k:
+            if ("Daily" in k) or ("SfcType") in k:
                 label = self.get_label_from_key(k)
 
                 df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
