@@ -168,31 +168,38 @@ class BokehFigureFormat:
 
         return palettes[name]
 
-    def get_hover_tool(self, mode="mouse") -> bokeh.models.HoverTool:
+    def get_hover_tool(self, mode="vline", tooltips=None) -> bokeh.models.HoverTool:
         """Get the hover tool attribute.
+
+        , e.g. "mouse", "hline", "vline".
 
         Returns
         -------
         bokeh.models.HoverTool
             Hover tool with tooltips and formatter.
         """
+        if not tooltips:
+            tooltips = self.tooltips
+
         return bokeh.models.HoverTool(
-            tooltips=self.tooltips, formatters=self.get_tooltip_format(), mode=mode
+            tooltips=tooltips,
+            formatters=self.get_tooltip_format(tooltips=tooltips),
+            mode=mode,
         )
 
-    def set_hover_tool(self, mode: str = "mouse"):
+    def set_hover_tool(self, mode: str = "vline"):
         """Set the hover tool attribute.
 
         Parameters
         ----------
-        mode : str
-            Hover mode, e.g. "vline". Default "mouse".
+        mode : str, default "vline"
+            Hover mode, e.g. "mouse", "hline", "vline".
         """
         self.hover_tool = bokeh.models.HoverTool(
             tooltips=self.tooltips, formatters=self.get_tooltip_format(), mode=mode
         )
 
-    def set_tooltips(self, tooltips: list, mode: str = "mouse"):
+    def set_tooltips(self, tooltips: list, mode: str = "vline"):
         """Set the tooltips attribute and update the hover tool.
 
         Parameters
@@ -200,17 +207,24 @@ class BokehFigureFormat:
         tooltips : list
             List of Bokeh figure tooltips. The tooltips should only
             contain printf formatters.
-        mode : Hover mode for hover tool, e.g. "vline". Default "mouse".
+        mode : str, default "vline"
+            Hover mode for hover tool, e.g. "mouse", "hline", "vline".
         """
         self.tooltips = tooltips
         self.set_hover_tool(mode=mode)
 
-    def get_tooltip_format(self) -> dict:
+    def get_tooltip_format(self, tooltips: list = None) -> dict:
         """Get a tooltip formatter from the tooltips attribute.
 
         This ensures all tooltips with a format string (in curly
         braces) are formatted as fstrings. Skips tooltips without a
         format string.
+
+        Parameters
+        ----------
+        tooltips : list, optional.
+            List of Bokeh figure tooltips. The tooltips should only
+            contain printf formatters.
 
         Returns
         -------
@@ -224,7 +238,9 @@ class BokehFigureFormat:
         #         formatters[tooltip[1]] = "printf"
 
         # one-liner
-        formatters = {label[1].split("{")[0]: "printf" for label in self.tooltips}
+        if not tooltips:
+            tooltips = self.tooltips
+        formatters = {label[1].split("{")[0]: "printf" for label in tooltips}
         return formatters
 
     def set_defaults(self, updated_options: dict):
@@ -299,8 +315,8 @@ class BokehMap(BokehFigureFormat):
             ("Latitude", "@CenLat{%.2f °N}"),
             ("Longitude", "@CenLon{%.2f °E}"),
         ]
-        self.set_hover_tool()
-        self.hover_tool = self.get_hover_tool()
+        self.set_hover_tool(mode="mouse")
+        self.hover_tool = self.get_hover_tool(mode="mouse")
         self.palette = self.get_color_palette("hillshade_glacier")
         self.set_defaults({"xlabel": "Longitude (°E)", "ylabel": "Latitude (°N)"})
 
@@ -484,7 +500,7 @@ class BokehGraph(BokehFigureFormat):
             }
         )
         self.tooltips = [
-            ("Runoff", "$y{%.2f Mt}"),
+            ("Runoff", "$snap_y{%.2f Mt}"),
         ]
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
@@ -951,7 +967,7 @@ class BokehCryotempo(BokehFigureFormat):
             }
         )
         self.tooltips = [
-            ("Runoff", "$y{%.2f Mt}"),
+            ("Runoff", "$snap_y{%.2f Mt}"),
         ]
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
@@ -1051,18 +1067,21 @@ class BokehCryotempo(BokehFigureFormat):
         """
         self.check_holoviews()
         self.set_tooltips(
-            [("SMB", "$y{%.2f mm w.e.}")],
+            [
+                ("SMB", "$snap_y{%.2f mm w.e.}"),
+                #  ("Mean SMB", "@smb_mean{%.2f mm w.e.}")
+            ],
             mode="vline",
         )
 
         # self.tooltips = [
         #     # ("Name", "@Name"),
-        #     # ("SMB", "$y{%.2f mm w.e.}")
+        #     # ("SMB", "$snap_y{%.2f mm w.e.}")
         #     ("value", "@value"),
         #     ("name", "@Variable")
         # ]
         self.set_hover_tool()
-        self.hover_tool = self.get_hover_tool()
+        self.hover_tool = self.get_hover_tool(mode="vline")
 
         plot_data = {}
         figures = []
@@ -1116,45 +1135,50 @@ class BokehCryotempo(BokehFigureFormat):
         for k, v in smb.items():
             if "Daily" in k:
                 if not cumulative:
-                    label = self.get_label_from_key(k)
 
                     df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
 
                     geodetic_mask = self.get_date_mask(df, *geodetic_period)
 
                     all_data_mean = self.get_mean_by_doy(df[geodetic_mask])
-                    plot_data[k] = all_data_mean["smb"]
+                    # plot_data[k] = all_data_mean["smb"]
                     all_data_mean.index = pd.to_datetime(
                         all_data_mean.index, format="%j"
                     )
-                    plot_data[k] = all_data_mean["smb"]
+                    all_data_mean["smb_mean"] = all_data_mean["smb"]
+                    plot_data[f"{k}_mean"] = all_data_mean["smb_mean"]
 
                     label = f"{start_year}-{end_year} Mean"
+                    hover_tool_mean = self.get_hover_tool(
+                        tooltips=[("Mean SMB", "@smb_mean{%.2f mm w.e.}")], mode="vline"
+                    )
                     figures = self.add_curve_to_figures(
                         data=plot_data,
-                        key=k,
+                        key=f"{k}_mean",
                         figures=figures,
                         line_color="k",
                         label=label,
+                        tools=[hover_tool_mean],
+                        # tools=[self.hover_tool],
                     )
 
-                    date_mask = self.get_date_mask(
-                        df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
-                    )
+                    # date_mask = self.get_date_mask(
+                    #     df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+                    # )
 
-                    df_daily_mean = self.get_mean_by_doy(df[date_mask])
-                    df_daily_mean.index = pd.to_datetime(
-                        df_daily_mean.index, format="%j"
-                    )
-                    plot_data[k] = df_daily_mean["smb"]
-                    label = f"{ref_year}"
-                    figures = self.add_curve_to_figures(
-                        data=plot_data,
-                        key=k,
-                        figures=figures,
-                        line_color="#d62728",
-                        label=label,
-                    )
+                    # df_daily_mean = self.get_mean_by_doy(df[date_mask])
+                    # df_daily_mean.index = pd.to_datetime(
+                    #     df_daily_mean.index, format="%j"
+                    # )
+                    # plot_data[k] = df_daily_mean["smb"]
+                    # label = f"{ref_year}"
+                    # figures = self.add_curve_to_figures(
+                    #     data=plot_data,
+                    #     key=k,
+                    #     figures=figures,
+                    #     line_color="#d62728",
+                    #     label=label,
+                    # )
                 else:
                     label = self.get_label_from_key(k)
 
@@ -1444,7 +1468,7 @@ class BokehSynthetic(BokehCryotempo):
             }
         )
         self.tooltips = [
-            ("Runoff", "$y{%.2f Mt}"),
+            ("Runoff", "$snap_y{%.2f Mt}"),
         ]
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
