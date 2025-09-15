@@ -19,7 +19,7 @@ Plotting utilities for the frontend.
 """
 
 import sys
-from datetime import datetime, date
+from datetime import date, datetime
 
 import bokeh.models
 import bokeh.plotting
@@ -564,7 +564,7 @@ class BokehGraph(BokehFigureFormat):
         if cumulative:
             ylabel = f"Cumulative {ylabel}"
             title = f"Cumulative {title}"
-            runoff_ref_year = runoff_mean.cumsum()
+            runoff_ref_year = runoff_ref_year.cumsum()
             for year in runoff.time:
                 runoff_year = runoff.sel(time=year).cumsum()
                 curve = (
