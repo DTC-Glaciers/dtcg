@@ -234,24 +234,22 @@ class BokehFigureFormat:
         Parameters
         ----------
         tooltips : list, optional.
-            List of Bokeh figure tooltips. The tooltips should only
-            contain printf formatters.
+            List of Bokeh figure tooltips.
 
         Returns
         -------
         dict
-            Tooltip field names with an associated "printf" value.
+            Tooltip field names with an associated "printf" or
+            "datetime" value.
         """
-        # formatters = {}
-        # for tooltip in self.tooltips:
-        #     label = tooltip[1].split("{")
-        #     if len(label) > 1:
-        #         formatters[tooltip[1]] = "printf"
-
-        # one-liner
         if not tooltips:
             tooltips = self.tooltips
-        formatters = {label[1].split("{")[0]: "printf" for label in tooltips}
+        formatters = {}
+        for label in tooltips:
+            if not any(x in label[0].lower() for x in ["date", "time"]):
+                formatters[label[1].split("{")[0]] = "printf"
+            else:
+                formatters[label[1].split("{")[0]] = "datetime"
         return formatters
 
     def set_defaults(self, updated_options: dict):
@@ -584,10 +582,13 @@ class BokehGraph(BokehFigureFormat):
         runoff_mean = runoff.mean(dim="time")
         index = [date(ref_year, i, 1) for i in runoff_ref_year.month_2d.values]
         # index = pd.to_datetime(index, format="%j")
+        runoff_minimum = runoff.min(dim="time", skipna=True)
+        runoff_maximum = runoff.max(dim="time", skipna=True)
 
         title = self.get_title(title="Runoff", suffix=name)
         figures = []
         ylabel = "Runoff (Mt)"
+        time_period = f"{latest_year-nyears}-{latest_year}"
         if cumulative:
             ylabel = f"Cumulative {ylabel}"
             title = f"Cumulative {title}"
@@ -598,7 +599,7 @@ class BokehGraph(BokehFigureFormat):
                     hv.Curve(
                         (index, runoff_year),
                         group="runoff",
-                        label=f"{latest_year-nyears}-{latest_year}",
+                        label=time_period,
                     )
                     .opts(**self.defaults)
                     .opts(
@@ -614,7 +615,7 @@ class BokehGraph(BokehFigureFormat):
                 hv.Curve(
                     (index, runoff_mean),
                     group="runoff",
-                    label=f"Mean ({latest_year-20}-{latest_year})",
+                    label=f"Mean ({time_period})",
                 )
                 .opts(**self.defaults)
                 .opts(
@@ -628,9 +629,9 @@ class BokehGraph(BokehFigureFormat):
             if year_maximum_runoff and year_minimum_runoff:
                 min_curve = (
                     hv.Curve(
-                        (index, runoff.sel(time=year_minimum_runoff)),
+                        (index, runoff_minimum),
                         group="runoff",
-                        label=f"Minimum: {year_minimum_runoff}",
+                        label=f"Minimum ({time_period})",
                     )
                     .opts(**self.defaults)
                     .opts(
@@ -641,9 +642,9 @@ class BokehGraph(BokehFigureFormat):
                 figures.append(min_curve)
                 max_curve = (
                     hv.Curve(
-                        (index, runoff.sel(time=year_maximum_runoff)),
+                        (index, runoff_maximum),
                         group="runoff",
-                        label=f"Maximum: {year_maximum_runoff}",
+                        label=f"Maximum ({time_period})",
                     )
                     .opts(**self.defaults)
                     .opts(
@@ -1079,18 +1080,13 @@ class BokehCryotempo(BokehFigureFormat):
         self.check_holoviews()
         self.set_tooltips(
             [
-                ("SMB", "$snap_y{%.2f mm w.e.}"),
-                #  ("Mean SMB", "@smb_mean{%.2f mm w.e.}")
+                ("Date", "$snap_x{%d %B}"),
+                ("SMB", "$snap_y{%.2f mm w.e.}")
+                
             ],
             mode="vline",
         )
 
-        # self.tooltips = [
-        #     # ("Name", "@Name"),
-        #     # ("SMB", "$snap_y{%.2f mm w.e.}")
-        #     ("value", "@value"),
-        #     ("name", "@Variable")
-        # ]
         self.set_hover_tool()
         self.hover_tool = self.get_hover_tool(mode="vline")
 
