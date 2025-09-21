@@ -443,11 +443,14 @@ class DatacubeCryotempoEolis:
             )
         )
 
+        elevation_change_var_name = "elevation_change"
+        elevation_change_sigma_var_name = "elevation_change_sigma"
+
         # convert spare dataframe to data cube
         eolis_arrays, eolis_grid, time_coordinates = (
             self.convert_gridded_dataframe_to_array(
                 eolis_gridded_data,
-                ["elevation_change", "elevation_change_sigma"],
+                [elevation_change_var_name, elevation_change_sigma_var_name],
                 "x",
                 "y",
                 np.nanmin(np.abs(np.diff(eolis_gridded_data.x.unique()))),
@@ -461,7 +464,7 @@ class DatacubeCryotempoEolis:
 
         # add EOLIS elevation and uncertainty to OGGM data cube
         eolis_metadata = self.prepare_eolis_metadata(eolis_gridded_sources)
-        for col in ["elevation_change", "elevation_change_sigma"]:
+        for col in [elevation_change_var_name, elevation_change_sigma_var_name]:
             data_name = f"eolis_gridded_{col}"
 
             # buffer eolis grid using gaussian filter to avoid data loss at
@@ -494,12 +497,38 @@ class DatacubeCryotempoEolis:
             f"{perf_counter()-resampling_start_time:.2f} seconds"
         )
 
+        self.augment_dataset_with_1d_timeseries(
+            eolis_gridded_data, oggm_ds, elevation_change_var_name, elevation_change_sigma_var_name)
+
         return oggm_ds
 
-    def timeseries_uncertainty_propagation(
-            self, gdf, raster_resolution, glaciated_area_in_region_km2):
-        gdf.dropna(inplace=True)
-        grouped_data = gdf.groupby('timestamp', sort=True)
+    def augment_dataset_with_1d_timeseries(self, eolis_gridded_data, oggm_ds, elevation_change_var_name, elevation_change_sigma_var_name):
+        logger.debug("Generating 1D time series.")
+        timeseries_gen_start_time = perf_counter()
+        elevation_change_timeseries, error_timeseries = self.generate_1d_timeseries(
+            eolis_gridded_data, elevation_change_var_name, elevation_change_sigma_var_name
+        )
+        timeseries_data = {elevation_change_var_name: elevation_change_timeseries,
+                           elevation_change_sigma_var_name: error_timeseries}
+        for col, timeseries in timeseries_data.items():
+            data_name = f"eolis_{col}_timeseries"
+            eolis_resampled_grids_xarr = xr.DataArray(
+                timeseries,
+                coords={"t": oggm_ds.t},
+                dims=("t", "y", "x"),
+                name=data_name,
+                attrs=oggm_ds[f"eolis_gridded_{col}"].attrs
+            )
+            oggm_ds[data_name] = eolis_resampled_grids_xarr
+        logger.debug(
+            "1D time series generation and addition to dataset took "
+            f"{perf_counter()-timeseries_gen_start_time:.2f} seconds"
+        )
+
+    def generate_1d_timeseries(
+            self, eolis_gridded_data, elevation_change_var_name,
+            elevation_change_sigma_var_name, length_scale=2e4):
+        grouped_data = eolis_gridded_data.groupby('timestamp', sort=True)
         timestamps = [t[0] for t in grouped_data]
         gridded_product_data_grouped = [t[1] for t in grouped_data]
 
@@ -507,39 +536,28 @@ class DatacubeCryotempoEolis:
         error_timeseries = []
         for i in range(len(timestamps)):
             gridded_data_this_timestamp = gridded_product_data_grouped[i].loc[
-                gridded_product_data_grouped[i]['elevation_difference'].notna()]
-            weighted_mean = (
-                np.sum(gridded_data_this_timestamp['elevation_difference']
-                    / gridded_data_this_timestamp['uncertainty']**2)
-                / np.sum(1 / gridded_data_this_timestamp['uncertainty']**2))
+                gridded_product_data_grouped[i][elevation_change_var_name].notna()]
+            mean = gridded_data_this_timestamp[elevation_change_var_name].mean()
             uncertainty = gridded_data_this_timestamp[
-                'uncertainty'].astype(float).to_numpy()  # shape (N,)
+                elevation_change_sigma_var_name].astype(float).to_numpy()
             coords = gridded_data_this_timestamp[
-                ['x', 'y']].astype(float).to_numpy()  # shape (N, 2)
-
-            # Set a correlation length scale (in same units as coords)
-            L = 20000  # meters, for example
+                ['x', 'y']].astype(float).to_numpy()
 
             # Build correlation matrix (exponential decay kernel)
-            D = cdist(coords, coords)  # pairwise distances
-            correlation = np.exp(-D / L)
+            pairwise_dist = cdist(coords, coords)
+            correlation = np.exp(-pairwise_dist / length_scale)
 
             # Covariance matrix
-            C = np.outer(uncertainty, uncertainty) * correlation
+            cov_matrix = np.outer(uncertainty, uncertainty) * correlation
 
-            # Inverse variance weights
-            weights = 1 / uncertainty**2
-            weights /= weights.sum()
+            # Uniform weights
+            n_vals = len(gridded_data_this_timestamp)
+            weights = np.ones(n_vals) / n_vals
 
             # Compute variance of the weighted mean
-            var_mean = weights @ C @ weights
+            var_mean = weights @ cov_matrix @ weights
             std_mean = np.sqrt(var_mean)
 
-            percentage_coverage = (
-                len(gridded_data_this_timestamp)
-                * raster_resolution / glaciated_area_in_region_km2)
-
-            elevation_change_timeseries.append(weighted_mean)
-            error_timeseries.append(
-                std_mean / (1 / percentage_coverage)**0.5)
+            elevation_change_timeseries.append(mean)
+            error_timeseries.append(std_mean)
         return elevation_change_timeseries, error_timeseries
