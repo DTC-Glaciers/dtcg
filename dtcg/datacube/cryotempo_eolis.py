@@ -515,7 +515,7 @@ class DatacubeCryotempoEolis:
             eolis_resampled_grids_xarr = xr.DataArray(
                 timeseries,
                 coords={"t": oggm_ds.t},
-                dims=("t", "y", "x"),
+                dims=("t"),
                 name=data_name,
                 attrs=oggm_ds[f"eolis_gridded_{col}"].attrs
             )
