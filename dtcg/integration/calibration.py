@@ -247,7 +247,7 @@ class CalibratorCryotempo(Calibrator):
     def set_model_matrix(
         self,
         name: str = "DailySfc_Cryosat",
-        model=massbalance.DailySfcTIModel,
+        model=massbalance.SfcTypeTIModel,
         geo_period: str = "2011-01-01_2020-01-01",
         daily: bool = True,
         source: str = "CryoTEMPO-EOLIS",
@@ -416,7 +416,7 @@ class CalibratorCryotempo(Calibrator):
 
         return mb_model_calib, mb_model_flowlines, smb
 
-    def run_calibration(self, gdir, datacube, model=massbalance.DailySfcTIModel):
+    def run_calibration(self, gdir, datacube, model=massbalance.SfcTypeTIModel):
         ref_mb = self.get_geodetic_mb(gdir=gdir, ds=datacube)
 
         sfc_model_kwargs = {
