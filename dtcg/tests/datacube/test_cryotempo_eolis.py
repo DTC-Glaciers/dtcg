@@ -36,7 +36,7 @@ def dataframe_2d():
             "x": [0, 1, 0, 1],
             "y": [0, 0, 1, 1],
             "elevation_change": [1, 2, 3, 4],
-            "standard_error": [0.1, 0.2, 0.3, 0.4],
+            "elevation_change_sigma": [0.1, 0.2, 0.3, 0.4],
         }
     )
 
@@ -49,7 +49,7 @@ def dataframe_3d():
             "y": [0, 0, 1, 1, 0, 1],
             "timestamp": [1, 1, 1, 1, 2, 2],
             "elevation_change": [1, 2, 3, 4, 5, 6],
-            "standard_error": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            "elevation_change_sigma": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
         }
     )
 
@@ -120,7 +120,7 @@ class TestDataCubeCryoTempoEolis:
         output, grid, t_axis = (
             DatacubeCryotempoEolis.convert_gridded_dataframe_to_array(
                 gridded_df=df,
-                value_column_names=["elevation_change", "standard_error"],
+                value_column_names=["elevation_change", "elevation_change_sigma"],
                 x_coordinate_column="x",
                 y_coordinate_column="y",
                 spatial_resolution=1.0,
@@ -131,7 +131,7 @@ class TestDataCubeCryoTempoEolis:
 
         assert isinstance(output, dict)
         assert "elevation_change" in output
-        assert "standard_error" in output
+        assert "elevation_change_sigma" in output
         assert isinstance(grid, Grid)
         if is_3d:
             assert output["elevation_change"].ndim == 3
@@ -189,10 +189,13 @@ class TestDataCubeCryoTempoEolis:
                     "y": ys.flatten(),
                     "timestamp": np.ones(n_coords),
                     "elevation_change": np.random.rand(n_coords),
-                    "standard_error": np.random.rand(n_coords),
+                    "elevation_change_sigma": np.random.rand(n_coords),
                 }
             ),
-            [{"source_information": {"xy_cols_proj4": self.XY_PROJ}}],
+            [{"source_information":
+              {"xy_cols_proj4": self.XY_PROJ,
+               "elevation_change": {"long_name": "Elevation Change"},
+               "elevation_change_sigma": {"long_name": "Error"}}}],
             {
                 "columns": [
                     {
@@ -200,7 +203,10 @@ class TestDataCubeCryoTempoEolis:
                         "unit": "m",
                         "description": "Elevation change",
                     },
-                    {"name": "standard_error", "unit": "m", "description": "Error"},
+                    {
+                        "name": "elevation_change_sigma",
+                        "unit": "m",
+                        "description": "Error"},
                 ]
             },
         )
@@ -232,11 +238,34 @@ class TestDataCubeCryoTempoEolis:
 
         # check eolis data was added
         assert "eolis_gridded_elevation_change" in result
-        assert "eolis_gridded_standard_error" in result
+        assert "eolis_gridded_elevation_change_sigma" in result
         assert (
             np.count_nonzero(
-                np.isfinite(result["eolis_gridded_elevation_change"])) == 480
+                np.isfinite(result["eolis_gridded_elevation_change"])) == 142
         )
         np.testing.assert_almost_equal(
-            np.nanmean(result["eolis_gridded_elevation_change"]), 0.3771391
+            np.nanmean(result["eolis_gridded_elevation_change"]), 0.4906209
         )
+        assert result.eolis_gridded_elevation_change.attrs == {
+            'units': 'm', 'long_name': 'Elevation Change'}
+
+    def test_gaussian_filter_fill(self, DatacubeCryotempoEolis):
+        arr = np.array([
+            [1.0,  np.nan, 3.0],
+            [np.nan, np.nan, np.nan],
+            [7.0,  np.nan, 9.0]
+        ])
+
+        result = DatacubeCryotempoEolis.gaussian_filter_fill(
+            arr, sigma=1)
+
+        # Original finite values should be preserved
+        np.testing.assert_array_equal(result[np.isfinite(arr)],
+                                      arr[np.isfinite(arr)])
+        assert np.all(np.isfinite(result[np.isnan(arr)]))
+
+        # If input is all-NaN, output should stay all-NaN
+        all_nan = np.full((3, 3), np.nan)
+        all_nan_result = DatacubeCryotempoEolis.gaussian_filter_fill(
+            all_nan, sigma=1)
+        assert np.all(np.isnan(all_nan_result))

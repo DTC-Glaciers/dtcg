@@ -30,6 +30,7 @@ import xarray as xr
 from oggm import cfg, tasks, utils, workflow
 from oggm.shop import its_live, w5e5
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
+from dtcg.datacube.geozarr import GeoZarrHandler
 import dtcg.integration.calibration
 
 # TODO: Link to DTCG instead.
@@ -882,4 +883,7 @@ class BindingsCryotempo(BindingsOggmWrangler):
         self.datacube_manager.retrieve_prepare_eolis_gridded_data(
             oggm_ds=datacube, grid=gdir.grid
         )
-        return gdir, datacube
+
+        geozarr_handler = GeoZarrHandler(datacube)
+
+        return gdir, geozarr_handler
