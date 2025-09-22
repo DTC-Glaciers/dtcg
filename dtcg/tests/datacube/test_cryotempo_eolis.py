@@ -75,7 +75,9 @@ class TestDataCubeCryoTempoEolis:
     def get_datacube_cryotempo_eolis(self):
         return cryotempo_eolis_utils.DatacubeCryotempoEolis()
 
-    @pytest.fixture(name="DatacubeCryotempoEolis", autouse=False, scope="function")
+    @pytest.fixture(
+        name="DatacubeCryotempoEolis", autouse=False, scope="function"
+    )
     def fixture_datacube_cryotempo_eolis(self):
         return self.get_datacube_cryotempo_eolis()
 
@@ -83,11 +85,12 @@ class TestDataCubeCryoTempoEolis:
     def test_retrieve_data_from_specklia(
         self, mock_specklia_class, DatacubeCryotempoEolis
     ):
+        specklia_ds_name = "CryoTEMPO-EOLIS Processed Elevation Change Maps"
         mock_client = MagicMock()
         mock_client.list_datasets.return_value = pd.DataFrame(
             [
                 {
-                    "dataset_name": "CryoTEMPO-EOLIS Processed Elevation Change Maps",
+                    "dataset_name": specklia_ds_name,
                     "dataset_id": "abc123",
                     "min_timestamp": pd.Timestamp(0),
                     "max_timestamp": pd.Timestamp(100),
@@ -104,7 +107,7 @@ class TestDataCubeCryoTempoEolis:
 
         gdf, meta, info = DatacubeCryotempoEolis.retrieve_data_from_specklia(
             query_polygon=box(0, 0, 1, 1),
-            specklia_data_set_name="CryoTEMPO-EOLIS Processed Elevation Change Maps",
+            specklia_data_set_name=specklia_ds_name,
             specklia_api_key="dummy-key",
         )
 
@@ -122,7 +125,8 @@ class TestDataCubeCryoTempoEolis:
         output, grid, t_axis = (
             DatacubeCryotempoEolis.convert_gridded_dataframe_to_array(
                 gridded_df=df,
-                value_column_names=["elevation_change", "elevation_change_sigma"],
+                value_column_names=["elevation_change",
+                                    "elevation_change_sigma"],
                 x_coordinate_column="x",
                 y_coordinate_column="y",
                 spatial_resolution=1.0,
@@ -198,8 +202,10 @@ class TestDataCubeCryoTempoEolis:
             ),
             [{"source_information":
               {"xy_cols_proj4": self.XY_PROJ,
-               "elevation_change": {"long_name": "Elevation Change"},
-               "elevation_change_sigma": {"long_name": "Error"}}}],
+               "elevation_change": {"long_name": "Elevation Change",
+                                    "source": 'dummy'},
+               "elevation_change_sigma": {"long_name": "Error",
+                                          "source": 'dummy'}}}],
             {
                 "columns": [
                     {
@@ -210,7 +216,8 @@ class TestDataCubeCryoTempoEolis:
                     {
                         "name": "elevation_change_sigma",
                         "unit": "m",
-                        "description": "Error"},
+                        "description": "Error"
+                    },
                 ]
             },
         )
@@ -258,7 +265,12 @@ class TestDataCubeCryoTempoEolis:
             np.nanmean(result["eolis_gridded_elevation_change"]), 0.49841077
         )
         assert result.eolis_gridded_elevation_change.attrs == {
-            'units': 'm', 'long_name': 'Elevation Change'}
+            "units": "m", "long_name": "Elevation Change", "source": "dummy"}
+        assert result.eolis_elevation_change_timeseries.attrs == {
+            "ancillary_variables": "eolis_elevation_change_sigma_timeseries",
+            "units": "m", "long_name": "Elevation Change",
+            "source": "dummy Values represent glacier-wide mean elevation change,"
+            " computed as the average of all valid grid cells within the glacier mask."}
 
     def test_gaussian_filter_fill(self, DatacubeCryotempoEolis):
         arr = np.array([
@@ -305,7 +317,8 @@ class TestDataCubeCryoTempoEolis:
         # Errors should be positive
         assert all(e > 0 for e in errors)
 
-    def test_create_vector_glacier_mask(self, oggm_dataset, DatacubeCryotempoEolis):
+    def test_create_vector_glacier_mask(
+            self, oggm_dataset, DatacubeCryotempoEolis):
         # Ensure dataset has CRS
         oggm_dataset.rio.write_crs(oggm_dataset.pyproj_srs, inplace=True)
 
