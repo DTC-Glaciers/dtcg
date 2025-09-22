@@ -101,9 +101,9 @@ class TestGeoZarrWriter:
     def test_missing_required_dims_raises(self, test_dataset):
         """Test that missing required dimensions raises ValueError."""
         ds, _ = test_dataset
-        ds = ds.drop_dims("x")
+        ds = ds.rename({"x": "x_coordinate"})
 
-        with pytest.raises(ValueError, match="Dataset must have at least dimensions"):
+        with pytest.raises(ValueError, match="Incorrect dataset dimensions"):
             GeoZarrHandler(ds=ds)
 
     @pytest.mark.filterwarnings("ignore:Metadata mapping is missing")

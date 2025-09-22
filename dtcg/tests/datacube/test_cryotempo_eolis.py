@@ -237,8 +237,15 @@ class TestDataCubeCryoTempoEolis:
         ), f"Missing dimensions: {expected_dims - set(result.dims)}"
 
         # check eolis data was added
-        assert "eolis_gridded_elevation_change" in result
-        assert "eolis_gridded_elevation_change_sigma" in result
+        expected_vars = {
+            "eolis_gridded_elevation_change": ("t", "y", "x"),
+            "eolis_gridded_elevation_change_sigma": ("t", "y", "x"),
+            "eolis_elevation_change_timeseries": ("t",),
+            "eolis_elevation_change_sigma_timeseries": ("t",)
+        }
+        for var_name, var_dims in expected_vars.items():
+            assert var_name in result
+            assert var_dims == result[var_name].dims
         assert (
             np.count_nonzero(
                 np.isfinite(result["eolis_gridded_elevation_change"])) == 142
