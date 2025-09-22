@@ -33,9 +33,11 @@ import xarray as xr
 from affine import Affine
 from pandas import Timedelta
 from pyproj import Proj
+from rasterio import features
 from salem.gis import Grid
-from scipy.spatial.distance import cdist
 from scipy.ndimage import gaussian_filter
+from scipy.spatial.distance import cdist
+from shapely.geometry import shape
 from specklia import Specklia
 
 os.environ["PROJ_LIB"] = pyproj.datadir.get_data_dir()
@@ -505,9 +507,17 @@ class DatacubeCryotempoEolis:
     def augment_dataset_with_1d_timeseries(self, eolis_gridded_data, oggm_ds, elevation_change_var_name, elevation_change_sigma_var_name):
         logger.debug("Generating 1D time series.")
         timeseries_gen_start_time = perf_counter()
+
+        # mask dataset to glacier extent
+        vector_glacier_mask = self.create_vector_glacier_mask(oggm_ds, eolis_gridded_data.crs)
+        eolis_gridded_data_masked = eolis_gridded_data[eolis_gridded_data.intersects(vector_glacier_mask)]
+
+        # generate timeseries with uncertainties
         elevation_change_timeseries, error_timeseries = self.generate_1d_timeseries(
-            eolis_gridded_data, elevation_change_var_name, elevation_change_sigma_var_name
+            eolis_gridded_data_masked, elevation_change_var_name, elevation_change_sigma_var_name
         )
+
+        # add timeseries to datacube
         timeseries_data = {elevation_change_var_name: elevation_change_timeseries,
                            elevation_change_sigma_var_name: error_timeseries}
         for col, timeseries in timeseries_data.items():
@@ -561,3 +571,27 @@ class DatacubeCryotempoEolis:
             elevation_change_timeseries.append(mean)
             error_timeseries.append(std_mean)
         return elevation_change_timeseries, error_timeseries
+
+    def create_vector_glacier_mask(self, oggm_ds, target_crs):
+        # Extract the mask
+        mask = oggm_ds.glacier_mask.values.astype("uint8")
+
+        # Get spatial transform from dataset
+        transform = oggm_ds.glacier_mask.rio.transform()
+
+        # Vectorize
+        shapes = features.shapes(mask, mask=mask.astype(bool), transform=transform)
+
+        # Build GeoDataFrame
+        geoms = []
+        for geom, val in shapes:
+            if val == 1:  # keep only glacier pixels
+                geoms.append(shape(geom))
+
+        gdf = gpd.GeoDataFrame(
+            geometry=geoms,
+            crs=oggm_ds.rio.crs
+        )
+        gdf = gdf.dissolve()
+        gdf_reproj = gdf.to_crs(target_crs)
+        return gdf_reproj
