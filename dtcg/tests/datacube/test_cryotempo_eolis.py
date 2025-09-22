@@ -24,7 +24,7 @@ import pytest
 import xarray as xr
 from pyproj import Proj
 from salem import Grid
-from shapely.geometry import Polygon, box
+from shapely.geometry import box
 
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis_utils
 
@@ -262,9 +262,9 @@ class TestDataCubeCryoTempoEolis:
 
     def test_gaussian_filter_fill(self, DatacubeCryotempoEolis):
         arr = np.array([
-            [1.0,  np.nan, 3.0],
+            [1.0, np.nan, 3.0],
             [np.nan, np.nan, np.nan],
-            [7.0,  np.nan, 9.0]
+            [7.0, np.nan, 9.0]
         ])
 
         result = DatacubeCryotempoEolis.gaussian_filter_fill(

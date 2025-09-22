@@ -32,7 +32,7 @@ import shapely
 import xarray as xr
 from affine import Affine
 from pandas import Timedelta
-from pyproj import Proj
+from pyproj import CRS, Proj
 from rasterio import features
 from salem.gis import Grid
 from scipy.ndimage import gaussian_filter
@@ -504,7 +504,38 @@ class DatacubeCryotempoEolis:
 
         return oggm_ds
 
-    def augment_dataset_with_1d_timeseries(self, eolis_gridded_data, oggm_ds, elevation_change_var_name, elevation_change_sigma_var_name):
+    def augment_dataset_with_1d_timeseries(
+            self: DatacubeCryotempoEolis,
+            eolis_gridded_data: gpd.GeoDataFrame,
+            oggm_ds: xr.Dataset,
+            elevation_change_var_name: str,
+            elevation_change_sigma_var_name: str
+    ) -> None:
+        """Generate and attach 1D time series of elevation change and uncertainty
+        to an OGGM dataset.
+
+        This method masks gridded EOLIS data to the glacier extent,
+        computes mean elevation change and propagated uncertainties per
+        timestamp, and appends them to the input OGGM dataset as new
+        time series variables.
+
+        Parameters
+        ----------
+        eolis_gridded_data : geopandas.GeoDataFrame
+            EOLIS gridded data containing x/y locations, timestamps,
+            and elevation change values.
+        oggm_ds : xr.Dataset
+            OGGM dataset to which new time series variables will be added.
+        elevation_change_var_name : str
+            Name of the column holding elevation change values in the input data.
+        elevation_change_sigma_var_name : str
+            Name of the column holding uncertainty values in the input data.
+
+        Returns
+        -------
+        None
+            The input dataset is modified in place with new 1D time series variables.
+        """
         logger.debug("Generating 1D time series.")
         timeseries_gen_start_time = perf_counter()
 
@@ -536,8 +567,40 @@ class DatacubeCryotempoEolis:
         )
 
     def generate_1d_timeseries(
-            self, eolis_gridded_data, elevation_change_var_name,
-            elevation_change_sigma_var_name, length_scale=2e4):
+            self: DatacubeCryotempoEolis,
+            eolis_gridded_data: gpd.GeoDataFrame,
+            elevation_change_var_name: str,
+            elevation_change_sigma_var_name: str,
+            length_scale: int | float = 2e4
+    ) -> tuple[list[float], list[float]]:
+        """Compute a 1D elevation change time series with propagated uncertainties.
+
+        For each timestamp in the gridded dataset, the function calculates
+        the mean elevation change across all valid pixels and estimates the
+        uncertainty of the mean by building a covariance matrix that accounts
+        for spatial correlation between points.
+
+        Parameters
+        ----------
+        eolis_gridded_data : gpd.GeoDataFrame
+            EOLIS gridded data containing x/y locations, timestamps,
+            and elevation change values.
+        elevation_change_var_name : str
+            Column name holding elevation change values.
+        elevation_change_sigma_var_name : str
+            Column name holding uncertainty values.
+        length_scale : int | float, optional
+            Spatial correlation length scale in eolis_gridded_data
+            geometry crs units used to construct the exponential
+            decay kernel, by default 2e4.
+
+        Returns
+        -------
+        tuple[list[float], list[float]]
+            Two lists with the same length as the number of unique timestamps:
+            - Mean elevation change per timestamp.
+            - Propagated uncertainty per timestamp.
+        """
         grouped_data = eolis_gridded_data.groupby('timestamp', sort=True)
         timestamps = [t[0] for t in grouped_data]
         gridded_product_data_grouped = [t[1] for t in grouped_data]
@@ -572,7 +635,30 @@ class DatacubeCryotempoEolis:
             error_timeseries.append(std_mean)
         return elevation_change_timeseries, error_timeseries
 
-    def create_vector_glacier_mask(self, oggm_ds, target_crs):
+    def create_vector_glacier_mask(
+            self: DatacubeCryotempoEolis,
+            oggm_ds: xr.Dataset,
+            target_crs: CRS
+    ) -> gpd.GeoDataFrame:
+        """Vectorise the glacier mask of an OGGM dataset into polygon(s).
+
+        The raster glacier mask is converted to shapely polygons using
+        rasterio.features.shapes, dissolved into a single geometry, and
+        reprojected to the target CRS.
+
+        Parameters
+        ----------
+        oggm_ds : xr.Dataset
+            OGGM dataset containing a glacier_mask DataArray and CRS.
+        target_crs : CRS
+            Target coordinate reference system for the output polygons.
+
+        Returns
+        -------
+        gpd.GeoDataFrame
+            GeoDataFrame containing the glacier mask polygon(s) in the
+            specified CRS.
+        """
         # Extract the mask
         mask = oggm_ds.glacier_mask.values.astype("uint8")
 
