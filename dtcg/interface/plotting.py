@@ -175,7 +175,7 @@ class BokehFigureFormat:
             try:
                 palettes[name] = list(hv.Cycle.default_cycles[name])
             except:
-                raise KeyError(f"{name} not found. Try: {'\n'.join(palettes.keys())}")
+                raise KeyError(f"{name} not found. Try: {', '.join(palettes.keys())}")
 
         return palettes[name]
 
