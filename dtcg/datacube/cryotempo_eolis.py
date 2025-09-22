@@ -510,7 +510,7 @@ class DatacubeCryotempoEolis:
 
         # mask dataset to glacier extent
         vector_glacier_mask = self.create_vector_glacier_mask(oggm_ds, eolis_gridded_data.crs)
-        eolis_gridded_data_masked = eolis_gridded_data[eolis_gridded_data.intersects(vector_glacier_mask)]
+        eolis_gridded_data_masked = eolis_gridded_data[eolis_gridded_data.intersects(vector_glacier_mask.geometry.union_all())]
 
         # generate timeseries with uncertainties
         elevation_change_timeseries, error_timeseries = self.generate_1d_timeseries(
