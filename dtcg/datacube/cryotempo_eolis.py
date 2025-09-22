@@ -577,16 +577,22 @@ class DatacubeCryotempoEolis:
         timeseries_data = {
             elevation_change_var_name: {
                 "data": elevation_change_timeseries,
-                "source": " Values represent glacier-wide mean elevation"
+                "source": "Values represent glacier-wide mean elevation"
                 " change, computed as the average of all valid grid cells"
-                " within the glacier mask.",
+                f" (eolis_gridded_{elevation_change_var_name}) within the "
+                "glacier mask.",
+                "comment": f"Computed from eolis_gridded_{elevation_change_var_name}. "
+                + oggm_ds[f"eolis_gridded_{elevation_change_var_name}"].attrs["comment"],
                 "ancillary_var": elevation_change_sigma_var_name
             },
             elevation_change_sigma_var_name: {
                 "data": error_timeseries,
-                "source": " Values represent propagated 1-sigma uncertainty"
+                "source": "Values represent propagated 1-sigma uncertainty"
                 " of the glacier-wide mean, estimated from pixel-level"
-                " uncertainties using a spatial correlation model.",
+                f" uncertainties (eolis_gridded_{elevation_change_sigma_var_name})"
+                " using a spatial correlation model.",
+                "comment": "Uncertainty propagated using a static 20 km "
+                "spatial correlation length.",
                 "ancillary_var": elevation_change_var_name
             },
         }
@@ -598,6 +604,7 @@ class DatacubeCryotempoEolis:
                 timeseries_dict["ancillary_var"])
             attrs = oggm_ds[f"eolis_gridded_{col}"].attrs.copy()
             attrs["ancillary_variables"] = ancillary_var_name
+            attrs["comment"] = timeseries_dict["comment"]
             attrs["source"] += timeseries_dict["source"]
 
             eolis_resampled_grids_xarr = xr.DataArray(

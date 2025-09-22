@@ -203,9 +203,11 @@ class TestDataCubeCryoTempoEolis:
             [{"source_information":
               {"xy_cols_proj4": self.XY_PROJ,
                "elevation_change": {"long_name": "Elevation Change",
-                                    "source": 'dummy'},
+                                    "source": "dummy",
+                                    "comment": "dummy"},
                "elevation_change_sigma": {"long_name": "Error",
-                                          "source": 'dummy'}}}],
+                                          "source": "dummy",
+                                          "comment": "dummy"}}}],
             {
                 "columns": [
                     {
@@ -265,12 +267,15 @@ class TestDataCubeCryoTempoEolis:
             np.nanmean(result["eolis_gridded_elevation_change"]), 0.49841077
         )
         assert result.eolis_gridded_elevation_change.attrs == {
-            "units": "m", "long_name": "Elevation Change", "source": "dummy"}
+            "units": "m", "long_name": "Elevation Change", "source": "dummy",
+            "comment": "dummy"}
         assert result.eolis_elevation_change_timeseries.attrs == {
             "ancillary_variables": "eolis_elevation_change_sigma_timeseries",
             "units": "m", "long_name": "Elevation Change",
-            "source": "dummy Values represent glacier-wide mean elevation change,"
-            " computed as the average of all valid grid cells within the glacier mask."}
+            "source": "dummyValues represent glacier-wide mean elevation change,"
+            " computed as the average of all valid grid cells "
+            "(eolis_gridded_elevation_change) within the glacier mask.",
+            "comment": "Computed from eolis_gridded_elevation_change. dummy"}
 
     def test_gaussian_filter_fill(self, DatacubeCryotempoEolis):
         arr = np.array([
