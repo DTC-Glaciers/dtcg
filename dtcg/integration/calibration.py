@@ -247,7 +247,7 @@ class CalibratorCryotempo(Calibrator):
     def set_model_matrix(
         self,
         name: str = "DailySfc_Cryosat",
-        model=massbalance.DailySfcTIModel,
+        model=massbalance.SfcTypeTIModel,
         geo_period: str = "2011-01-01_2020-01-01",
         daily: bool = True,
         source: str = "CryoTEMPO-EOLIS",
@@ -311,8 +311,10 @@ class CalibratorCryotempo(Calibrator):
         year_end : datetime
             End of reference period.
         """
-        elevation = self.get_eolis_mean_dh(datacube)
-        calib_frame = pd.DataFrame({"dh": elevation}, index=dates)
+        calib_frame = pd.DataFrame(
+            {"dh": datacube.eolis_elevation_change_timeseries,
+             "dh_sigma": datacube.eolis_elevation_change_sigma_timeseries},
+            index=dates)
 
         dt = (year_end - year_start).total_seconds() / cfg.SEC_IN_YEAR
 
@@ -416,7 +418,7 @@ class CalibratorCryotempo(Calibrator):
 
         return mb_model_calib, mb_model_flowlines, smb
 
-    def run_calibration(self, gdir, datacube, model=massbalance.DailySfcTIModel):
+    def run_calibration(self, gdir, datacube, model=massbalance.SfcTypeTIModel):
         ref_mb = self.get_geodetic_mb(gdir=gdir, ds=datacube)
 
         sfc_model_kwargs = {
