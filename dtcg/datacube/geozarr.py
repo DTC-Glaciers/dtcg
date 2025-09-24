@@ -84,8 +84,10 @@ class GeoZarrHandler(MetadataMapper):
         """
         accepted_dims = {"x", "y", "t"}
         if not set(self.ds.dims).issubset(accepted_dims):
-            raise ValueError("Incorrect dataset dimensions."
-                             f" Accepted data dimensions are: {accepted_dims}")
+            raise ValueError(
+                "Incorrect dataset dimensions."
+                f" Accepted data dimensions are: {accepted_dims}"
+            )
         for dim in self.ds.dims:
             if dim not in self.ds.coords:
                 raise ValueError(
@@ -181,7 +183,7 @@ class GeoZarrHandler(MetadataMapper):
         dir_path = Path(storage_directory).parent
         if not dir_path.exists():
             raise FileNotFoundError(
-                "Base directory of 'storage_directory' does not exist: " + dir_path
+                f"Base directory of 'storage_directory' does not exist: {dir_path}"
             )
         self.ds.to_zarr(
             storage_directory,
