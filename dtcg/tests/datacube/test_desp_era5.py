@@ -57,18 +57,17 @@ class Test_DatacubeDespERA5:
         reason="No access to DESP. Check your .netrc file has a valid API key.",
     )
     def test_get_desp_datastream(self, conftest_boilerplate, monkeypatch):
-        test_cube = desp_era5.DatacubeDespEra5()
         conftest_boilerplate.patch_variable(
             monkeypatch, desp_era5, self.basenames_patch
         )
 
         for d in desp_era5.BASENAMES.keys():
-            assert isinstance(test_cube.get_desp_datastream(d), xr.Dataset)
+            assert isinstance(desp_era5.get_desp_datastream(d), xr.Dataset)
 
         with pytest.raises(ValueError):
-            test_cube.get_desp_datastream("ERA5")
+            desp_era5.get_desp_datastream("ERA5")
         with pytest.raises(ValueError):
-            test_cube.get_desp_datastream("Wrong_Set")
+            desp_era5.get_desp_datastream("Wrong_Set")
 
     @pytest.mark.skipif(
         not has_desp_access,
@@ -82,10 +81,9 @@ class Test_DatacubeDespERA5:
     def test_process_desp_era5_data(self, arg_dataset, arg_years, hef_gdir):
 
         gdir = hef_gdir
-        test_cube = desp_era5.DatacubeDespEra5()
 
         arg_y0, arg_y1 = arg_years
-        test_cube.process_desp_era5_data(
+        desp_era5.process_desp_era5_data(
             gdir=gdir, dataset=arg_dataset, y0=arg_y0, y1=arg_y1
         )
         with xr.open_dataset(gdir.get_filepath("climate_historical")) as ds:

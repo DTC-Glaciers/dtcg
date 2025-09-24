@@ -127,10 +127,10 @@ def process_desp_era5_data(
     with get_desp_datastream(dataset) as ds:
         # DESTINE recommends spatial selection first
         ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
-        yrs = ds["valid_time.year"]
+        years = ds["valid_time.year"]
 
-        y0 = yrs[0].astype("int").values if y0 is None else y0
-        y1 = yrs[-1].astype("int").values if y1 is None else y1
+        y0 = years[0].astype("int").values if y0 is None else y0
+        y1 = years[-1].astype("int").values if y1 is None else y1
         ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
         # oggm.shop.ecmwf._check_ds_validity(ds)
 
@@ -149,20 +149,20 @@ def process_desp_era5_data(
     with get_desp_datastream("ERA5_DESP_hourly") as ds:
         # height is not included in monthly data
         ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
-        yrs = ds["valid_time.year"]
+        years = ds["valid_time.year"]
 
         # don't recalculate years in case of mismatch
         ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
-        hgt = ds.z.astype("float32") / cfg.G
-        hgt = hgt.compute().data
+        height = ds.z.astype("float32") / cfg.G
+        height = height.compute().data
 
     temp_std = None
     # OK, ready to write
-    gdir.write_monthly_climate_file(
+    gdir.write_climate_file(
         time,
         precipitation,
         temperature,
-        hgt,
+        height,
         ref_lon,
         ref_lat,
         filesuffix=output_filesuffix,
