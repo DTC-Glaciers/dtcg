@@ -82,9 +82,12 @@ class GeoZarrHandler(MetadataMapper):
             - If any dimension does not have an associated coordinate
               variable.
         """
-        required_dims = {"x", "y"}
-        if not required_dims.issubset(self.ds.dims):
-            raise ValueError(f"Dataset must have at least dimensions {required_dims}")
+        accepted_dims = {"x", "y", "t"}
+        if not set(self.ds.dims).issubset(accepted_dims):
+            raise ValueError(
+                "Incorrect dataset dimensions."
+                f" Accepted data dimensions are: {accepted_dims}"
+            )
         for dim in self.ds.dims:
             if dim not in self.ds.coords:
                 raise ValueError(
@@ -111,21 +114,24 @@ class GeoZarrHandler(MetadataMapper):
             optionally 't'.
         """
         target_bytes = self.target_chunk_mb * 1024 * 1024
-        x_size = var.sizes["x"]
-        y_size = var.sizes["y"]
         t_size = var.sizes.get("t", 1)  # Defaults to 1 if no 't' dimension
+        chunk_sizes = {}
 
-        # Calculate the number of elements allowed per chunk
-        # After accounting for a full 't' slice
-        elements_per_t_slice = target_bytes // (var.dtype.itemsize * t_size)
+        if "x" in var.dims and "y" in var.dims:
+            x_size = var.sizes["x"]
+            y_size = var.sizes["y"]
+            # Calculate the number of elements allowed per chunk
+            # After accounting for a full 't' slice
+            elements_per_t_slice = target_bytes // (var.dtype.itemsize * t_size)
 
-        # Determine side length based on remaining budget
-        side_length = int(np.sqrt(elements_per_t_slice))
+            # Determine side length based on remaining budget
+            side_length = int(np.sqrt(elements_per_t_slice))
 
-        chunk_x = min(x_size, side_length)
-        chunk_y = min(y_size, side_length)
+            chunk_x = min(x_size, side_length)
+            chunk_y = min(y_size, side_length)
 
-        chunk_sizes = {"x": chunk_x, "y": chunk_y}
+            chunk_sizes["x"] = chunk_x
+            chunk_sizes["y"] = chunk_y
 
         if "t" in var.dims:
             # Use the full length of 't' - this allows more efficient loading,
@@ -157,7 +163,9 @@ class GeoZarrHandler(MetadataMapper):
         """
         self.ds = self.update_metadata(self.ds)
         for var in self.ds.data_vars:
-            self.ds[var].attrs["grid_mapping"] = "spatial_ref"
+            var_dims = self.ds[var].dims
+            if "x" in var_dims or "y" in var_dims:
+                self.ds[var].attrs["grid_mapping"] = "spatial_ref"
 
     def export(
         self: GeoZarrHandler, storage_directory: str, overwrite: bool = True
@@ -175,7 +183,7 @@ class GeoZarrHandler(MetadataMapper):
         dir_path = Path(storage_directory).parent
         if not dir_path.exists():
             raise FileNotFoundError(
-                "Base directory of 'storage_directory' does not exist: " + dir_path
+                f"Base directory of 'storage_directory' does not exist: {dir_path}"
             )
         self.ds.to_zarr(
             storage_directory,
