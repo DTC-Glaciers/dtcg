@@ -222,7 +222,7 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
     def test_get_geodetic_mb_missing(self, Calibrator, hef_gdir):
         test_calibrator = Calibrator
         gdir = hef_gdir
-        return super().test_get_geodetci_mb_missing(
+        return super().test_get_geodetic_mb_missing(
             Calibrator=test_calibrator, hef_gdir=gdir
         )
 
