@@ -92,7 +92,8 @@ class TestBokehFigureFormat:
         test_figure = BokehFigureFormat
         test_name = "Missing Palette"
         test_palettes = test_figure.get_all_palettes()
-        msg = f"{test_name} not found. Try: {'\n'.join(test_palettes.keys())}"
+        palette_names = "', '".join(test_palettes.keys())
+        msg = f"{test_name} not found. Try: {palette_names}"
         with pytest.raises(KeyError, match=msg):
             test_figure.get_color_palette(name=test_name)
 
@@ -187,7 +188,7 @@ class TestBokehCryotempo:
         test_yformatter = bokeh.models.PrintfTickFormatter(format="%.2f")
         assert compare_defaults["yformatter"].format == test_yformatter.format
 
-        assert test_figure.tooltips == [("Mass Balance", "$y{%.2f mm w.e.}")]
+        assert test_figure.tooltips == [("Runoff", "$snap_y{%.2f Mt}")]
 
         assert test_figure.hover_tool.mode == "vline"
         assert isinstance(test_figure.palette, tuple)

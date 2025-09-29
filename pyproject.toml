@@ -93,6 +93,11 @@ dev = [
     "black >= 23.1",
     "isort",
 ]
+jupyter = [
+    "ipywidgets",
+    "ipykernel",
+    "jupyter_bokeh",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/DTC-Glaciers/dtcg"
