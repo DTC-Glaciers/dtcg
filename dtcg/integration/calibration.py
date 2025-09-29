@@ -47,7 +47,7 @@ class Calibrator:
         matrix = {
             name: {
                 "model": model,
-                "geo_period": geo_period
+                "geo_period": geo_period,
             }
         }
         if kwargs:
