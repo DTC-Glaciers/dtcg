@@ -33,6 +33,7 @@ from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 from dateutil.tz import UTC
 
 hv.extension("bokeh")
+hv.renderer("bokeh").webgl = True
 
 
 class BokehFigureFormat:
@@ -108,7 +109,7 @@ class BokehFigureFormat:
             title = f"{title} at {location}"
         if timestamp:
             if not isinstance(timestamp, str):
-                timestamp = timestamp.strftime("%d %B %Y")
+                timestamp = timestamp.strftime("%-d %B %Y")
             title = f"{title},\n{timestamp}"
         if suffix:
             title = f"{title},\n{suffix}"
@@ -175,7 +176,8 @@ class BokehFigureFormat:
             try:
                 palettes[name] = list(hv.Cycle.default_cycles[name])
             except:
-                raise KeyError(f"{name} not found. Try: {', '.join(palettes.keys())}")
+                palette_names = "', '".join(palettes.keys())
+                raise KeyError(f"{name} not found. Try: {palette_names}")
 
         return palettes[name]
 
@@ -294,6 +296,38 @@ class BokehFigureFormat:
         help_button = bokeh.models.HelpButton(tooltip=tooltip)
 
         return help_button
+
+    def to_layout(
+        overlay: list | hv.Overlay,
+        cols: int = 1,
+        sizing_mode: str = "stretch_width",
+        shared_axes: bool = False,
+        **kwargs,
+    ) -> hv.Layout:
+        """Convert overlay to layout.
+
+        Parameters
+        ----------
+        overlay : list or hv.Overlay
+            Either an Overlay object or a list of overlays.
+        cols : int, default 1
+            Force the number of allowed columns in the layout.
+        sizing_mode : str, default "stretch_width".
+            Layout responsiveness to screen dimensions.
+        shared_axes : bool, default False
+            Whether the overlays should share data axes.
+        **kwargs
+            Extra arguments passed to hv.Layout options.
+        """
+        if not isinstance(overlay, list):
+            overlay = [overlay]
+        layout = (
+            hv.Layout(overlay)
+            .cols(cols)
+            .opts(sizing_mode=sizing_mode, shared_axes=shared_axes, **kwargs)
+        )
+
+        return layout
 
 
 class BokehMap(BokehFigureFormat):
@@ -558,7 +592,7 @@ class BokehGraph(BokehFigureFormat):
         cumulative=False,
         year_minimum_runoff=None,
         year_maximum_runoff=None,
-    ) -> hv.Curve:
+    ) -> hv.Overlay:
         """Plot the runoff of a glacier or basin.
 
         Parameters
@@ -1079,11 +1113,7 @@ class BokehCryotempo(BokehFigureFormat):
         """
         self.check_holoviews()
         self.set_tooltips(
-            [
-                ("Date", "$snap_x{%d %B}"),
-                ("SMB", "$snap_y{%.2f mm w.e.}")
-                
-            ],
+            [("Date", "$snap_x{%d %B}"), ("SMB", "$snap_y{%.2f mm w.e.}")],
             mode="vline",
         )
 
@@ -1259,12 +1289,8 @@ class BokehCryotempo(BokehFigureFormat):
                 # },
             )
         )
-        layout = (
-            hv.Layout([overlay])
-            .cols(1)
-            .opts(sizing_mode="stretch_width", shared_axes=False)
-        )
-        return layout
+
+        return overlay
 
     def plot_cryotempo_comparison(
         self,
@@ -1449,12 +1475,7 @@ class BokehCryotempo(BokehFigureFormat):
             legend_opts=legend_opts,
         )
 
-        layout = (
-            hv.Layout([overlay])
-            .cols(1)
-            .opts(sizing_mode="stretch_width", shared_axes=False)
-        )
-        return layout
+        return overlay
 
     def get_percentage_difference(self, a, b):
         return 100 * np.absolute(b - a) / ((a + b) / 2)
@@ -1503,7 +1524,9 @@ class BokehSynthetic(BokehCryotempo):
         plot_data.index = pd.to_datetime(plot_data.index, format="%j")
         return plot_data
 
-    def plot_synthetic_data(self, title, label, ref_year=2017, cumulative=False):
+    def plot_synthetic_data(
+        self, title, label, ref_year=2017, cumulative=False
+    ) -> hv.Overlay:
         geodetic_period = [2015, 2020]
         figures = []
         for year in np.arange(*geodetic_period):
@@ -1557,12 +1580,8 @@ class BokehSynthetic(BokehCryotempo):
                 },
             )
         )
-        layout = (
-            hv.Layout([overlay])
-            .cols(1)
-            .opts(sizing_mode="stretch_width", shared_axes=False)
-        )
-        return layout
+
+        return overlay
 
 
 class HoloviewsDashboard(BokehFigureFormat):
