@@ -898,12 +898,7 @@ class BindingsCryotempo(BindingsOggmWrangler):
         return gdir, geozarr_handler
 
     def get_aggregate_runoff(self, gdir) -> dict:
-        """Get the computed runoff from OGGM.
-        
-        Parameters
-        ----------
-        gdir : 
-        """
+        """Get the computed runoff from OGGM."""
 
         annual_runoff = []
         monthly_runoff = []
@@ -1080,7 +1075,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
             gdir = dict(json.loads(raw))
 
         smb = np.load(cache_path / "smb.npz")
-        runoff = xr.open_dataarray(cache_path / "runoff.nc")
+        with xr.open_dataarray(cache_path / "runoff.nc") as file:
+            runoff = file.load()
         runoff_data = {
             "monthly_runoff": runoff,
             "runoff_year_min": gdir["runoff_data"]["runoff_year_min"],
