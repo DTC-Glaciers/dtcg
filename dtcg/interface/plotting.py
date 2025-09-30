@@ -1411,7 +1411,7 @@ class BokehCryotempo(BokehFigureFormat):
         dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
         plot_data = {"sigma": dataset.eolis_elevation_change_sigma_timeseries}
         if not cumulative:
-            plot_data["mean"] = (dataset.eolis_elevation_change_timeseries,)
+            plot_data["mean"] = dataset.eolis_elevation_change_timeseries
         else:
             plot_data["mean"] = dataset.eolis_elevation_change_timeseries.cumsum()
         sigma_minimum = plot_data["mean"] - plot_data["sigma"]
