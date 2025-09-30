@@ -1042,7 +1042,25 @@ class BokehCryotempo(BokehFigureFormat):
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
 
-    def get_date_mask(self, dataframe: pd.DataFrame, start_date: str, end_date: str):
+    def get_date_mask(
+        self, dataframe: pd.DataFrame, start_date: str, end_date: str
+    ) -> np.ndarray:
+        """Get a mask for all data between a start and end date.
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            Dataframe to get mask for.
+        start_date : str
+            Start date in Y-M-D format.
+        end_date : str
+            End date in Y-M-D format.
+
+        Returns
+        -------
+        np.ndarray
+            Mask for all data between start and end date.
+        """
         date_mask = (
             datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC)
             <= dataframe.index
@@ -1053,6 +1071,19 @@ class BokehCryotempo(BokehFigureFormat):
         return date_mask
 
     def get_mean_by_doy(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Get mean by day of year.
+
+        Parameters
+        -----
+        dataframe : pd.DataFrame
+            Time series.
+
+        Returns
+        -------
+        pd.DataFrame
+            Mean indexed by day of year.
+
+        """
         return (
             dataframe.groupby([dataframe.index.day_of_year])
             .mean()
@@ -1068,6 +1099,28 @@ class BokehCryotempo(BokehFigureFormat):
         line_width=0.8,
         **kwargs,
     ) -> list:
+        """Add Holoviews curve to a list of figures.
+
+        Parameters
+        ----------
+        figures : list
+            Holoviews figures.
+        data : dict
+            1D data to plot as a Curve.
+        key : str
+            Key used to access the correct data in `data`.
+        label : str, optional
+            Label used for the figure which will appear in the legend.
+        line_width : float, default 0.8
+            The curve's line width.
+        kwargs
+            Extra arguments passed to hv.Curve().
+
+        Returns
+        -------
+        list
+            List of Holoviews figures.
+        """
         if not label:
             label = self.get_label_from_key(key)
         curve = hv.Curve(data[key], label=label).opts(line_width=line_width, **kwargs)
@@ -1075,7 +1128,18 @@ class BokehCryotempo(BokehFigureFormat):
         return figures
 
     def get_label_from_key(self, key: str) -> str:
+        """Get a plot label for a given OGGM model type.
 
+        Parameters
+        ----------
+        key : str
+            OGGM model type.
+
+        Returns
+        -------
+        str
+            Plot label.
+        """
         key_split = key.split("_")
         model_name = key_split[0]
         if "SfcType" in model_name:
@@ -1091,10 +1155,12 @@ class BokehCryotempo(BokehFigureFormat):
             label = f"{label} ({geo_period})"
         return label
 
-    def get_eolis_dates(self, ds):
+    def get_eolis_dates(self, ds: xr.Dataset) -> np.ndarray:
+        """Get time index of EOLIS data."""
         return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
-    def get_eolis_mean_dh(self, ds):
+    def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
+        """Get time series of mean elevation change from EOLIS data."""
         mean_time_series = [
             np.nanmean(elevation_change_map.where(ds.glacier_mask == 1))
             for elevation_change_map in ds.eolis_gridded_elevation_change
@@ -1102,10 +1168,31 @@ class BokehCryotempo(BokehFigureFormat):
         return np.array(mean_time_series)
 
     def set_hover_date_tooltips(
-        self, x_format="$snap_x{%d %B}", y_format="$snap_y{%.2f mm w.e.}", y_name="SMB"
+        self,
+        y_name,
+        x_name="Date",
+        x_format="$snap_x{%d %B}",
+        y_format="$snap_y{%.2f mm w.e.}",
     ):
+        """Set hover tool tooltips for time series.
+
+        Note these are Holoviews' own formatting codes.
+
+        Parameters
+        ----------
+        y_name : str
+            Name of dependent variable.
+        x_name : str, default Date
+            Name of independent variable.
+        x_format : str, default "$snap_x{%d %B}"
+            Annotation formatting code for the independent variable.
+            The default will show the day and month.
+        y_format : str
+            Annotation formatting code for the dependent variable.
+            The default will show "mm w.e.".
+        """
         self.set_tooltips(
-            [("Date", x_format), (y_name, y_format)],
+            [(x_name, x_format), (y_name, y_format)],
             mode="vline",
         )
         self.set_hover_tool()
@@ -1144,6 +1231,9 @@ class BokehCryotempo(BokehFigureFormat):
         resample : bool, default False
             If True, resample observations to begin on the first day of the
             month.
+        cumulative : bool, default False
+            If True, calculate and display the cumulative sum of
+            specific mass balance.
         """
         self.check_holoviews()
         self.set_hover_date_tooltips(
