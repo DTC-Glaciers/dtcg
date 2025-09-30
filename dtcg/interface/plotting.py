@@ -1292,15 +1292,13 @@ class BokehCryotempo(BokehFigureFormat):
 
         return overlay
 
-    def plot_eolis_timeseries(self, datacube, gdir=None, cumulative=False):
+    def plot_eolis_timeseries(self, datacube, cumulative=False):
         """Plot mean and standard deviation of elevation change.
 
         Parameters
         ----------
         datacube : xr.DataArray, default None
             CryoTEMPO-EOLIS observations for elevation change.
-        gdir : GlacierDirectory, default None
-            Glacier of interest.
         """
         self.check_holoviews()
         self.set_tooltips(
@@ -1359,7 +1357,6 @@ class BokehCryotempo(BokehFigureFormat):
                 ylabel="Elevation Change [m]",
                 title=title,
                 xlabel="Year",
-                # xformatter=f"%j",
                 xformatter=xformatter,
                 tools=["xwheel_zoom", "xpan", self.hover_tool],
                 active_tools=["xwheel_zoom"],
@@ -1555,6 +1552,163 @@ class BokehCryotempo(BokehFigureFormat):
         )
 
         return overlay
+
+    def plot_eolis_smb(
+        self,
+        datacube,
+        gdir,
+        years=None,
+        glacier_name: str = "",
+        ref_year: int = 2015,
+        cumulative: bool = False,
+    ):
+        """Plot daily SMB for a specific year and geodetic mean.
+
+        Parameters
+        ----------
+        smb : dict
+            Specific mass balance data for various OGGM models.
+        years : list, default None
+            OGGM output years.
+        glacier_name : str, default empty string
+            Name of glacier.
+        geodetic_period : str, default "2000-01-01_2020-01-01"
+            Period over which to take the mean daily specific mass balance.
+        ref_year : int, default 2015
+            Reference year.
+        datacube : xr.DataArray, default None
+            CryoTEMPO-EOLIS observations for elevation change.
+        gdir : GlacierDirectory, default None
+            Glacier of interest.
+        cumulative : bool, default False
+            If True, calculate and display the cumulative sum of
+            specific mass balance.
+        """
+        self.check_holoviews()
+        self.set_tooltips(
+            [("Date", "$snap_x{%B}"), ("SMB", "$snap_y{%.2f mm w.e.}")],
+            mode="vline",
+        )
+
+        self.set_hover_tool()
+        self.hover_tool = self.get_hover_tool(mode="vline")
+
+        plot_data = {}
+        figures = []
+
+        if years is None:
+            years = np.arange(2011, 2025)
+        start_year = years[0]
+        end_year = years[-1]
+
+        cryotempo_dates = self.get_eolis_dates(datacube.ds)
+        cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
+        if cumulative:
+            cryotempo_dh = cryotempo_dh.cumsum()
+
+        df_cryo = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
+
+        cryo_date_mask = self.get_date_mask(
+            df_cryo, f"{ref_year}-01-15", f"{ref_year+1}-01-15"
+        )
+        df_cryo = df_cryo[cryo_date_mask]
+
+        if not df_cryo.empty:
+            df_cryo["smb"] = (
+                1000
+                * (df_cryo["smb"] - df_cryo["smb"].iloc[0])
+                * 850
+                / gdir.rgi_area_km2
+            )
+
+            df_cryo_daily_mean = self.get_mean_by_doy(df_cryo)
+            df_cryo_daily_mean.index = pd.to_datetime(
+                df_cryo_daily_mean.index, format="%j"
+            )
+            df_cryo_daily_mean["smb"] = df_cryo_daily_mean["smb"]
+            label = f"{ref_year}"
+
+            plot_data["CryoTEMPO-EOLIS Observations"] = df_cryo_daily_mean["smb"]
+            figures = self.add_curve_to_figures(
+                data=plot_data,
+                key="CryoTEMPO-EOLIS Observations",
+                figures=figures,
+                line_color="#d62728",
+                label=label,
+                tools=[self.hover_tool],
+            )
+
+        # Get all years
+        df = pd.DataFrame(cryotempo_dh, columns=["elevation"], index=cryotempo_dates)
+        for year in np.arange(int(start_year), int(end_year + 1)):
+            cryo_date_mask = self.get_date_mask(df, f"{year}-01-15", f"{year+1}-01-15")
+            df_cryo = df.loc[cryo_date_mask].copy()
+            if not df_cryo.empty:
+                # print(df_cryo.loc["elevation"])
+                df_cryo["smb"] = self.get_smb_from_elevation_change(
+                    elevation=df_cryo["elevation"], area=gdir.rgi_area_km2
+                )
+                df_daily_mean = self.get_mean_by_doy(df_cryo)
+                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+                df_daily_mean["smb"] = df_daily_mean["smb"]
+                plot_data["CryoTEMPO-EOLIS Aggregate"] = df_daily_mean["smb"]
+                label = f"{start_year}-{end_year+1}"
+                figures = self.add_curve_to_figures(
+                    data=plot_data,
+                    key="CryoTEMPO-EOLIS Aggregate",
+                    figures=figures,
+                    muted=True,
+                    line_color="grey",
+                    label=label,
+                )
+            # figures.append(curve)
+
+        default_opts = self.get_default_opts()
+        if glacier_name:
+            glacier_name = f"{glacier_name}, "
+
+        ylabel = f"Monthly SMB (mm w.e.)"
+        title = f"Monthly Specific Mass Balance Cycles\n {glacier_name}"
+        xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
+        legend_opts = {"orientation": "vertical"}
+        hline = hv.HLine(0).opts(color="black", line_dash="dotted", line_width=0.8)
+        overlay = hv.Overlay(figures) * hline
+
+        overlay = overlay.opts(**default_opts).opts(
+            aspect=2,
+            ylabel=ylabel,
+            title=title,
+            xlabel="Month",
+            # xformatter=f"%j",
+            xformatter=xformatter,
+            tools=["xwheel_zoom", "xpan", self.hover_tool],
+            active_tools=["xwheel_zoom"],
+            legend_position="top_left",
+            legend_opts=legend_opts,
+        )
+
+        return overlay
+
+    def get_smb_from_elevation_change(self, elevation, area, ice_density=850.0):
+        """Get specific mass balance from elevation change.
+
+        Parameters
+        ----------
+        elevation : array_like
+            Elevation change data.
+        area : float
+            Area of glacier in km2.
+        ice_density : float, default 850.0
+            Density of ice.
+
+        Returns
+        -------
+        array_like
+            Specific mass balance.
+        """
+
+        smb = 1000 * (elevation - elevation.iloc[0]) * ice_density / area
+        return smb
 
     def get_percentage_difference(self, a, b):
         return 100 * np.absolute(b - a) / ((a + b) / 2)
