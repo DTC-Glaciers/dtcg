@@ -1292,6 +1292,85 @@ class BokehCryotempo(BokehFigureFormat):
 
         return overlay
 
+    def plot_eolis_timeseries(self, datacube, gdir=None, cumulative=False):
+        """Plot mean and standard deviation of elevation change.
+
+        Parameters
+        ----------
+        datacube : xr.DataArray, default None
+            CryoTEMPO-EOLIS observations for elevation change.
+        gdir : GlacierDirectory, default None
+            Glacier of interest.
+        """
+        self.check_holoviews()
+        self.set_tooltips(
+            [("Date", "$snap_x{%d %B}"), ("Elevation Change", "$snap_y{%.2f m}")],
+            mode="vline",
+        )
+
+        self.set_hover_tool()
+        self.hover_tool = self.get_hover_tool(mode="vline")
+
+        dataset = xr.decode_cf(datacube.ds)
+        if not cumulative:
+            plot_data = {
+                "mean": dataset.eolis_elevation_change_timeseries,
+                "sigma": dataset.eolis_elevation_change_sigma_timeseries,
+            }
+        else:
+            plot_data = {
+                "mean": dataset.eolis_elevation_change_timeseries.cumsum(),
+                "sigma": dataset.eolis_elevation_change_sigma_timeseries,
+            }
+        sigma_minimum = plot_data["mean"] - plot_data["sigma"]
+        sigma_maximum = plot_data["mean"] + plot_data["sigma"]
+
+        mean_period = f"{dataset.t[0].dt.year.values} - {dataset.t[-1].dt.year.values}"
+        figures = []
+
+        figures = self.add_curve_to_figures(
+            data=plot_data,
+            key="mean",
+            figures=figures,
+            line_color="black",
+            label=f"Mean ({mean_period})",
+            tools=[self.hover_tool],
+        )
+
+        area = hv.Area(
+            (dataset.t, sigma_minimum, sigma_maximum),
+            vdims=["sigma_minimum", "sigma_maximum"],
+            label="± 1σ",
+        ).opts(color="grey", alpha=0.2)
+        figures.append(area)
+
+        # title = f"{gdir.name}, {gdir.rgi_subregion_name.split(': ')[1]}"
+        title = "Elevation Change"
+        if cumulative:
+            title = f"Cumulative {title}"
+        xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
+        default_opts = self.get_default_opts()
+
+        overlay = (
+            hv.Overlay(figures)
+            .opts(**default_opts)
+            .opts(
+                aspect=2,
+                ylabel="Elevation Change [m]",
+                title=title,
+                xlabel="Year",
+                # xformatter=f"%j",
+                xformatter=xformatter,
+                tools=["xwheel_zoom", "xpan", self.hover_tool],
+                active_tools=["xwheel_zoom"],
+                autorange="y",
+                legend_position="top_left",
+                legend_opts={"orientation": "vertical"},
+            )
+        )
+
+        return overlay
+
     def plot_cryotempo_comparison(
         self,
         smb: dict,
