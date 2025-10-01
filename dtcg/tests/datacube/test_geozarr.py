@@ -82,21 +82,22 @@ class TestGeoZarrWriter:
         writer.export(store_dir)
 
         root = zarr.open_group(store=store_dir, mode="r")
+        root_group = root["L1"]
 
-        assert "spatial_ref" in root
-        assert "crs_wkt" in root["spatial_ref"].attrs
+        assert "spatial_ref" in root_group
+        assert "crs_wkt" in root_group["spatial_ref"].attrs
 
         for param in ["temperature", "precipitation"]:
-            assert param in root
-            assert "_ARRAY_DIMENSIONS" in root[param].attrs
-            assert root[param].attrs["grid_mapping"] == "spatial_ref"
+            assert param in root_group
+            assert "_ARRAY_DIMENSIONS" in root_group[param].attrs
+            assert root_group[param].attrs["grid_mapping"] == "spatial_ref"
             if param == "temperature":
-                assert root[param].attrs["standard_name"] == "bond"
-                assert root[param].attrs["references"] == "moneypenny"
+                assert root_group[param].attrs["standard_name"] == "bond"
+                assert root_group[param].attrs["references"] == "moneypenny"
 
         for coord in ["x", "y", "t"]:
-            assert coord in root
-            assert root[coord].attrs["_ARRAY_DIMENSIONS"] == [coord]
+            assert coord in root_group
+            assert root_group[coord].attrs["_ARRAY_DIMENSIONS"] == [coord]
 
     def test_missing_required_dims_raises(self, test_dataset):
         """Test that missing required dimensions raises ValueError."""
@@ -119,8 +120,10 @@ class TestGeoZarrWriter:
         writer.export(output_path)
 
         root = zarr.open_group(store=output_path, mode="r")
-        temp_chunks = root["temperature"].chunks
-        precip_chunks = root["precipitation"].chunks
+        root_group = root["L1"]
+
+        temp_chunks = root_group["temperature"].chunks
+        precip_chunks = root_group["precipitation"].chunks
 
         assert isinstance(temp_chunks, tuple)
         assert temp_chunks == (100, 36, 36)

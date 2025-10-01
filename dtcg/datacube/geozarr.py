@@ -169,10 +169,13 @@ class GeoZarrHandler(MetadataMapper):
         Chunk sizes are computed using `_calculate_chunk_sizes`, and the
         compressor is set according to the class-level setting.
         """
+        if ds_name not in self.encoding:
+            self.encoding[f"/{ds_name}"] = {}
+
         for var in ds.data_vars:
             chunk_sizes = self._calculate_chunk_sizes(ds[var])
             chunks = tuple(chunk_sizes.get(dim) for dim in ds[var].dims)
-            self.encoding[f"{ds_name}/{var}"] = {"chunks": chunks, "compressor": self.compressor}
+            self.encoding[f"/{ds_name}"][var] = {"chunks": chunks, "compressor": self.compressor}
 
     def _update_metadata(self, ds: xr.Dataset) -> xr.Dataset:
         """Update metadata to Climate and Forecast convention.
