@@ -1085,6 +1085,47 @@ class BindingsCryotempo(BindingsOggmWrangler):
 
         return gdir, smb, runoff_data
 
+    def get_cached_data(self, rgi_id: str, cache="../../ext/data/l2_precompute/"):
+
+        if isinstance(cache, str):
+            cache = Path(cache)
+        cache_path = cache / rgi_id
+        gdir = self.get_cached_gdir_data(cache_path=cache_path)
+
+        smb = self.get_cached_smb_data(cache_path=cache_path)
+        runoff = self.get_cached_runoff_data(cache_path=cache_path)
+        runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
+        runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
+
+        return gdir, smb, runoff
+
+    def get_cached_l1_data(self, rgi_id: str, cache="../../ext/data/l1_precompute/"):
+
+        if isinstance(cache, str):
+            cache = Path(cache)
+        cache_path = cache / rgi_id
+        gdir = self.get_cached_gdir_data(cache_path=cache_path)
+
+        return gdir
+
+    def get_cached_gdir_data(self, cache_path: Path) -> dict:
+
+        with open(cache_path / "gdir.json", mode="r", encoding="utf-8") as file:
+            raw = file.read()
+            gdir = dict(json.loads(raw))
+        return gdir
+
+    def get_cached_smb_data(self, cache_path: Path) -> np.ndarray:
+        smb = np.load(cache_path / "smb.npz")
+
+        return smb
+
+    def get_cached_runoff_data(self, cache_path: Path) -> dict:
+        runoff = xr.open_dataarray(cache_path / "runoff.nc")
+        runoff_data = {"monthly_runoff": runoff}
+
+        return runoff_data
+
     def get_cached_metadata(
         self, index="glacier_index", cache="../../ext/data/l2_precompute/"
     ):
