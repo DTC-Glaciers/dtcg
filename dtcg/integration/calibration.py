@@ -168,7 +168,8 @@ class Calibrator:
         )
 
         if not extra_model_kwargs:
-            model_calib[model_key] = model_class(gdir,
+            model_calib[model_key] = model_class(
+                gdir,
                 settings_filesuffix=calibration_filesuffix,
             )
         else:
@@ -222,7 +223,7 @@ class Calibrator:
         geodetic_mb = ref_mb.loc[ref_mb.period == geo_period].dmdtda * 1000
         return geodetic_mb
 
-    def calibrate(self, gdir, model_matrix:dict, ref_mb:float):
+    def calibrate(self, gdir, model_matrix: dict, ref_mb: float):
         """Calibrate an OGGM glacier model."""
         # Store results
         mb_model_calib = {}
