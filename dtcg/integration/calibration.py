@@ -18,13 +18,14 @@ limitations under the License.
 Calibrate OGGM models.
 """
 
+from datetime import datetime
+
+import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from dateutil.tz import UTC
 from oggm import cfg, utils
 from oggm.core import massbalance
-import numpy as np
-from datetime import datetime
-from dateutil.tz import UTC
+from tqdm import tqdm
 
 
 class Calibrator:
@@ -116,11 +117,6 @@ class Calibrator:
         if not geodetic_period:
             geodetic_period = cfg.PARAMS["geodetic_mb_period"]
 
-        if not daily:
-            baseline_climate_suffix = ""
-        else:
-            baseline_climate_suffix = "_daily"
-
         if model_calib is None:
             model_calib = {}
         if model_flowlines is None:
@@ -145,7 +141,7 @@ class Calibrator:
         prcp_fac_min = utils.clip_scalar(prcp_fac * 0.8, mi, ma)
         prcp_fac_max = utils.clip_scalar(prcp_fac * 1.2, mi, ma)
 
-        if "DailySfc_Cryosat_2015" in calibration_filesuffix:
+        if "SfcType_Cryosat_2015" in calibration_filesuffix:
             calibration_parameters.update(
                 {
                     "calibrate_param1": "prcp_fac",
@@ -158,7 +154,7 @@ class Calibrator:
         massbalance.mb_calibration_from_scalar_mb(
             gdir,
             ref_mb=ref_mb,
-            ref_period=geodetic_period,
+            ref_mb_period=geodetic_period,
             **calibration_parameters,
             prcp_fac=prcp_fac,
             prcp_fac_min=prcp_fac_min,
@@ -166,24 +162,27 @@ class Calibrator:
             mb_model_class=model_class,
             overwrite_gdir=True,
             use_2d_mb=False,
-            baseline_climate_suffix=baseline_climate_suffix,
-            filesuffix=calibration_filesuffix,
-            extra_model_kwargs=extra_model_kwargs,
+            settings_filesuffix=calibration_filesuffix,
+            observations_filesuffix=calibration_filesuffix,
+            **extra_model_kwargs,
         )
 
         if not extra_model_kwargs:
             model_calib[model_key] = model_class(
-                gdir, mb_params_filesuffix=calibration_filesuffix
+                gdir,
+                settings_filesuffix=calibration_filesuffix,
             )
         else:
             model_calib[model_key] = model_class(
-                gdir, mb_params_filesuffix=calibration_filesuffix, **extra_model_kwargs
+                gdir,
+                settings_filesuffix=calibration_filesuffix,
+                **extra_model_kwargs,
             )
         model_flowlines[model_key] = massbalance.MultipleFlowlineMassBalance(
             gdir,
             mb_model_class=model_class,
             use_inversion_flowlines=True,
-            mb_params_filesuffix=calibration_filesuffix,
+            settings_filesuffix=calibration_filesuffix,
         )
         fls = gdir.read_pickle("inversion_flowlines")
         if not years:
@@ -193,8 +192,8 @@ class Calibrator:
                 fls=fls, year=years
             )
         else:
-            smb[model_key] = model_flowlines[model_key].get_specific_mb_daily(
-                fls=fls, year=years
+            smb[model_key] = model_flowlines[model_key].get_specific_mb(
+                fls=fls, year=years, time_resolution="daily"
             )
 
         return model_calib, model_flowlines, smb
@@ -205,11 +204,27 @@ class Calibrator:
 
         return pd_geodetic.loc[gdir.rgi_id]
 
-    def get_calibration_mb(self, ref_mb: pd.DataFrame, geo_period: str) -> pd.DataFrame:
+    def get_calibration_mb(self, ref_mb: pd.DataFrame, geo_period: str) -> float:
+        """Get calibration mass balance for a specific reference period.
+
+        Parameters
+        ----------
+        ref_mb
+            Reference mass balances for a glacier.
+        geo_period
+            Reference calibration period. This should be a value in
+            ref_mb["period"].
+
+        Returns
+        -------
+        float
+            Mass balance used for calibration.
+        """
         geodetic_mb = ref_mb.loc[ref_mb.period == geo_period].dmdtda * 1000
         return geodetic_mb
 
-    def calibrate(self, model_matrix, gdir, ref_mb):
+    def calibrate(self, gdir, model_matrix: dict, ref_mb: float):
+        """Calibrate an OGGM glacier model."""
         # Store results
         mb_model_calib = {}
         mb_model_flowlines = {}
@@ -246,16 +261,11 @@ class CalibratorCryotempo(Calibrator):
 
     def set_model_matrix(
         self,
-        name: str = "DailySfc_Cryosat",
-        model=massbalance.DailySfcTIModel,
+        name: str = "SfcType_Cryosat",
+        model=massbalance.SfcTypeTIModel,
         geo_period: str = "2011-01-01_2020-01-01",
         daily: bool = True,
         source: str = "CryoTEMPO-EOLIS",
-        extra_kwargs={
-            "resolution": "day",
-            "gradient_scheme": "annual",
-            "check_data_exists": False,
-        },
         **kwargs,
     ):
         return super().set_model_matrix(
@@ -264,7 +274,6 @@ class CalibratorCryotempo(Calibrator):
             geo_period,
             daily=daily,
             source=source,
-            extra_kwargs=extra_kwargs,
             **kwargs,
         )
 
@@ -297,13 +306,13 @@ class CalibratorCryotempo(Calibrator):
         return year_start, year_end, data_start, data_end
 
     def get_dmdtda(
-        self, datacube, dates: list, year_start: datetime, year_end: datetime
+        self, dataset, dates: list, year_start: datetime, year_end: datetime
     ) -> float:
         """
         Parameters
         ----------
-        datacube : xr.DataArray
-            OGGM dataset with EOLIS datacube.
+        dataset : xr.DataArray
+            CryoTEMPO-EOLIS data.
         dates : list
             Datetimes for each timestep in the data period.
         year_start : datetime
@@ -311,8 +320,13 @@ class CalibratorCryotempo(Calibrator):
         year_end : datetime
             End of reference period.
         """
-        elevation = self.get_eolis_mean_dh(datacube)
-        calib_frame = pd.DataFrame({"dh": elevation}, index=dates)
+        calib_frame = pd.DataFrame(
+            {
+                "dh": dataset.eolis_elevation_change_timeseries,
+                "dh_sigma": dataset.eolis_elevation_change_sigma_timeseries,
+            },
+            index=dates,
+        )
 
         dt = (year_end - year_start).total_seconds() / cfg.SEC_IN_YEAR
 
@@ -327,17 +341,17 @@ class CalibratorCryotempo(Calibrator):
         return dmdtda
 
     def set_geodetic_mb_from_dataset(
-        self, gdir, datacube, year_start: int = 2011, year_end: int = 2020
+        self, gdir, dataset, year_start: int = 2011, year_end: int = 2020
     ) -> pd.DataFrame:
         """Set the geodetic mass balance from enhanced gridded data."""
 
-        dates = self.get_eolis_dates(datacube)
+        dates = self.get_eolis_dates(dataset)
         year_start, year_end, data_start, data_end = self.get_temporal_bounds(
             dates=dates, year_start=year_start, year_end=year_end
         )
 
         dmdtda = self.get_dmdtda(
-            datacube=datacube, dates=dates, year_start=data_start, year_end=data_end
+            dataset=dataset, dates=dates, year_start=data_start, year_end=data_end
         )
 
         geodetic_mb_period = (
@@ -360,21 +374,30 @@ class CalibratorCryotempo(Calibrator):
 
         return pd.DataFrame.from_records(geodetic_mb, index="rgiid")
 
-    def get_geodetic_mb(self, gdir, ds) -> pd.DataFrame:
-        """Get geodetic mass balances for a glacier."""
+    def get_geodetic_mb(self, gdir, dataset=None) -> pd.DataFrame:
+        """Get geodetic mass balances for a glacier.
+
+        Parameters
+        ----------
+        gdir : oggm.GlacierDirectory
+            Glacier directory.
+        dataset : xr.Dataset
+            CryoTEMPO-EOLIS data.
+        """
         pd_geodetic = utils.get_geodetic_mb_dataframe()
         pd_geodetic["source"] = "Hugonnet"
 
-        period = [(2011, 2020), (2015, 2016)]
-        for years in period:
-            geodetic_mb = self.set_geodetic_mb_from_dataset(
-                gdir=gdir, datacube=ds, year_start=years[0], year_end=years[1]
-            )
-            pd_geodetic = pd.concat([pd_geodetic, geodetic_mb])
+        if dataset:
+            period = [(2011, 2020), (2015, 2016)]
+            for years in period:
+                geodetic_mb = self.set_geodetic_mb_from_dataset(
+                    gdir=gdir, dataset=dataset, year_start=years[0], year_end=years[1]
+                )
+                pd_geodetic = pd.concat([pd_geodetic, geodetic_mb])
 
         return pd_geodetic.loc[gdir.rgi_id]
 
-    def get_calibration_mb(self, ref_mb, geo_period: str, source: str):
+    def get_calibration_mb(self, ref_mb, geo_period: str, source: str) -> float:
         geodetic_mb = (
             ref_mb.loc[
                 np.logical_and(ref_mb["source"] == source, ref_mb.period == geo_period)
@@ -395,7 +418,6 @@ class CalibratorCryotempo(Calibrator):
             geo_period = model_params["geo_period"]
             source = model_params["source"]
             calibration_filesuffix = f"{matrix_name}_{geo_period}"
-            # cfg.PARAMS["geodetic_mb_period"] = geo_period
 
             mb_geodetic = self.get_calibration_mb(
                 ref_mb=ref_mb, geo_period=geo_period, source=source
@@ -416,21 +438,38 @@ class CalibratorCryotempo(Calibrator):
 
         return mb_model_calib, mb_model_flowlines, smb
 
-    def run_calibration(self, gdir, datacube, model=massbalance.DailySfcTIModel):
-        ref_mb = self.get_geodetic_mb(gdir=gdir, ds=datacube)
+    def run_calibration(self, gdir, datacube, model=massbalance.SfcTypeTIModel):
+        if not datacube:
+            ref_mb = self.get_geodetic_mb(gdir=gdir)
+        else:
+            ref_mb = self.get_geodetic_mb(gdir=gdir, ds=datacube.ds)
 
-        sfc_model_kwargs = {
-            "resolution": "day",
-            "gradient_scheme": "annual",
-            "check_data_exists": False,
-        }
+        if isinstance(model, str):
+            try:
+                model = getattr(massbalance, model)
+            except:
+                model = massbalance.DailyTIModel
+
+        if not datacube:
+            source = "Hugonnet"
+            geo_period = cfg.PARAMS["geodetic_mb_period"]
+            sfc_model_kwargs = {}
+        else:
+            source = "Cryosat"
+            geo_period = ("2011-01-01_2020-01-01",)
+            sfc_model_kwargs = {
+                "resolution": "day",
+                "gradient_scheme": "annual",
+                "check_data_exists": False,
+            }
+
         self.set_model_matrix(
-            name="DailySfc_Cryosat",
+            name=f"{model.__name__}_{source}",
             model=model,
-            geo_period="2011-01-01_2020-01-01",
+            geo_period=geo_period,
             daily=True,
-            source="CryoTEMPO-EOLIS",
-            extra_kwargs=sfc_model_kwargs,
+            source=source,
+            **sfc_model_kwargs,
         )
 
         mb_model_calib, mb_model_flowlines, smb = self.calibrate(

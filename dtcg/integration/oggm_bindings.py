@@ -21,16 +21,21 @@ Executes an OGGM-API request.
 """
 
 import csv
+import json
 import os
+from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import shapely.geometry as shpg
 import xarray as xr
 from oggm import cfg, tasks, utils, workflow
 from oggm.shop import its_live, w5e5
+
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
 import dtcg.integration.calibration
+from dtcg.datacube.geozarr import GeoZarrHandler
 
 # TODO: Link to DTCG instead.
 # DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
@@ -838,15 +843,20 @@ class BindingsCryotempo(BindingsOggmWrangler):
 
     def __init__(
         self,
-        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/exps/dtcg/halslon_v1/",
+        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup",
         working_dir: str = "",
-        oggm_params: dict = {"border": 10, "store_model_geometry": True},
+        oggm_params: dict = {
+            "border": 160,
+            "store_model_geometry": True,
+        },
+        hydro_location: str = "_spinup_historical_hydro",
     ):
         super().__init__(
             base_url=base_url, working_dir=working_dir, oggm_params=oggm_params
         )
         self.datacube_manager = cryotempo_eolis.DatacubeCryotempoEolis()
         self.calibrator = dtcg.integration.calibration.CalibratorCryotempo()
+        self.hydro_location = hydro_location
 
     def init_oggm(self, dirname="", **kwargs):
         return super().init_oggm(dirname, **kwargs)
@@ -855,8 +865,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
         self,
         rgi_ids: list,
         base_url: str = "",
-        prepro_level: int = 1,
-        prepro_border: int = 10,
+        prepro_level: int = 4,
+        prepro_border: int = 80,
         **kwargs,
     ):
         return super().get_glacier_directories(
@@ -882,4 +892,209 @@ class BindingsCryotempo(BindingsOggmWrangler):
         self.datacube_manager.retrieve_prepare_eolis_gridded_data(
             oggm_ds=datacube, grid=gdir.grid
         )
-        return gdir, datacube
+
+        geozarr_handler = GeoZarrHandler(datacube)
+
+        return gdir, geozarr_handler
+
+    def get_aggregate_runoff(self, gdir) -> dict:
+        """Get the computed runoff from OGGM."""
+
+        annual_runoff = []
+        monthly_runoff = []
+        mass_balance = []
+        observations = []
+        climatology, ref_data, specific_mb = self.get_climatology(
+            name=gdir.rgi_id, gdir=gdir
+        )
+        mass_balance.append(specific_mb)
+        observations.append(ref_data)
+        annual_runoff.append(self.get_annual_runoff(ds=climatology))
+        monthly_runoff.append(self.get_monthly_runoff(ds=climatology))
+
+        total_annual_runoff = sum(annual_runoff)
+        total_monthly_runoff = sum(monthly_runoff)
+        min_year, max_year = self.get_min_max_runoff_years(
+            annual_runoff=total_annual_runoff
+        )
+        runoff_data = {
+            "annual_runoff": total_annual_runoff,
+            "monthly_runoff": total_monthly_runoff,
+            "runoff_year_min": min_year,
+            "runoff_year_max": max_year,
+            "mass_balance": mass_balance,
+            "wgms": observations,
+        }
+        return runoff_data
+
+    def get_monthly_runoff(self, ds: xr.Dataset, nyears: int = 20) -> xr.DataArray:
+        """Get the monthly glacier runoff.
+
+        Parameters
+        ----------
+        ds : xr.Dataset
+            Glacier climatology.
+        nyears : int, default 20
+            Time period in years. The end date is always the most
+            recent available year.
+
+        Returns
+        -------
+        xr.Dataset
+            Monthly runoff.
+        """
+        monthly_runoff = (
+            ds["melt_off_glacier_monthly"]
+            + ds["melt_on_glacier_monthly"]
+            + ds["liq_prcp_off_glacier_monthly"]
+            + ds["liq_prcp_on_glacier_monthly"]
+        )
+        if len(monthly_runoff) > nyears:
+            monthly_runoff = monthly_runoff.isel(time=slice(nyears, None))
+        monthly_runoff *= 1e-9
+
+        return monthly_runoff
+
+    def get_climatology(self, gdir, name: str = "") -> tuple:
+        """Get climatological data for a glacier.
+
+        Parameters
+        ----------
+        data : gpd.GeoDataFrame
+            Contains data for one or more glaciers.
+        name : str, optional
+            Name of glacier.
+
+        Returns
+        -------
+        tuple[xr.Dataset,np.ndarray]
+            Climatological data and specific mass balance for a glacier.
+        """
+
+        climatology = self.get_hydro_climatology(gdir=gdir)
+
+        try:
+            mass_balance = self.get_compiled_run_output(
+                gdir=gdir,
+                # keys=["volume", "area"],
+                input_filesuffix=self.hydro_location,
+            )
+            mass_balance = self.get_specific_mass_balance(
+                ds=mass_balance, rgi_id=gdir.rgi_id
+            )
+            ref_data = gdir.get_ref_mb_data()
+
+        except RuntimeError:
+            ref_data = None
+            mass_balance = None
+        return climatology, ref_data, mass_balance
+
+    def get_annual_runoff(self, ds: xr.Dataset):
+        sel_vars = [v for v in ds.variables if "month_2d" not in ds[v].dims]
+        df_annual = ds[sel_vars].to_dataframe()
+        runoff_vars = [
+            "melt_off_glacier",
+            "melt_on_glacier",
+            "liq_prcp_off_glacier",
+            "liq_prcp_on_glacier",
+        ]
+        df_runoff = df_annual[runoff_vars] * 1e-9
+        return df_runoff
+
+    def get_min_max_runoff_years(
+        self, annual_runoff: pd.Series, nyears: int = 20
+    ) -> tuple:
+        """Get the years with minimum and maximum runoff.
+
+        Parameters
+        ----------
+        annual_runoff : pd.Series
+            Time series of annual runoff.
+        nyears : int, default 20
+            Time period in years. The end date is always the most
+            recent available year.
+
+        Returns
+        -------
+        tuple[int]
+            The years with minimum and maximum runoff.
+        """
+        if len(annual_runoff) > nyears:
+            annual_runoff = annual_runoff.iloc[-nyears:]
+        runoff = annual_runoff.sum(axis=1)
+        runoff_year_min = int(runoff.idxmin())
+        runoff_year_max = int(runoff.idxmax())
+
+        return runoff_year_min, runoff_year_max
+
+    def get_hydro_climatology(self, gdir, nyears: int = 20) -> xr.Dataset:
+        workflow.execute_entity_task(
+            tasks.run_with_hydro,
+            gdir,  # Select the one glacier but actually should be a list
+            run_task=tasks.run_from_climate_data,
+            init_model_filesuffix="_spinup_historical",
+            init_model_yr=1979,
+            ref_area_yr=2000,  # Important ! Fixed gauge runoff with ref year 2000
+            ys=1979,
+            ye=2020,
+            output_filesuffix=self.hydro_location,
+            store_monthly_hydro=True,
+        )[0]
+        with xr.open_dataset(
+            gdir.get_filepath("model_diagnostics", filesuffix=self.hydro_location)
+        ) as ds:
+            ds = ds.isel(time=slice(0, -1)).load()
+        return ds
+
+    def get_compiled_run_output(
+        self,
+        gdir,
+        keys: list = None,
+        input_filesuffix: str = "",
+    ) -> xr.Dataset:
+        if not input_filesuffix:
+            input_filesuffix = self.hydro_location
+        ds = utils.compile_run_output(gdir, input_filesuffix=input_filesuffix)
+        if keys:
+            ds = ds[keys]
+        return ds
+
+    def get_specific_mass_balance(self, ds, rgi_id: str):
+        volume = ds.loc[{"rgi_id": rgi_id}].volume.values
+        area = ds.loc[{"rgi_id": rgi_id}].area.values
+        smb = (volume[1:] - volume[:-1]) / area[1:] * cfg.PARAMS["ice_density"] / 1000
+        return smb
+
+    def get_cached_data(self, rgi_id: str, cache="../../ext/data/l2_precompute/"):
+
+        if isinstance(cache, str):
+            cache = Path(cache)
+        cache_path = cache / rgi_id
+        with open(cache_path / "gdir.json", mode="r", encoding="utf-8") as file:
+            raw = file.read()
+            gdir = dict(json.loads(raw))
+
+        smb = np.load(cache_path / "smb.npz")
+        with xr.open_dataarray(cache_path / "runoff.nc") as file:
+            runoff = file.load()
+        runoff_data = {
+            "monthly_runoff": runoff,
+            "runoff_year_min": gdir["runoff_data"]["runoff_year_min"],
+            "runoff_year_max": gdir["runoff_data"]["runoff_year_max"],
+        }
+
+        return gdir, smb, runoff_data
+
+    def get_cached_metadata(
+        self, index="glacier_index", cache="../../ext/data/l2_precompute/"
+    ):
+        if isinstance(cache, str):
+            cache = Path(cache)
+        cache_path = cache / index
+        with open(
+            cache_path / f"glacier_index.json", mode="r", encoding="utf-8"
+        ) as file:
+            raw = file.read()
+            metadata = dict(json.loads(raw))
+
+        return metadata

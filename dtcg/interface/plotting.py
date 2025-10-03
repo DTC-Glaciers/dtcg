@@ -19,7 +19,7 @@ Plotting utilities for the frontend.
 """
 
 import sys
-from datetime import datetime
+from datetime import date, datetime
 
 import bokeh.models
 import bokeh.plotting
@@ -33,6 +33,7 @@ from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 from dateutil.tz import UTC
 
 hv.extension("bokeh")
+hv.renderer("bokeh").webgl = True
 
 
 class BokehFigureFormat:
@@ -108,7 +109,7 @@ class BokehFigureFormat:
             title = f"{title} at {location}"
         if timestamp:
             if not isinstance(timestamp, str):
-                timestamp = timestamp.strftime("%d %B %Y")
+                timestamp = timestamp.strftime("%-d %B %Y")
             title = f"{title},\n{timestamp}"
         if suffix:
             title = f"{title},\n{suffix}"
@@ -132,7 +133,7 @@ class BokehFigureFormat:
             # "yformatter": NumeralTickFormatter(format="0.00 N"),
             "bgcolor": "white",
             "backend_opts": {"title.align": "center", "toolbar.autohide": True},
-            "scalebar_opts": {"padding": 5},
+            # "scalebar_opts": {"padding": 5},
             # "apply_hard_bounds":True,
             "show_frame": False,
             "margin": 0,
@@ -140,6 +141,22 @@ class BokehFigureFormat:
         }
 
         return default_options
+
+    def get_all_palettes(self) -> dict:
+        """Get all valid preset colour palettes.
+
+        Returns
+        -------
+        dict
+            Preset colour palettes.
+        """
+        palettes = {
+            "brown_blue_pastel": ("#e0beb3", "#b3d5e0", "#beacf6"),
+            "brown_blue_vivid": ("#f6beac", "#ace4fc", "#beacf6"),
+            "hillshade_glacier": ("#f6beac", "#ffffff", "#33b5cb"),
+            "lines_jet_r": ("#ffffff", "#d62728", "#1f77b4"),
+        }
+        return palettes
 
     def get_color_palette(self, name: str) -> tuple:
         """Get a preset palette.
@@ -154,45 +171,48 @@ class BokehFigureFormat:
         tuple[str]
             Palette of hex colours.
         """
-        palettes = {
-            "brown_blue_pastel": ("#e0beb3", "#b3d5e0", "#beacf6"),
-            "brown_blue_vivid": ("#f6beac", "#ace4fc", "#beacf6"),
-            "hillshade_glacier": ("#f6beac", "#ffffff", "#33b5cb"),
-            "lines_jet_r": ("#ffffff", "#d62728", "#1f77b4"),
-        }
+        palettes = self.get_all_palettes()
         if name.lower() not in palettes.keys():
             try:
                 palettes[name] = list(hv.Cycle.default_cycles[name])
             except:
-                raise KeyError("{name} not found. Try:{'\n'.join(palettes.keys())}")
+                palette_names = "', '".join(palettes.keys())
+                raise KeyError(f"{name} not found. Try: {palette_names}")
 
         return palettes[name]
 
-    def get_hover_tool(self, mode="mouse") -> bokeh.models.HoverTool:
+    def get_hover_tool(self, mode="vline", tooltips=None) -> bokeh.models.HoverTool:
         """Get the hover tool attribute.
+
+        , e.g. "mouse", "hline", "vline".
 
         Returns
         -------
         bokeh.models.HoverTool
             Hover tool with tooltips and formatter.
         """
+        if not tooltips:
+            tooltips = self.tooltips
+
         return bokeh.models.HoverTool(
-            tooltips=self.tooltips, formatters=self.get_tooltip_format(), mode=mode
+            tooltips=tooltips,
+            formatters=self.get_tooltip_format(tooltips=tooltips),
+            mode=mode,
         )
 
-    def set_hover_tool(self, mode: str = "mouse"):
+    def set_hover_tool(self, mode: str = "vline"):
         """Set the hover tool attribute.
 
         Parameters
         ----------
-        mode : str
-            Hover mode, e.g. "vline". Default "mouse".
+        mode : str, default "vline"
+            Hover mode, e.g. "mouse", "hline", "vline".
         """
         self.hover_tool = bokeh.models.HoverTool(
             tooltips=self.tooltips, formatters=self.get_tooltip_format(), mode=mode
         )
 
-    def set_tooltips(self, tooltips: list, mode: str = "mouse"):
+    def set_tooltips(self, tooltips: list, mode: str = "vline"):
         """Set the tooltips attribute and update the hover tool.
 
         Parameters
@@ -200,31 +220,38 @@ class BokehFigureFormat:
         tooltips : list
             List of Bokeh figure tooltips. The tooltips should only
             contain printf formatters.
-        mode : Hover mode for hover tool, e.g. "vline". Default "mouse".
+        mode : str, default "vline"
+            Hover mode for hover tool, e.g. "mouse", "hline", "vline".
         """
         self.tooltips = tooltips
         self.set_hover_tool(mode=mode)
 
-    def get_tooltip_format(self) -> dict:
+    def get_tooltip_format(self, tooltips: list = None) -> dict:
         """Get a tooltip formatter from the tooltips attribute.
 
         This ensures all tooltips with a format string (in curly
         braces) are formatted as fstrings. Skips tooltips without a
         format string.
 
+        Parameters
+        ----------
+        tooltips : list, optional.
+            List of Bokeh figure tooltips.
+
         Returns
         -------
         dict
-            Tooltip field names with an associated "printf" value.
+            Tooltip field names with an associated "printf" or
+            "datetime" value.
         """
-        # formatters = {}
-        # for tooltip in self.tooltips:
-        #     label = tooltip[1].split("{")
-        #     if len(label) > 1:
-        #         formatters[tooltip[1]] = "printf"
-
-        # one-liner
-        formatters = {label[1].split("{")[0]: "printf" for label in self.tooltips}
+        if not tooltips:
+            tooltips = self.tooltips
+        formatters = {}
+        for label in tooltips:
+            if not any(x in label[0].lower() for x in ["date", "time"]):
+                formatters[label[1].split("{")[0]] = "printf"
+            else:
+                formatters[label[1].split("{")[0]] = "datetime"
         return formatters
 
     def set_defaults(self, updated_options: dict):
@@ -270,6 +297,38 @@ class BokehFigureFormat:
 
         return help_button
 
+    def to_layout(
+        overlay: list | hv.Overlay,
+        cols: int = 1,
+        sizing_mode: str = "stretch_width",
+        shared_axes: bool = False,
+        **kwargs,
+    ) -> hv.Layout:
+        """Convert overlay to layout.
+
+        Parameters
+        ----------
+        overlay : list or hv.Overlay
+            Either an Overlay object or a list of overlays.
+        cols : int, default 1
+            Force the number of allowed columns in the layout.
+        sizing_mode : str, default "stretch_width".
+            Layout responsiveness to screen dimensions.
+        shared_axes : bool, default False
+            Whether the overlays should share data axes.
+        **kwargs
+            Extra arguments passed to hv.Layout options.
+        """
+        if not isinstance(overlay, list):
+            overlay = [overlay]
+        layout = (
+            hv.Layout(overlay)
+            .cols(cols)
+            .opts(sizing_mode=sizing_mode, shared_axes=shared_axes, **kwargs)
+        )
+
+        return layout
+
 
 class BokehMap(BokehFigureFormat):
     """Plot data as a map.
@@ -299,8 +358,8 @@ class BokehMap(BokehFigureFormat):
             ("Latitude", "@CenLat{%.2f °N}"),
             ("Longitude", "@CenLon{%.2f °E}"),
         ]
-        self.set_hover_tool()
-        self.hover_tool = self.get_hover_tool()
+        self.set_hover_tool(mode="mouse")
+        self.hover_tool = self.get_hover_tool(mode="mouse")
         self.palette = self.get_color_palette("hillshade_glacier")
         self.set_defaults({"xlabel": "Longitude (°E)", "ylabel": "Latitude (°N)"})
 
@@ -484,7 +543,7 @@ class BokehGraph(BokehFigureFormat):
             }
         )
         self.tooltips = [
-            ("Runoff", "$y{%.2f Mt}"),
+            ("Runoff", "$snap_y{%.2f Mt}"),
         ]
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
@@ -523,6 +582,141 @@ class BokehGraph(BokehFigureFormat):
     def get_time_index(self, data: xr.DataArray, end_date: int):
         index = [datetime.date(end_date, i, 1) for i in data.index.values]
         return index
+
+    def plot_runoff_timeseries(
+        self,
+        runoff: xr.Dataset,
+        name: str = "",
+        nyears=20,
+        ref_year=2015,
+        cumulative=False,
+        year_minimum_runoff=None,
+        year_maximum_runoff=None,
+    ) -> hv.Overlay:
+        """Plot the runoff of a glacier or basin.
+
+        Parameters
+        ----------
+        runoff : xr.Dataset
+            Annual runoff data.
+        name : str, optional
+            Glacier or basin name.
+        nyears : int, default 20
+            Time period in years. The end date is always the most
+            recent available year.
+
+        Returns
+        -------
+        hv.Curve
+            Time series of runoff for a given number of years.
+        """
+        runoff = self.set_time_constraint(dataset=runoff, nyears=nyears)
+        latest_year = int(runoff.time.values[-1])
+        runoff_ref_year = runoff.sel(time=ref_year)
+        runoff_mean = runoff.mean(dim="time")
+        index = [date(ref_year, i, 1) for i in runoff_ref_year.month_2d.values]
+        # index = pd.to_datetime(index, format="%j")
+        runoff_minimum = runoff.min(dim="time", skipna=True)
+        runoff_maximum = runoff.max(dim="time", skipna=True)
+
+        title = self.get_title(title="Runoff", suffix=name)
+        figures = []
+        ylabel = "Runoff (Mt)"
+        time_period = f"{latest_year-nyears}-{latest_year}"
+        if cumulative:
+            ylabel = f"Cumulative {ylabel}"
+            title = f"Cumulative {title}"
+            runoff_ref_year = runoff_ref_year.cumsum()
+            for year in runoff.time:
+                runoff_year = runoff.sel(time=year).cumsum()
+                curve = (
+                    hv.Curve(
+                        (index, runoff_year),
+                        group="runoff",
+                        label=time_period,
+                    )
+                    .opts(**self.defaults)
+                    .opts(
+                        line_color="grey",
+                        muted=True,
+                        line_width=0.8,
+                        # tools=[self.hover_tool],
+                    )
+                )
+                figures.append(curve)
+        else:
+            mean_curve = (
+                hv.Curve(
+                    (index, runoff_mean),
+                    group="runoff",
+                    label=f"Mean ({time_period})",
+                )
+                .opts(**self.defaults)
+                .opts(
+                    line_color="black",
+                    line_dash="dashed",
+                    line_width=0.8,
+                    tools=[self.hover_tool],
+                )
+            )
+            figures.append(mean_curve)
+            if year_maximum_runoff and year_minimum_runoff:
+                min_curve = (
+                    hv.Curve(
+                        (index, runoff_minimum),
+                        group="runoff",
+                        label=f"Minimum ({time_period})",
+                    )
+                    .opts(**self.defaults)
+                    .opts(
+                        color="black",
+                        line_width=0.8,
+                    )
+                )
+                figures.append(min_curve)
+                max_curve = (
+                    hv.Curve(
+                        (index, runoff_maximum),
+                        group="runoff",
+                        label=f"Maximum ({time_period})",
+                    )
+                    .opts(**self.defaults)
+                    .opts(
+                        color=self.palette[2],
+                        line_width=0.8,
+                    )
+                )
+                figures.append(max_curve)
+
+        ref_curve = (
+            hv.Curve((index, runoff_ref_year), group="runoff", label=f"{ref_year}")
+            .opts(**self.defaults)
+            .opts(
+                line_color="#d62728",
+                line_width=0.8,
+                tools=[self.hover_tool],
+            )
+        )
+        figures.append(ref_curve)
+        overlay = (
+            hv.Overlay(figures)
+            .opts(**self.defaults)
+            .opts(
+                aspect=2,
+                shared_axes=False,
+                title=title,
+                ylabel="Runoff (Mt)",
+                xlabel="Month",
+                xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
+                legend_position="top_left",
+                autorange="y",
+                tools=["xwheel_zoom", "xpan", self.hover_tool],
+                # tools=[self.hover_tool],
+                fixed_bounds=True,
+            )
+        )
+
+        return overlay
 
     def plot_annual_runoff(
         self, runoff: xr.Dataset, name: str = "", nyears=20
@@ -708,7 +902,7 @@ class BokehGraph(BokehFigureFormat):
             legend_opts={
                 "elements": [help_button],
                 "orientation": "vertical",
-                "css_variables": {"font-size": "1em", "display": "inline"},
+                # "css_variables": {"font-size": "1em", "display": "inline"},
             },
         )
 
@@ -819,7 +1013,7 @@ class BokehCryotempo(BokehFigureFormat):
             }
         )
         self.tooltips = [
-            ("Runoff", "$y{%.2f Mt}"),
+            ("Runoff", "$snap_y{%.2f Mt}"),
         ]
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
@@ -860,8 +1054,8 @@ class BokehCryotempo(BokehFigureFormat):
 
         key_split = key.split("_")
         model_name = key_split[0]
-        if "Sfc" in model_name:
-            model_name = f"{model_name.removesuffix('Sfc')}, Tracking"
+        if "SfcType" in model_name:
+            model_name = f"Daily {model_name.removesuffix('SfcType')}, Tracking"
         label = f"{model_name}, {key_split[1]}"
 
         if len(key_split) > 4:
@@ -893,6 +1087,7 @@ class BokehCryotempo(BokehFigureFormat):
         datacube=None,
         gdir=None,
         resample: bool = False,
+        cumulative=False,
     ):
         """Plot daily SMB for a specific year and geodetic mean.
 
@@ -917,6 +1112,13 @@ class BokehCryotempo(BokehFigureFormat):
             month.
         """
         self.check_holoviews()
+        self.set_tooltips(
+            [("Date", "$snap_x{%d %B}"), ("SMB", "$snap_y{%.2f mm w.e.}")],
+            mode="vline",
+        )
+
+        self.set_hover_tool()
+        self.hover_tool = self.get_hover_tool(mode="vline")
 
         plot_data = {}
         figures = []
@@ -934,8 +1136,8 @@ class BokehCryotempo(BokehFigureFormat):
         if datacube:
             if not gdir:
                 raise ValueError("Provide a glacier directory.")
-            cryotempo_dates = self.get_eolis_dates(datacube)
-            cryotempo_dh = self.get_eolis_mean_dh(datacube)
+            cryotempo_dates = self.get_eolis_dates(datacube.ds)
+            cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
 
             df = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
             if resample:
@@ -952,30 +1154,93 @@ class BokehCryotempo(BokehFigureFormat):
 
                 df_daily_mean = self.get_mean_by_doy(df)
                 df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
-                plot_data["CryoTEMPO-EOLIS Observations"] = df_daily_mean["smb"] / 30
+                if not cumulative:
+                    plot_data["CryoTEMPO-EOLIS Observations"] = (
+                        df_daily_mean["smb"] / 30
+                    )
+                else:
+                    plot_data["CryoTEMPO-EOLIS Observations"] = df_daily_mean[
+                        "smb"
+                    ].cumsum()
 
                 label = f"CryoTEMPO-EOLIS Observations ({ref_year})"
                 curve = hv.Curve(
                     plot_data["CryoTEMPO-EOLIS Observations"], label=label
-                ).opts(line_width=1.0, color="grey", line_dash="dotted")
+                ).opts(line_width=1.0, color="k", line_dash="dotted")
                 figures.append(curve)
 
         for k, v in smb.items():
-            if "Daily" in k:
-                label = self.get_label_from_key(k)
+            if ("Daily" in k) or ("SfcType" in k):
+                if not cumulative:
 
-                df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
+                    df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
 
-                geodetic_mask = self.get_date_mask(df, *geodetic_period)
+                    geodetic_mask = self.get_date_mask(df, *geodetic_period)
 
-                df_daily_mean = self.get_mean_by_doy(df[geodetic_mask])
-                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
-                plot_data[k] = df_daily_mean["smb"]
+                    all_data_mean = self.get_mean_by_doy(df[geodetic_mask])
+                    # plot_data[k] = all_data_mean["smb"]
+                    all_data_mean.index = pd.to_datetime(
+                        all_data_mean.index, format="%j"
+                    )
+                    all_data_mean["smb_mean"] = all_data_mean["smb"]
+                    plot_data[f"{k}_mean"] = all_data_mean["smb_mean"]
 
-                label = f"{start_year}-{end_year} Mean"
-                figures = self.add_curve_to_figures(
-                    data=plot_data, key=k, figures=figures, line_color="k", label=label
-                )
+                    label = f"{start_year}-{end_year} Mean"
+                    hover_tool_mean = self.get_hover_tool(
+                        tooltips=[("Mean SMB", "@smb_mean{%.2f mm w.e.}")], mode="vline"
+                    )
+                    figures = self.add_curve_to_figures(
+                        data=plot_data,
+                        key=f"{k}_mean",
+                        figures=figures,
+                        line_color="k",
+                        label=label,
+                        tools=[hover_tool_mean],
+                        # tools=[self.hover_tool],
+                    )
+
+                    # date_mask = self.get_date_mask(
+                    #     df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+                    # )
+
+                    # df_daily_mean = self.get_mean_by_doy(df[date_mask])
+                    # df_daily_mean.index = pd.to_datetime(
+                    #     df_daily_mean.index, format="%j"
+                    # )
+                    # plot_data[k] = df_daily_mean["smb"]
+                    # label = f"{ref_year}"
+                    # figures = self.add_curve_to_figures(
+                    #     data=plot_data,
+                    #     key=k,
+                    #     figures=figures,
+                    #     line_color="#d62728",
+                    #     label=label,
+                    # )
+                else:
+                    label = self.get_label_from_key(k)
+
+                    df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
+
+                    for year in np.arange(int(start_year), int(end_year)):
+                        geodetic_mask = self.get_date_mask(
+                            df, f"{year}-01-01", f"{year+1}-01-01"
+                        )
+
+                        df_daily_mean = self.get_mean_by_doy(df[geodetic_mask])
+                        df_daily_mean.index = pd.to_datetime(
+                            df_daily_mean.index, format="%j"
+                        )
+                        plot_data[k] = df_daily_mean["smb"].cumsum()
+
+                        label = f"{start_year}-{end_year}"
+                        figures = self.add_curve_to_figures(
+                            data=plot_data,
+                            key=k,
+                            figures=figures,
+                            muted=True,
+                            line_color="grey",
+                            label=label,
+                        )
 
                 date_mask = self.get_date_mask(
                     df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
@@ -983,7 +1248,187 @@ class BokehCryotempo(BokehFigureFormat):
 
                 df_daily_mean = self.get_mean_by_doy(df[date_mask])
                 df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
-                plot_data[k] = df_daily_mean["smb"]
+                if not cumulative:
+                    plot_data[k] = df_daily_mean["smb"]
+                else:
+                    plot_data[k] = df_daily_mean["smb"].cumsum()
+                label = f"{ref_year}"
+                figures = self.add_curve_to_figures(
+                    data=plot_data,
+                    key=k,
+                    figures=figures,
+                    line_color="#d62728",
+                    label=label,
+                    tools=[self.hover_tool],
+                )
+
+        default_opts = self.get_default_opts()
+        if glacier_name:
+            glacier_name = f"{glacier_name}, "
+        title = f"Daily Specific Mass Balance"
+        # title = f"Daily Specific Mass Balance\n {glacier_name}{start_year}-{end_year}"
+        if cumulative:
+            title = f"Cumulative {title}"
+        overlay = (
+            hv.Overlay(figures)
+            .opts(**default_opts)
+            .opts(
+                aspect=2,
+                ylabel="Daily SMB (mm w.e.)",
+                title=title,
+                xlabel="Month",
+                # xformatter=f"%j",
+                xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
+                tools=["xwheel_zoom", "xpan", self.hover_tool],
+                active_tools=["xwheel_zoom"],
+                legend_position="top_left",
+                autorange="y",
+                # legend_opts={
+                #     # "orientation": "vertical",
+                #     # "css_variables": {"font-size": "1em", "display": "inline"},
+                # },
+            )
+        )
+
+        return overlay
+
+    def plot_cryotempo_comparison(
+        self,
+        smb: dict,
+        years=None,
+        glacier_name: str = "",
+        geodetic_period: str = "2000-01-01_2020-01-01",
+        ref_year: int = 2015,
+        datacube=None,
+        gdir=None,
+        percentage_difference=False,
+        averaged=False,
+        daily=True,
+    ):
+        """Plot daily SMB for a specific year and geodetic mean.
+
+        Parameters
+        ----------
+        smb : dict
+            Specific mass balance data for various OGGM models.
+        years : list, default None
+            OGGM output years.
+        glacier_name : str, default empty string
+            Name of glacier.
+        geodetic_period : str, default "2000-01-01_2020-01-01"
+            Period over which to take the mean daily specific mass balance.
+        ref_year : int, default 2015
+            Reference year.
+        datacube : xr.DataArray, default None
+            CryoTEMPO-EOLIS observations for elevation change.
+        gdir : GlacierDirectory, default None
+            Glacier of interest.
+        percentage_difference : bool, default False
+            If True, calculate and display the percentage difference
+            between CryoTEMPO-EOLIS observations and modelled specific
+            mass balance.
+        """
+        self.check_holoviews()
+
+        plot_data = {}
+        figures = []
+
+        if years is None:
+            years = np.arange(1979, 2020)
+        geodetic_period = geodetic_period.split("_")
+        start_year = geodetic_period[0][:4]
+        end_year = geodetic_period[1][:4]
+
+        plot_dates_day = pd.date_range(
+            f"{years[0]}-01-01", f"{years[-1]}-12-31", freq="1D", tz=UTC
+        )
+
+        if datacube:
+            if not gdir:
+                raise ValueError("Provide a glacier directory.")
+            cryotempo_dates = self.get_eolis_dates(datacube.ds)
+            cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
+
+            df_cryo = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
+
+            if not averaged:
+                cryo_date_mask = self.get_date_mask(
+                    df_cryo, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+                )
+                df_cryo = df_cryo[cryo_date_mask]
+            if not df_cryo.empty:
+                df_cryo["smb"] = (
+                    1000
+                    * (df_cryo["smb"] - df_cryo["smb"].iloc[0])
+                    * 850
+                    / gdir.rgi_area_km2
+                )
+
+                df_cryo_daily_mean = self.get_mean_by_doy(df_cryo)
+                df_cryo_daily_mean.index = pd.to_datetime(
+                    df_cryo_daily_mean.index, format="%j"
+                )
+                df_cryo_daily_mean["smb"] = df_cryo_daily_mean["smb"] / 30
+                if not averaged:
+                    label = f"CryoTEMPO-EOLIS Observations ({ref_year})"
+                else:
+                    label = f"CryoTEMPO-EOLIS Observations ({cryotempo_dates[0].strftime('%Y')}-{cryotempo_dates[-1].strftime('%Y')})"
+                if not percentage_difference:
+                    plot_data["CryoTEMPO-EOLIS Observations"] = df_cryo_daily_mean[
+                        "smb"
+                    ]
+
+                    curve = hv.Curve(
+                        plot_data["CryoTEMPO-EOLIS Observations"], label=label
+                    ).opts(line_width=0.8, color="black")
+                    figures.append(curve)
+
+        for k, v in smb.items():
+            if ("Daily" in k) or ("SfcType") in k:
+                label = self.get_label_from_key(k)
+
+                df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
+                # align with Cryosat data
+                if datacube:
+                    date_mask = self.get_date_mask(
+                        df,
+                        df_cryo.index[0].strftime("%Y-%m-%d"),
+                        df_cryo.index[-1].strftime("%Y-%m-%d"),
+                    )
+                    df = df[date_mask]
+                    if percentage_difference or not daily:
+                        df = df.resample("1MS").mean()
+                        df.index += pd.Timedelta(14, "d")
+
+                # geodetic_mask = self.get_date_mask(df, *geodetic_period)
+
+                # df_daily_mean = self.get_mean_by_doy(df[geodetic_mask])
+                # df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+                # plot_data[k] = df_daily_mean["smb"]
+
+                # label = f"{start_year}-{end_year} Mean"
+                # figures = self.add_curve_to_figures(
+                #     data=plot_data, key=k, figures=figures, line_color="k", label=label
+                # )
+
+                date_mask = self.get_date_mask(
+                    df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+                )
+
+                df_daily_mean = self.get_mean_by_doy(df[date_mask])
+
+                # align with CryoSat
+                # df_daily_mean.index = pd.to_datetime(
+                #     df_cryo_daily_mean.index, format="%j"
+                # )
+                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+                if not percentage_difference:
+                    plot_data[k] = df_daily_mean["smb"]
+                else:
+                    plot_data[k] = self.get_percentage_difference(
+                        df_daily_mean["smb"], df_cryo_daily_mean["smb"]
+                    )
+
                 label = f"{ref_year}"
                 figures = self.add_curve_to_figures(
                     data=plot_data,
@@ -996,13 +1441,133 @@ class BokehCryotempo(BokehFigureFormat):
         default_opts = self.get_default_opts()
         if glacier_name:
             glacier_name = f"{glacier_name}, "
+
+        if not percentage_difference:
+            ylabel = f"Daily SMB (mm w.e.)"
+            title = f"Daily Specific Mass Balance\n {glacier_name}{ref_year}"
+            xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
+            legend_opts = {"orientation": "vertical"}
+        else:
+            help_button = self.get_help_button(
+                text=[i[1] for i in ["2017"]],
+                position="left",
+            )
+            ylabel = f"Percentage difference (%)"
+            title = f"Percentage Difference in Monthly Specific Mass Balance\n {glacier_name}{ref_year}"
+            xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
+            legend_opts = {"orientation": "vertical", "elements": [help_button]}
+        # if not percentage_difference:
+        #     overlay = hv.Overlay(figures)
+        # else:
+        hline = hv.HLine(0).opts(color="black", line_dash="dotted", line_width=0.8)
+        overlay = hv.Overlay(figures) * hline
+
+        overlay = overlay.opts(**default_opts).opts(
+            aspect=2,
+            ylabel=ylabel,
+            title=title,
+            xlabel="Month",
+            # xformatter=f"%j",
+            xformatter=xformatter,
+            tools=["xwheel_zoom", "xpan", self.hover_tool],
+            active_tools=["xwheel_zoom"],
+            legend_position="top_left",
+            legend_opts=legend_opts,
+        )
+
+        return overlay
+
+    def get_percentage_difference(self, a, b):
+        return 100 * np.absolute(b - a) / ((a + b) / 2)
+
+
+class BokehSynthetic(BokehCryotempo):
+
+    def __init__(self):
+        super().__init__()
+
+        self.set_defaults(
+            {
+                "ylabel": "Runoff (Mt)",
+                "yformatter": PrintfTickFormatter(format="%.2f"),
+                "padding": (0.1, (0, 0.1)),
+                "ylim": (0, None),
+                "autorange": "y",
+            }
+        )
+        self.tooltips = [
+            ("Runoff", "$snap_y{%.2f Mt}"),
+        ]
+        self.set_hover_tool(mode="vline")
+        self.palette = self.get_color_palette("lines_jet_r")
+
+    def get_sine_data(self, size, scaling=1):
+        x = np.linspace(0, 2 * np.pi, num=size)
+        n = np.random.normal(scale=10 * scaling, size=x.size)
+        y = np.abs(100 * np.sin(x) + n / 50)  # +2*(year - 2000)
+        return y
+
+    def get_synthetic_data(self, year, scale_offset=0):
+        x_dates = pd.date_range(f"{year}-01-01", f"{year+1}-12-31", freq="1D", tz=UTC)
+        y = self.get_sine_data(size=x_dates.size, scaling=year - scale_offset)
+        df = pd.DataFrame(index=x_dates, data=y, columns=["data"])
+
+        date_mask = self.get_date_mask(df, f"{year}-01-01", f"{year+1}-01-01")
+        df[date_mask] = df[date_mask] + year / 1000
+        plot_data = (
+            df[date_mask]
+            .groupby([df[date_mask].index.day_of_year])
+            .mean()
+            .rename_axis(index=["doy"])
+        )
+
+        plot_data.index = pd.to_datetime(plot_data.index, format="%j")
+        return plot_data
+
+    def plot_synthetic_data(
+        self, title, label, ref_year=2017, cumulative=False
+    ) -> hv.Overlay:
+        geodetic_period = [2015, 2020]
+        figures = []
+        for year in np.arange(*geodetic_period):
+            if not cumulative:
+                plot_data = self.get_synthetic_data(year=year, scale_offset=2000)
+            else:
+                plot_data = self.get_synthetic_data(year=year)
+                plot_data = plot_data.cumsum() / 1000
+            figures = self.add_curve_to_figures(
+                data=plot_data,
+                key="data",
+                figures=figures,
+                line_color="grey",
+                muted=True,
+                line_width=0.8,
+                # line_dash="dotted",
+                label=f"{geodetic_period[0]}-{geodetic_period[-1]}",
+            )
+
+        plot_data = self.get_synthetic_data(year=ref_year)
+        if not cumulative:
+            plot_data = self.get_synthetic_data(year=year, scale_offset=2000)
+        else:
+            plot_data = self.get_synthetic_data(year=year)
+            plot_data = plot_data.cumsum() / 1000
+        figures = self.add_curve_to_figures(
+            data=plot_data,
+            key="data",
+            figures=figures,
+            line_color="#d62728",
+            line_width=2.0,
+            label=f"{ref_year}",
+        )
+        default_opts = self.get_default_opts()
         overlay = (
             hv.Overlay(figures)
             .opts(**default_opts)
             .opts(
-                aspect=4,
-                ylabel="Daily SMB (mm w.e.)",
-                title=f"Daily Specific Mass Balance\n {glacier_name}{start_year}-{end_year}",
+                aspect=2,
+                ylabel=f"{label}",
+                title=f"{title}",
                 xlabel="Month",
                 # xformatter=f"%j",
                 xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
@@ -1011,20 +1576,16 @@ class BokehCryotempo(BokehFigureFormat):
                 legend_position="top",
                 legend_opts={
                     "orientation": "vertical",
-                    "css_variables": {"font-size": "1em", "display": "inline"},
+                    # "css_variables": {"font-size": "1em", "display": "inline"},
                 },
             )
         )
-        layout = (
-            hv.Layout([overlay])
-            .cols(1)
-            .opts(sizing_mode="stretch_width", shared_axes=False)
-        )
-        return layout
+
+        return overlay
 
 
 class HoloviewsDashboard(BokehFigureFormat):
-    """Holoviews dashboard for runoff data.
+    """Holoviews dashboard.
 
     Attributes
     ----------
@@ -1093,6 +1654,53 @@ class HoloviewsDashboard(BokehFigureFormat):
             sizing_mode="scale_both",
             merge_tools=False,
         )
+        return self.dashboard
+
+
+class HoloviewsDashboardL2(HoloviewsDashboard, BokehCryotempo):
+    """Holoviews dashboard for runoff data.
+
+    Attributes
+    ----------
+    plot_map : BokehMap
+    plot_graph : BokehGraph
+    title : str
+    figures : list
+    dashboard : hv.Layout
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.plot_map = BokehMap()
+        self.plot_graph = BokehGraph()
+        self.plot_cryosat = BokehCryotempo
+        self.plot_synthetic = BokehSynthetic()
+        self.title = "Dashboard"
+        self.figures = []
+        self.dashboard = hv.Layout()
+
+
+class HoloviewsDashboardL1(HoloviewsDashboard):
+    """Holoviews dashboard for runoff data.
+
+    Attributes
+    ----------
+    plot_map : BokehMap
+    plot_graph : BokehGraph
+    title : str
+    figures : list
+    dashboard : hv.Layout
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.plot_map = BokehMap()
+        self.plot_graph = BokehGraph()
+        self.title = "Dashboard"
+        self.figures = []
+        self.dashboard = hv.Layout()
 
     def plot_runoff_dashboard(
         self,
