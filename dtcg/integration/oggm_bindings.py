@@ -865,8 +865,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
         self,
         rgi_ids: list,
         base_url: str = "",
-        prepro_level: int = 1,
-        prepro_border: int = 10,
+        prepro_level: int = 4,
+        prepro_border: int = 80,
         **kwargs,
     ):
         return super().get_glacier_directories(
