@@ -26,6 +26,7 @@ from dateutil.tz import UTC
 from oggm import cfg, utils
 from oggm.core import massbalance
 from tqdm import tqdm
+import xarray as xr
 
 
 class Calibrator:
@@ -42,7 +43,23 @@ class Calibrator:
         else:
             self.model_matrix = model_matrix
 
-    def set_model_matrix(self, name, model, geo_period, **kwargs):
+    def set_model_matrix(self, name:str, model, geo_period:str, **kwargs):
+        """Set model parameters for calibration.
+
+        Parameters
+        ----------
+        name : str
+            Name of configuration parameters. Ideally this should match
+            the settings filesuffix.
+        model : oggm.core.massbalance.MassBalanceModel
+            OGGM mass balance model class.
+        geo_period : str
+            Reference mass balance period in the format
+            YYYY-MM-DD_YYYY-MM-DD.
+        kwargs
+            Additional arguments passed to the mass balance model
+            class.
+        """
 
         matrix = {
             name: {
@@ -63,14 +80,14 @@ class Calibrator:
         model_class,
         ref_mb: pd.DataFrame,
         geodetic_period: str = "",
-        years=None,
-        model_calib=None,
-        model_flowlines=None,
-        smb=None,
-        daily=False,
-        calibration_filesuffix="",
+        years: list=None,
+        model_calib:dict=None,
+        model_flowlines:dict=None,
+        smb:dict=None,
+        daily:bool=False,
+        calibration_filesuffix:str="",
         calibration_parameters: dict = None,
-        extra_model_kwargs=None,
+        **kwargs,
     ) -> tuple:
         """Get calibrated models.
 
@@ -102,7 +119,7 @@ class Calibrator:
             Calibration filesuffix.
         calibration_parameters : dict, default None
             Extra arguments passed to ``mb_calibration_from_scalar_mb``.
-        extra_model_kwargs : dict, default None
+        kwargs
             Extra arguments passed to the mass balance model used for
             calibration.
 
@@ -164,10 +181,10 @@ class Calibrator:
             use_2d_mb=False,
             settings_filesuffix=calibration_filesuffix,
             observations_filesuffix=calibration_filesuffix,
-            **extra_model_kwargs,
+            **kwargs,
         )
 
-        if not extra_model_kwargs:
+        if not kwargs:
             model_calib[model_key] = model_class(
                 gdir,
                 settings_filesuffix=calibration_filesuffix,
@@ -176,7 +193,7 @@ class Calibrator:
             model_calib[model_key] = model_class(
                 gdir,
                 settings_filesuffix=calibration_filesuffix,
-                **extra_model_kwargs,
+                **kwargs,
             )
         model_flowlines[model_key] = massbalance.MultipleFlowlineMassBalance(
             gdir,
@@ -199,7 +216,14 @@ class Calibrator:
         return model_calib, model_flowlines, smb
 
     def get_geodetic_mb(self, gdir) -> pd.DataFrame:
-        """Get geodetic mass balances for a glacier."""
+        """Get geodetic mass balances for a glacier.
+
+        Returns
+        -------
+        pd.DataFrame
+            Geodetic mass balances for a specific glacier for different
+            reference periods.
+        """
         pd_geodetic = utils.get_geodetic_mb_dataframe()
 
         return pd_geodetic.loc[gdir.rgi_id]
@@ -209,9 +233,9 @@ class Calibrator:
 
         Parameters
         ----------
-        ref_mb
+        ref_mb : pd.DataFrame
             Reference mass balances for a glacier.
-        geo_period
+        geo_period : str
             Reference calibration period. This should be a value in
             ref_mb["period"].
 
@@ -223,8 +247,25 @@ class Calibrator:
         geodetic_mb = ref_mb.loc[ref_mb.period == geo_period].dmdtda * 1000
         return geodetic_mb
 
-    def calibrate(self, gdir, model_matrix: dict, ref_mb: float):
-        """Calibrate an OGGM glacier model."""
+    def calibrate(self, gdir, model_matrix: dict, ref_mb: float) -> tuple:
+        """Calibrate an OGGM glacier model.
+
+        Parameters
+        ----------
+        gdir : oggm.GlacierDirectory
+            Glacier directory.
+        model_matrix : dict
+            Model parameters for different run configurations.
+        ref_mb : float
+            Reference mass balance.
+
+        Returns
+        -------
+        tuple
+            Calibrated mass balance model instances, flowlines, and
+            specific mass balances for each run configuration in the
+            model matrix.
+        """
         # Store results
         mb_model_calib = {}
         mb_model_flowlines = {}
@@ -268,6 +309,23 @@ class CalibratorCryotempo(Calibrator):
         source: str = "CryoTEMPO-EOLIS",
         **kwargs,
     ):
+        """Set model parameters for calibration.
+
+        Parameters
+        ----------
+        name : str
+            Name of configuration parameters. Ideally this should match
+            the settings filesuffix.
+        model : oggm.core.massbalance.MassBalanceModel
+            OGGM mass balance model class.
+        geo_period : str
+            Reference mass balance period in the format
+            YYYY-MM-DD_YYYY-MM-DD.
+        kwargs
+            Additional arguments passed to the mass balance model
+            class.
+        """
+
         return super().set_model_matrix(
             name,
             model,
@@ -277,10 +335,34 @@ class CalibratorCryotempo(Calibrator):
             **kwargs,
         )
 
-    def get_eolis_dates(self, ds):
+    def get_eolis_dates(self, ds:xr.Dataset) -> np.ndarray:
+        """Get time index from CryoTEMPO-EOLIS dataset.
+
+        Parameters
+        ----------
+        ds : xr.Dataset
+            CryoTEMPO-EOLIS dataset.
+
+        Returns
+        -------
+        np.ndarray
+            Time index adjusted to UTC.
+        """
         return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
-    def get_eolis_mean_dh(self, ds):
+    def get_eolis_mean_dh(self, ds:xr.Dataset) -> np.ndarray:
+        """Get
+
+        Parameters
+        ----------
+        ds : xr.Dataset
+            CryoTEMPO-EOLIS dataset.
+
+        Returns
+        -------
+        np.ndarray
+            Time series of spatial mean of elevation change.
+        """
         mean_time_series = [
             np.nanmean(elevation_change_map.where(ds.glacier_mask == 1))
             for elevation_change_map in ds.eolis_gridded_elevation_change
@@ -289,6 +371,18 @@ class CalibratorCryotempo(Calibrator):
 
     def get_temporal_bounds(self, dates: list, year_start: int, year_end: int) -> tuple:
         """Get start and end dates of geodetic and observational periods.
+
+        This matches the nearest available dates for irregular time
+        indices.
+
+        Parameters
+        ----------
+        dates : list
+            Time index. This may be irregularly spaced.
+        year_start : int
+            Start year of a desired period.
+        year_end : int
+            End year of a desired period.
 
         Returns
         -------
@@ -309,6 +403,8 @@ class CalibratorCryotempo(Calibrator):
         self, dataset, dates: list, year_start: datetime, year_end: datetime
     ) -> float:
         """
+        Get dmdtdA from a CryoTEMPO-EOLIS dataset.
+
         Parameters
         ----------
         dataset : xr.DataArray
@@ -319,6 +415,11 @@ class CalibratorCryotempo(Calibrator):
             Start of reference period.
         year_end : datetime
             End of reference period.
+
+        Returns
+        -------
+        float
+            dmdtdA for a glacier.
         """
         calib_frame = pd.DataFrame(
             {
@@ -341,9 +442,26 @@ class CalibratorCryotempo(Calibrator):
         return dmdtda
 
     def set_geodetic_mb_from_dataset(
-        self, gdir, dataset, year_start: int = 2011, year_end: int = 2020
+        self, gdir, dataset:xr.Dataset, year_start: int = 2011, year_end: int = 2020
     ) -> pd.DataFrame:
-        """Set the geodetic mass balance from enhanced gridded data."""
+        """Set the geodetic mass balance from enhanced gridded data.
+
+        Parameters
+        ----------
+        gdir : oggm.GlacierDirectory
+            Glacier directory.
+        dataset : xr.Dataset
+            CryoTEMPO-EOLIS dataset.
+        year_start : int, default 2011
+            Start of reference period.
+        year_end : int, default 2020
+            End of reference period.
+
+        Returns
+        -------
+        pd.DataFrame
+            Geodetic mass balances for various glaciers.
+        """
 
         dates = self.get_eolis_dates(dataset)
         year_start, year_end, data_start, data_end = self.get_temporal_bounds(
@@ -374,7 +492,7 @@ class CalibratorCryotempo(Calibrator):
 
         return pd.DataFrame.from_records(geodetic_mb, index="rgiid")
 
-    def get_geodetic_mb(self, gdir, dataset=None) -> pd.DataFrame:
+    def get_geodetic_mb(self, gdir, dataset:xr.Dataset=None) -> pd.DataFrame:
         """Get geodetic mass balances for a glacier.
 
         Parameters
@@ -383,6 +501,11 @@ class CalibratorCryotempo(Calibrator):
             Glacier directory.
         dataset : xr.Dataset
             CryoTEMPO-EOLIS data.
+
+        Returns
+        -------
+        pd.DataFrame
+            Geodetic mass balances for a specific glacier RGI ID.
         """
         pd_geodetic = utils.get_geodetic_mb_dataframe()
         pd_geodetic["source"] = "Hugonnet"
@@ -397,7 +520,25 @@ class CalibratorCryotempo(Calibrator):
 
         return pd_geodetic.loc[gdir.rgi_id]
 
-    def get_calibration_mb(self, ref_mb, geo_period: str, source: str) -> float:
+    def get_calibration_mb(self, ref_mb:pd.DataFrame, geo_period: str, source: str) -> float:
+        """
+
+        Parameters
+        ----------
+        ref_mb : pd.DataFrame
+            Reference geodetic mass balances.
+        geo_period : str
+            Geodetic reference period in the format <YYYY-MM-DD_YYYY-MM-DD>.
+        source : str
+            Reference mass balance source, e.g. "Hugonnet".
+
+        Returns
+        -------
+
+        float
+            Geodetic mass balance for calibration period.
+
+        """
         geodetic_mb = (
             ref_mb.loc[
                 np.logical_and(ref_mb["source"] == source, ref_mb.period == geo_period)
@@ -406,7 +547,24 @@ class CalibratorCryotempo(Calibrator):
         )
         return geodetic_mb
 
-    def calibrate(self, model_matrix: dict, gdir, ref_mb):
+    def calibrate(self, gdir, model_matrix: dict, ref_mb:pd.DataFrame) -> tuple:
+        """Calibrate and run OGGM models using a model matrix.
+
+        Parameters
+        ----------
+        gdir : oggm.GlacierDirectory
+            Glacier directory.
+        model_matrix : dict
+            Model parameters for various calibration runs.
+        ref_mb : Geodetic mass balances.
+
+        Returns
+        -------
+        tuple
+            Calibrated mass balance models, flowlines, and specific
+            mass balances for each set of configuration parameters in
+            ``model_matrix``.
+        """
         # Store results
         mb_model_calib = {}
         mb_model_flowlines = {}
@@ -439,6 +597,24 @@ class CalibratorCryotempo(Calibrator):
         return mb_model_calib, mb_model_flowlines, smb
 
     def run_calibration(self, gdir, datacube, model=massbalance.SfcTypeTIModel):
+        """Run calibration.
+
+        Parameters
+        ----------
+        gdir : oggm.GlacierDirectory
+            Glacier directory.
+        datacube : GeoZarrHandler
+            L1 or L2 datacube.
+        model : massbalance.MassBalanceModel, default SfcTypeTIModel.
+            OGGM mass balance model class, ideally DailyTIModel or similar.
+
+        Returns
+        -------
+        tuple[dict, dict, dict]
+            Calibrated mass balance models, flowlines, and specific
+            mass balances for each set of configuration parameters in
+            ``model_matrix``.
+        """
         if not datacube:
             ref_mb = self.get_geodetic_mb(gdir=gdir)
         else:
