@@ -224,7 +224,8 @@ class GeoZarrHandler(MetadataMapper):
             encoding=self.encoding,
         )
 
-    def add_layer(self: GeoZarrHandler, ds: xr.Dataset, ds_name: str) -> None:
+    def add_layer(self: GeoZarrHandler, ds: xr.Dataset, ds_name: str,
+                  overwrite: bool = False) -> None:
         """Add a new dataset as a child group of the DataTree at the root.
 
         Parameters
@@ -233,8 +234,10 @@ class GeoZarrHandler(MetadataMapper):
             New dataset layer to be added to the existing data tree.
         ds_name : str
             Layer name to be used for this node of the tree.
+        overwrite : bool
+            If True, allow a layer of the same name to be overwritten.
         """
-        if ds_name in self.ds.children:
+        if ds_name in self.ds.children and not overwrite:
             raise ValueError(f"Group '{ds_name}' already exists.")
 
         # prepare new dataset
