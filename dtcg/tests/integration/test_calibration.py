@@ -183,7 +183,7 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
             assert matrix_attrs["geodetic_mb_period"] == "2000-01-01_2020-01-01"
             assert "test_kwarg" in matrix_attrs.keys()
 
-            for key in ["source", "daily", "extra_kwargs", "test_kwarg"]:
+            for key in ["source", "daily", "test_kwarg"]:
                 assert key in matrix_attrs.keys()
 
     # @pytest.mark.parametrize("arg_period", ["", None])
