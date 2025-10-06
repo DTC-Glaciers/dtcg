@@ -181,6 +181,9 @@ class MetadataMapper:
         """
         # check there are mappings for all variables in the dataset
         difference = set(dataset.data_vars) - set(self.metadata_mappings.keys())
+        print(difference)
+        print(dataset.data_vars)
+        print(self.metadata_mappings.keys())
         if difference:
             warnings.warn(
                 "Metadata mapping is missing for the following variables: "
