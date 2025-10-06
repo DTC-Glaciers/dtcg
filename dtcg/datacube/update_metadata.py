@@ -112,7 +112,7 @@ class MetadataMapper:
         title, and summary.
         """
         # create a spatial_ref layer in the dataset
-        if not dataset.rio.crs and set(dataset.dims).issubset({"x", "y"}):
+        if not dataset.rio.crs and not {"x", "y"}.isdisjoint(dataset.dims):
             dataset.rio.write_crs(dataset.pyproj_srs, inplace=True)
 
         # update metadata shared across all variables
@@ -133,7 +133,7 @@ class MetadataMapper:
 
         dataset.attrs.update(shared_metadata)
 
-        if set(dataset.dims).issubset({"x", "y"}):
+        if "x" in dataset.dims:
             # update coordinate metadata
             dataset["x"].attrs.update({
                 "standard_name": "projection_x_coordinate",
@@ -141,6 +141,7 @@ class MetadataMapper:
                 "units": "m",
             })
 
+        if "y" in dataset.dims:
             dataset["y"].attrs.update({
                 "standard_name": "projection_y_coordinate",
                 "long_name": "y coordinate of projection",

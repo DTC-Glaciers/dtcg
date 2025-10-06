@@ -75,7 +75,7 @@ class GeoZarrHandler(MetadataMapper):
         self._define_encodings(ds, ds_name)
 
         # convert dataset to datatree
-        self.ds = xr.DataTree.from_dict({ds_name: ds})
+        self.data_tree = xr.DataTree.from_dict({ds_name: ds})
 
     def _validate_dataset(self: GeoZarrHandler, ds: xr.Dataset) -> xr.Dataset:
         """Validate the input dataset to ensure it includes required
@@ -216,7 +216,7 @@ class GeoZarrHandler(MetadataMapper):
             raise FileNotFoundError(
                 f"Base directory of 'storage_directory' does not exist: {dir_path}"
             )
-        self.ds.to_zarr(
+        self.data_tree.to_zarr(
             storage_directory,
             mode="w" if overwrite else "a",
             consolidated=True,
@@ -237,7 +237,7 @@ class GeoZarrHandler(MetadataMapper):
         overwrite : bool
             If True, allow a layer of the same name to be overwritten.
         """
-        if ds_name in self.ds.children and not overwrite:
+        if ds_name in self.data_tree.children and not overwrite:
             raise ValueError(f"Group '{ds_name}' already exists.")
 
         # prepare new dataset
@@ -251,4 +251,4 @@ class GeoZarrHandler(MetadataMapper):
         for var in ds.data_vars:
             self.METADATA_SCHEMA.validate(ds[var].attrs)
 
-        self.ds[ds_name] = xr.DataTree(dataset=ds)
+        self.data_tree[ds_name] = xr.DataTree(dataset=ds)
