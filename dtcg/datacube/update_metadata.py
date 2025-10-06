@@ -181,16 +181,16 @@ class MetadataMapper:
         """
         # check there are mappings for all variables in the dataset
         difference = set(dataset.data_vars) - set(self.metadata_mappings.keys())
-        print(difference)
-        print(dataset.data_vars)
-        print(self.metadata_mappings.keys())
         if difference:
-            warnings.warn(
+            warning_msg = (
                 "Metadata mapping is missing for the following variables: "
                 f"{sorted(difference)}. The metadata for these variables might "
                 "not be compliant with Climate and Forecast conventions "
                 "https://cfconventions.org/."
             )
+            with warnings.catch_warnings():
+                warnings.simplefilter("always")
+                warnings.warn(warning_msg, UserWarning, stacklevel=2)
 
         # simple function to apply metadata to all layers in an xarray dataset
         for data_name, metadata in self.metadata_mappings.items():
