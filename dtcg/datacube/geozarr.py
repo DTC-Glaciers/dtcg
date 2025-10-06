@@ -245,6 +245,7 @@ class GeoZarrHandler(MetadataMapper):
         self._define_encodings(ds, ds_name)
 
         # validate dataset attributes
-        self.METADATA_SCHEMA.validate(ds.attrs)
+        for var in ds.data_vars:
+            self.METADATA_SCHEMA.validate(ds[var].attrs)
 
         self.ds[ds_name] = xr.DataTree(dataset=ds)
