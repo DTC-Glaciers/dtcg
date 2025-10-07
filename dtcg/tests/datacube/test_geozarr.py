@@ -59,6 +59,15 @@ class TestGeoZarrWriter:
                 "source": "wibble",
                 "comment": "wobble",
                 "references": "moneypenny",
+            },
+            "precipitation": {
+                "standard_name": "bond",
+                "long_name": "james bond",
+                "units": "007",
+                "institution": "mi6",
+                "source": "wibble",
+                "comment": "wobble",
+                "references": "moneypenny",
             }
         }
         metadata_path = os.path.join(tmp_path, "meta.yaml")
@@ -91,9 +100,8 @@ class TestGeoZarrWriter:
             assert param in root_group
             assert "_ARRAY_DIMENSIONS" in root_group[param].attrs
             assert root_group[param].attrs["grid_mapping"] == "spatial_ref"
-            if param == "temperature":
-                assert root_group[param].attrs["standard_name"] == "bond"
-                assert root_group[param].attrs["references"] == "moneypenny"
+            assert root_group[param].attrs["standard_name"] == "bond"
+            assert root_group[param].attrs["references"] == "moneypenny"
 
         for coord in ["x", "y", "t"]:
             assert coord in root_group
@@ -139,3 +147,24 @@ class TestGeoZarrWriter:
             ValueError, match="Coordinate variable for dimension 't' is missing"
         ):
             GeoZarrHandler(ds=ds)
+
+    def test_add_layer(self, test_dataset):
+        """Test that add layer functionality works correctly."""
+        ds, metadata_path = test_dataset
+        ds2 = ds.copy(deep=True)
+
+        handler = GeoZarrHandler(
+            ds=ds,
+            metadata_mapping_file_path=metadata_path,
+        )
+
+        handler.add_layer(ds2, "L2")
+
+        assert "L2" in handler.data_tree
+        assert isinstance(handler.data_tree["L2"], xr.DataTree)
+        assert isinstance(handler.data_tree["L2"].ds, xr.Dataset)
+        for var in ["temperature", "precipitation", "x", "y", "t"]:
+            xr.testing.assert_equal(ds2[var], handler.data_tree["L2"].ds[var])
+        for var in ["temperature", "precipitation"]:
+            assert "grid_mapping" in handler.data_tree["L2"].ds[var].attrs
+        assert "spatial_ref" in handler.data_tree["L2"].ds.coords

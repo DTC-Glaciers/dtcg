@@ -249,6 +249,8 @@ class GeoZarrHandler(MetadataMapper):
 
         # validate dataset attributes
         for var in ds.data_vars:
-            self.METADATA_SCHEMA.validate(ds[var].attrs)
+            attrs = ds[var].attrs.copy()
+            attrs.pop("grid_mapping", None)
+            self.METADATA_SCHEMA.validate(attrs)
 
         self.data_tree[ds_name] = xr.DataTree(dataset=ds)
