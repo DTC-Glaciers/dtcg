@@ -1997,6 +1997,18 @@ class HoloviewsDashboardL2(HoloviewsDashboard, BokehCryotempo):
         self.figures = []
         self.dashboard = hv.Layout()
 
+    def set_dashboard(self, figures: list):
+        """Set dashboard from a sequence of figures.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        self.dashboard = figures
+
+        return self.dashboard
+
 
 class HoloviewsDashboardL1(HoloviewsDashboard):
     """Holoviews dashboard for runoff data.
