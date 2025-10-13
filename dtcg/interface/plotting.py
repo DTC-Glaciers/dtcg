@@ -1382,7 +1382,11 @@ class BokehCryotempo(BokehFigureFormat):
         return overlay
 
     def plot_eolis_timeseries(
-        self, datacube, cumulative: bool = False, glacier_name: str = ""
+        self,
+        datacube,
+        glacier_area=None,
+        mass_balance: bool = False,
+        glacier_name: str = "",
     ) -> hv.Overlay:
         """Plot mean and standard deviation of elevation change from EOLIS data.
 
@@ -1390,9 +1394,9 @@ class BokehCryotempo(BokehFigureFormat):
         ----------
         datacube : dtcg.datacube.geozarr.GeoZarrHandler
             CryoTEMPO-EOLIS observations for elevation change.
-        cumulative : bool, default False
-            If True, calculate and display the cumulative sum of
-            elevation change.
+        mass_balance : bool, default False
+            If True, calculate and display the specific mass balance
+            from elevation change. Requires a valid glacier area.
         glacier_name : str, default empty string
             Name of glacier added to plot title.
 
@@ -1402,22 +1406,49 @@ class BokehCryotempo(BokehFigureFormat):
             Interactive figure showing the mean and standard deviation
             of elevation change.
         """
-        self.set_hover_date_tooltips(
-            x_format="$snap_x{%B}",
-            y_name="Elevation Change",
-            y_format="$snap_y{%.2f m}",
-        )
 
-        dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
-        plot_data = {"sigma": dataset.eolis_elevation_change_sigma_timeseries}
-        if not cumulative:
-            plot_data["mean"] = dataset.eolis_elevation_change_timeseries
+        if isinstance(datacube, xr.Dataset):
+            dataset = xr.decode_cf(datacube)
         else:
-            plot_data["mean"] = dataset.eolis_elevation_change_timeseries.cumsum()
+            dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
+        plot_data = {
+            "sigma": dataset.eolis_elevation_change_sigma_timeseries,
+            "mean": dataset.eolis_elevation_change_timeseries,
+        }
         sigma_minimum = plot_data["mean"] - plot_data["sigma"]
         sigma_maximum = plot_data["mean"] + plot_data["sigma"]
+        if not mass_balance:
+
+            title = "Elevation Change"
+            ylabel = "Elevation Change [m]"
+            self.set_hover_date_tooltips(
+                x_format="$snap_x{%B}",
+                y_name="Elevation Change",
+                y_format="$snap_y{%.2f m}",
+            )
+        else:
+            smb = self.get_smb_from_elevation_change(
+                elevation=plot_data["mean"], area=glacier_area
+            )
+
+            sigma_minimum = self.get_smb_from_elevation_change(
+                elevation=sigma_minimum, area=glacier_area
+            )
+            sigma_maximum = self.get_smb_from_elevation_change(
+                elevation=sigma_maximum, area=glacier_area
+            )
+
+            plot_data["mean"] = smb
+            title = "Specific Mass Balance"
+            ylabel = "Monthly SMB [mm w.e.]"
+            self.set_hover_date_tooltips(
+                x_format="$snap_x{%B}",
+                y_name="Monthly SMB",
+                y_format="$snap_y{%.2f mm w.e.}",
+            )
 
         mean_period = f"{dataset.t[0].dt.year.values} - {dataset.t[-1].dt.year.values}"
+
         figures = []
         figures = self.add_curve_to_figures(
             data=plot_data,
@@ -1435,9 +1466,6 @@ class BokehCryotempo(BokehFigureFormat):
         ).opts(color="grey", alpha=0.2)
         figures.append(area)
 
-        title = "Elevation Change"
-        if cumulative:
-            title = f"Cumulative {title}"
         if glacier_name:
             title = f"{title}\n {glacier_name}"
         xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
@@ -1445,7 +1473,7 @@ class BokehCryotempo(BokehFigureFormat):
         overlay = self.set_overlay_options(
             hv.Overlay(figures),
             xlabel="Year",
-            ylabel="Elevation Change [m]",
+            ylabel=ylabel,
             title=title,
             xformatter=xformatter,
             autorange="y",
@@ -1790,8 +1818,12 @@ class BokehCryotempo(BokehFigureFormat):
         array_like
             Specific mass balance.
         """
+        if isinstance(elevation, xr.DataArray):
+            initial_elevation = elevation[0]
+        else:
+            initial_elevation = elevation.iloc[0]
 
-        smb = 1000 * (elevation - elevation.iloc[0]) * ice_density / area
+        smb = 1000 * (elevation - initial_elevation) * ice_density / area
         return smb
 
     def get_percentage_difference(self, a, b):
@@ -1890,7 +1922,7 @@ class BokehSynthetic(BokehCryotempo):
                 xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
                 tools=["xwheel_zoom", "xpan"],
                 active_tools=["xwheel_zoom"],
-                legend_position="top",
+                legend_position="top_left",
                 legend_opts={
                     "orientation": "vertical",
                     # "css_variables": {"font-size": "1em", "display": "inline"},
