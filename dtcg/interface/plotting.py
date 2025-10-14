@@ -1366,7 +1366,7 @@ class BokehCryotempo(BokehFigureFormat):
 
         if glacier_name:
             glacier_name = f"{glacier_name}, "
-        title = f"Daily Specific Mass Balance"
+        title = f"Specific Mass Balance"
         if cumulative:
             title = f"Cumulative {title}"
 
@@ -1977,7 +1977,6 @@ class HoloviewsDashboard(BokehFigureFormat):
         """
         # columns = len(figures)
         if isinstance(figures, list):
-            layout = figures[0]
             if len(figures) > 1:
                 layout = figures
             layout = hv.Layout(layout).cols(2)
@@ -2037,7 +2036,14 @@ class HoloviewsDashboardL2(HoloviewsDashboard, BokehCryotempo):
         figures : list[hv.Overlay|hv.Layout]
             A sequence of figures.
         """
-        self.dashboard = figures
+        # self.dashboard = figures
+        self.dashboard = self.set_layout(figures=figures).opts(
+            shared_axes=False,
+            title=self.title,
+            fontsize={"title": 18},
+            sizing_mode="scale_both",
+            merge_tools=False,
+        )
 
         return self.dashboard
 
@@ -2130,4 +2136,47 @@ class HoloviewsDashboardL1(HoloviewsDashboard):
         if glacier_name:
             self.set_dashboard_title(name=glacier_name)
         self.set_dashboard(figures=self.figures)
+        return self.dashboard
+
+    def set_layout(self, figures: list) -> hv.Layout:
+        """Compose Layout from a sequence of overlays or layouts.
+
+        Dynamically adds a sequence of overlays to a layout.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        # columns = len(figures)
+        if isinstance(figures, list):
+            if len(figures) > 1:
+                layout = figures
+            else:
+                layout = figures[0]
+            layout = hv.Layout(layout).cols(2)
+        else:
+            layout = hv.Layout([figures])
+
+        layout = layout.opts(sizing_mode="stretch_both", tabs=True)
+
+        return layout
+
+    def set_dashboard(self, figures: list):
+        """Set dashboard from a sequence of figures.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        # self.dashboard = figures
+        self.dashboard = self.set_layout(figures=figures).opts(
+            shared_axes=False,
+            title=self.title,
+            fontsize={"title": 18},
+            sizing_mode="scale_both",
+            merge_tools=False,
+        )
+
         return self.dashboard
