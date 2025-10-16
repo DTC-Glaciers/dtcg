@@ -31,6 +31,7 @@ import pandas as pd
 import xarray as xr
 from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 from dateutil.tz import UTC
+import geopandas as gpd
 
 hv.extension("bokeh")
 hv.renderer("bokeh").webgl = True
@@ -534,6 +535,132 @@ class BokehMap(BokehFigureFormat):
                 glacier_data=glacier_data, name=glacier_name, ax=overlay
             )
             overlay = overlay * fig_basin_highlight
+
+        return overlay
+
+
+class BokehMapOutlines(BokehMap):
+    """Plot glacier outlines as a map.
+
+    Attributes
+    ----------
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
+    hover_tool : bokeh.models.HoverTool
+        Hover tool for Bokeh figures.
+    palette : tuple[str]
+        Colour palette.
+    defaults : dict
+        Default options for all Bokeh figures.
+    """
+
+
+    def plot_glacier_highlight(self, glacier_outlines):
+        overlay = (
+            gv.Polygons(glacier_outlines).opts(
+                fill_color=self.palette[2],
+                line_color="black",
+                line_width=0.8,
+                fill_alpha=0.4,
+                color_index=None,
+            )
+        ).opts(
+            tools=[self.hover_tool],
+        )
+
+        return overlay
+
+    def plot_subregion(
+        self,
+        shapefile,
+        glacier_data,
+        subregion_name: str,
+    ) -> hv.Overlay:
+        """Plot a subregion with all its glaciers.
+
+        Parameters
+        ----------
+        shapefile : geopandas.GeoDataFrame
+            Subregion shapefile.
+        glacier_data: geopandas.GeoDataFrame
+            Glacier outlines.
+        subregion_name : str
+            Name of subregion.
+
+        Returns
+        -------
+        hv.Overlay
+            Interactive figure of all glaciers in a subregion.
+        """
+
+        mask = shapefile.O1Region == subregion_name
+        region_name = shapefile[mask]["name"].values[0]
+        title = self.get_title(title=f"{region_name}")
+        
+        overlay = (
+            (
+                # self.plot_shapefile(
+                #     shapefile[mask],
+                #     fill_color=self.palette[0],
+                #     line_color="black",
+                #     line_width=1.0,
+                #     fill_alpha=0.4,
+                #     color_index=None,
+                #     scalebar=True,  # otherwise won't appear in overlay
+                # ) *
+                gv.tile_sources.EsriWorldTopo()
+                * self.plot_shapefile(
+                    glacier_data,
+                    fill_color=self.palette[1],
+                    line_color="black",
+                    line_width=0.3,
+                    fill_alpha=0.9,
+                    color_index=None,
+                    tools=[self.hover_tool],
+                )
+            )
+            .opts(**self.defaults)
+            .opts(
+                title=title,
+                tools=[self.hover_tool],
+            )
+        )
+
+        return overlay
+
+    def plot_subregion_with_glacier(
+        self, glacier_outlines: gpd.GeoDataFrame, region_name: str = ""
+    ) -> hv.Overlay:
+        """Plot a subregion with a highlighted glacier.
+
+        Parameters
+        ----------
+        glacier_outlines: geopandas.GeoDataFrame
+            Glacier outlines. This *must* be projected to EPSG:4326.
+        region_name : str, optional
+            Name of subregion.
+
+        Returns
+        -------
+        hv.Overlay
+            Map of region with glacier outlines.
+        """
+        region_plot = self.plot_subregion(shapefile=shapefile,subregion_name=region_name)
+        glacier_highlight = self.plot_glacier_highlight(
+            glacier_outlines=glacier_outlines
+        )
+        overlay = glacier_highlight * gv.tile_sources.EsriWorldTopo()
+        overlay = overlay.opts(
+            # **self.defaults,
+            scalebar=True,
+            title=region_name,
+            active_tools=["pan", "wheel_zoom"],
+            backend_opts={"title.align": "center"},
+            toolbar=None,
+            show_frame=False,
+            margin=0,
+            border=0,
+        )
 
         return overlay
 
