@@ -1079,8 +1079,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
         runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
         runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
         eolis = self.get_cached_eolis_data(cache_path=cache_path)
+        outlines = self.get_cached_outline_data(cache_path=cache_path)
 
-        cached_data = {"gdir": gdir, "smb": smb, "runoff": runoff, "eolis": eolis}
+        cached_data = {
+            "gdir": gdir,
+            "smb": smb,
+            "runoff": runoff,
+            "eolis": eolis,
+            "outlines": outlines,
+        }
 
         return cached_data
 
@@ -1144,3 +1151,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
             metadata = dict(json.loads(raw))
 
         return metadata
+
+    def get_cached_outline_data(self, cache_path: Path) -> gpd.GeoDataFrame:
+        """Get glacier outlines.
+
+        This is identical to ``gdir.read_shapefile``, so the CRS should
+        later be converted to EPSG:4236"""
+        try:
+            glacier_outlines = gpd.read_feather(cache_path / "outlines.shp")
+        except FileNotFoundError:
+            return None
+
+        return glacier_outlines
