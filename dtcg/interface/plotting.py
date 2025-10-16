@@ -382,6 +382,7 @@ class BokehMap(BokehFigureFormat):
             ("Min Elevation", "@Zmin{%.2f m}"),
             ("Latitude", "@CenLat{%.2f °N}"),
             ("Longitude", "@CenLon{%.2f °E}"),
+            ("Longitude", "@CenLon{%.2f °E}"),
         ]
         self.set_hover_tool(mode="mouse")
         self.hover_tool = self.get_hover_tool(mode="mouse")
@@ -554,6 +555,31 @@ class BokehMapOutlines(BokehMap):
         Default options for all Bokeh figures.
     """
 
+    def __init__(self):
+        super().__init__()
+
+        self.tooltips = [
+            ("Name", "@Name"),
+            ("RGI ID", "@RGIId"),
+            ("GLIMS ID", "@GLIMSId"),
+            ("Area", "@Area{%0.2f km²}"),
+            ("Max Elevation", "@Zmax{%.2f m}"),
+            ("Min Elevation", "@Zmin{%.2f m}"),
+            ("Latitude", "@CenLat{%.2f °N}"),
+            ("Longitude", "@CenLon{%.2f °E}"),
+            ("Outline Date", "@BgnDate"),
+        ]
+        self.set_hover_tool(mode="mouse")
+        self.hover_tool = self.get_hover_tool(mode="mouse")
+        self.palette = self.get_color_palette("hillshade_glacier")
+        self.set_defaults(
+            {
+                "xlabel": "Longitude (°E)",
+                "ylabel": "Latitude (°N)",
+                "xaxis": None,
+                "yaxis": None,
+            }
+        )
 
     def plot_glacier_highlight(self, glacier_outlines):
         overlay = (
@@ -570,12 +596,7 @@ class BokehMapOutlines(BokehMap):
 
         return overlay
 
-    def plot_subregion(
-        self,
-        shapefile,
-        glacier_data,
-        subregion_name: str,
-    ) -> hv.Overlay:
+    def plot_region(self, shapefile, glacier_data, region_id: int) -> hv.Overlay:
         """Plot a subregion with all its glaciers.
 
         Parameters
@@ -593,22 +614,23 @@ class BokehMapOutlines(BokehMap):
             Interactive figure of all glaciers in a subregion.
         """
 
-        mask = shapefile.O1Region == subregion_name
-        region_name = shapefile[mask]["name"].values[0]
-        title = self.get_title(title=f"{region_name}")
-        
+        mask = shapefile.O1Region == f"{int(region_id)}"  # single digit string
+        # region_name = shapefile[mask]["name"].values[0]
+        # title = self.get_title(title=f"{region_name}")
+
         overlay = (
             (
-                # self.plot_shapefile(
-                #     shapefile[mask],
-                #     fill_color=self.palette[0],
-                #     line_color="black",
-                #     line_width=1.0,
-                #     fill_alpha=0.4,
-                #     color_index=None,
-                #     scalebar=True,  # otherwise won't appear in overlay
-                # ) *
-                gv.tile_sources.EsriWorldTopo()
+                self.plot_shapefile(
+                    shapefile[mask],
+                    fill_color=self.palette[0],
+                    line_color="black",
+                    line_width=1.0,
+                    fill_alpha=0.4,
+                    color_index=None,
+                    scalebar=True,  # otherwise won't appear in overlay
+                    tools=[self.hover_tool],
+                )
+                * gv.tile_sources.EsriWorldTopo()
                 * self.plot_shapefile(
                     glacier_data,
                     fill_color=self.palette[1],
@@ -616,40 +638,45 @@ class BokehMapOutlines(BokehMap):
                     line_width=0.3,
                     fill_alpha=0.9,
                     color_index=None,
-                    tools=[self.hover_tool],
                 )
             )
             .opts(**self.defaults)
             .opts(
-                title=title,
                 tools=[self.hover_tool],
             )
         )
 
         return overlay
 
-    def plot_subregion_with_glacier(
-        self, glacier_outlines: gpd.GeoDataFrame, region_name: str = ""
+    def plot_region_with_glacier(
+        self, shapefile: gpd.GeoDataFrame, rgi_id: str, region_name: str = ""
     ) -> hv.Overlay:
-        """Plot a subregion with a highlighted glacier.
+        """Plot a region with a highlighted glacier.
 
         Parameters
         ----------
-        glacier_outlines: geopandas.GeoDataFrame
+        shapefile: geopandas.GeoDataFrame
             Glacier outlines. This *must* be projected to EPSG:4326.
+        rgi_id : str
+            RGI ID. Converted to RGI60.
         region_name : str, optional
-            Name of subregion.
+            Name of region.
 
         Returns
         -------
         hv.Overlay
             Map of region with glacier outlines.
         """
-        region_plot = self.plot_subregion(shapefile=shapefile,subregion_name=region_name)
-        glacier_highlight = self.plot_glacier_highlight(
-            glacier_outlines=glacier_outlines
+
+        # Convert to RGI60
+        glacier_data = shapefile[shapefile["RGIId"] == f"RGI60-{rgi_id[6:]}"]
+
+        region_plot = self.plot_region(
+            shapefile=shapefile, glacier_data=glacier_data, region_id=rgi_id[6:8]
         )
-        overlay = glacier_highlight * gv.tile_sources.EsriWorldTopo()
+        glacier_highlight = self.plot_glacier_highlight(glacier_outlines=glacier_data)
+        # )
+        overlay = glacier_highlight * region_plot
         overlay = overlay.opts(
             # **self.defaults,
             scalebar=True,

@@ -321,6 +321,35 @@ class BindingsOggmModel:
 
         return gdirs
 
+    def get_outline_source_date(self, glacier_data: gpd.GeoDataFrame) -> int:
+        """Get the date for an outline's source.
+
+        Parameters
+        ----------
+        glacier_data : gpd.GeoDataFrame
+            Outline data for a glacier. Must conform to
+            `RGI60 specifications <https://www.glims.org/RGI/00_rgi60_TechnicalNote.pdf>`__.
+
+        Returns
+        -------
+        int
+            The year the outline's source data was published.
+        """
+
+        outline_date = glacier_data["BgnDate"]
+
+        outline_date = glacier_data.get("EndDate", "-9999999")
+        if "EndDate" in glacier_data.keys():
+            outline_date = glacier_data["EndDate"]
+
+        if outline_date == "-9999999":
+            outline_date = glacier_data["BgnDate"]
+        
+
+        outline_date = int(outline_date[:4])
+
+        return outline_date
+
     def set_flowlines(self, gdir) -> None:
         """Compute glacier flowlines if missing from glacier directory."""
         if not os.path.exists(gdir.get_filepath("inversion_flowlines")):
