@@ -68,7 +68,7 @@ class TestGeoZarrWriter:
                 "source": "wibble",
                 "comment": "wobble",
                 "references": "moneypenny",
-            }
+            },
         }
         metadata_path = os.path.join(tmp_path, "meta.yaml")
         with open(metadata_path, "w") as f:
@@ -124,7 +124,7 @@ class TestGeoZarrWriter:
             target_chunk_mb=1,
         )
 
-        output_path = os.path.join(tmp_path, 'test_zarr.zarr')
+        output_path = os.path.join(tmp_path, "test_zarr.zarr")
         writer.export(output_path)
 
         root = zarr.open_group(store=output_path, mode="r")
@@ -168,3 +168,35 @@ class TestGeoZarrWriter:
         for var in ["temperature", "precipitation"]:
             assert "grid_mapping" in handler.data_tree["L2"].ds[var].attrs
         assert "spatial_ref" in handler.data_tree["L2"].ds.coords
+
+    def test_get_layer(self, test_dataset):
+        """Test getting a datatree layer."""
+        ds, metadata_path = test_dataset
+
+        handler = GeoZarrHandler(
+            ds=ds,
+            metadata_mapping_file_path=metadata_path,
+        )
+
+        datacube = handler.get_layer(ds_name="L1")
+        assert isinstance(datacube, xr.Dataset)
+        for var in ["temperature", "precipitation", "x", "y", "t"]:
+            xr.testing.assert_equal(ds[var], datacube[var])
+        for var in ["temperature", "precipitation"]:
+            assert "grid_mapping" in datacube[var].attrs
+        assert "spatial_ref" in datacube.coords
+
+    def test_get_layer_errors(self, test_dataset):
+        """Test errors are correctly raised when getting a layer."""
+
+        ds, metadata_path = test_dataset
+
+        handler = GeoZarrHandler(
+            ds=ds,
+            metadata_mapping_file_path=metadata_path,
+        )
+
+        # Search for a non-existent layer
+
+        with pytest.raises(KeyError, match="L2 layer not found in the data tree."):
+            handler.get_layer("L2")

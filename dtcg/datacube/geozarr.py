@@ -176,7 +176,10 @@ class GeoZarrHandler(MetadataMapper):
         for var in ds.data_vars:
             chunk_sizes = self._calculate_chunk_sizes(ds[var])
             chunks = tuple(chunk_sizes.get(dim) for dim in ds[var].dims)
-            self.encoding[f"/{ds_name}"][var] = {"chunks": chunks, "compressor": self.compressor}
+            self.encoding[f"/{ds_name}"][var] = {
+                "chunks": chunks,
+                "compressor": self.compressor,
+            }
 
     def _update_metadata(self, ds: xr.Dataset) -> xr.Dataset:
         """Update metadata to Climate and Forecast convention.
@@ -224,8 +227,9 @@ class GeoZarrHandler(MetadataMapper):
             encoding=self.encoding,
         )
 
-    def add_layer(self: GeoZarrHandler, ds: xr.Dataset, ds_name: str,
-                  overwrite: bool = False) -> None:
+    def add_layer(
+        self: GeoZarrHandler, ds: xr.Dataset, ds_name: str, overwrite: bool = False
+    ) -> None:
         """Add a new dataset as a child group of the DataTree at the root.
 
         Parameters
@@ -254,3 +258,32 @@ class GeoZarrHandler(MetadataMapper):
             self.METADATA_SCHEMA.validate(attrs)
 
         self.data_tree[ds_name] = xr.DataTree(dataset=ds)
+
+    def get_layer(self: GeoZarrHandler, ds_name: str) -> xr.Dataset:
+        """Get a dataset from a DataTree.
+
+        Parameters
+        ----------
+        ds_name : str
+            Layer name.
+
+        Returns
+        -------
+        xr.Dataset
+            Dataset layer in tree.
+
+        Raises
+        ------
+        KeyError
+            If the layer name is not present in the data tree.
+        AttributeError
+            If the layer does not contain a dataset.
+
+
+        """
+        try:
+            layer = self.data_tree[ds_name].ds
+        except KeyError:
+            raise KeyError(f"{ds_name} layer not found in the data tree.")
+
+        return layer
