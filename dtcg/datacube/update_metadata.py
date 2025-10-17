@@ -112,7 +112,7 @@ class MetadataMapper:
         title, and summary.
         """
         # create a spatial_ref layer in the dataset
-        if not dataset.rio.crs:
+        if not dataset.rio.crs and not {"x", "y"}.isdisjoint(dataset.dims):
             dataset.rio.write_crs(dataset.pyproj_srs, inplace=True)
 
         # update metadata shared across all variables
@@ -133,18 +133,20 @@ class MetadataMapper:
 
         dataset.attrs.update(shared_metadata)
 
-        # update coordinate metadata
-        dataset["x"].attrs.update({
-            "standard_name": "projection_x_coordinate",
-            "long_name": "x coordinate of projection",
-            "units": "m",
-        })
+        if "x" in dataset.dims:
+            # update coordinate metadata
+            dataset["x"].attrs.update({
+                "standard_name": "projection_x_coordinate",
+                "long_name": "x coordinate of projection",
+                "units": "m",
+            })
 
-        dataset["y"].attrs.update({
-            "standard_name": "projection_y_coordinate",
-            "long_name": "y coordinate of projection",
-            "units": "m",
-        })
+        if "y" in dataset.dims:
+            dataset["y"].attrs.update({
+                "standard_name": "projection_y_coordinate",
+                "long_name": "y coordinate of projection",
+                "units": "m",
+            })
 
         if "t" in dataset.dims:
             # assuming unix epoch
@@ -180,12 +182,15 @@ class MetadataMapper:
         # check there are mappings for all variables in the dataset
         difference = set(dataset.data_vars) - set(self.metadata_mappings.keys())
         if difference:
-            warnings.warn(
+            warning_msg = (
                 "Metadata mapping is missing for the following variables: "
                 f"{sorted(difference)}. The metadata for these variables might "
                 "not be compliant with Climate and Forecast conventions "
                 "https://cfconventions.org/."
             )
+            with warnings.catch_warnings():
+                warnings.simplefilter("always")
+                warnings.warn(warning_msg, UserWarning, stacklevel=2)
 
         # simple function to apply metadata to all layers in an xarray dataset
         for data_name, metadata in self.metadata_mappings.items():

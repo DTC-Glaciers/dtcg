@@ -618,7 +618,7 @@ class CalibratorCryotempo(Calibrator):
         if not datacube:
             ref_mb = self.get_geodetic_mb(gdir=gdir)
         else:
-            ref_mb = self.get_geodetic_mb(gdir=gdir, ds=datacube.ds)
+            ref_mb = self.get_geodetic_mb(gdir=gdir, dataset=datacube)
 
         if isinstance(model, str):
             try:
