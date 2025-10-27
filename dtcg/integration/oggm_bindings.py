@@ -321,6 +321,35 @@ class BindingsOggmModel:
 
         return gdirs
 
+    def get_outline_source_date(self, glacier_data: gpd.GeoDataFrame) -> int:
+        """Get the date for an outline's source.
+
+        Parameters
+        ----------
+        glacier_data : gpd.GeoDataFrame
+            Outline data for a glacier. Must conform to
+            `RGI60 specifications <https://www.glims.org/RGI/00_rgi60_TechnicalNote.pdf>`__.
+
+        Returns
+        -------
+        int
+            The year the outline's source data was published.
+        """
+
+        outline_date = glacier_data["BgnDate"]
+
+        outline_date = glacier_data.get("EndDate", "-9999999")
+        if "EndDate" in glacier_data.keys():
+            outline_date = glacier_data["EndDate"]
+
+        if outline_date == "-9999999":
+            outline_date = glacier_data["BgnDate"]
+        
+
+        outline_date = int(outline_date[:4])
+
+        return outline_date
+
     def set_flowlines(self, gdir) -> None:
         """Compute glacier flowlines if missing from glacier directory."""
         if not os.path.exists(gdir.get_filepath("inversion_flowlines")):
@@ -1079,8 +1108,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
         runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
         runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
         eolis = self.get_cached_eolis_data(cache_path=cache_path)
+        outlines = self.get_cached_outline_data(cache_path=cache_path)
 
-        cached_data = {"gdir": gdir, "smb": smb, "runoff": runoff, "eolis": eolis}
+        cached_data = {
+            "gdir": gdir,
+            "smb": smb,
+            "runoff": runoff,
+            "eolis": eolis,
+            "outlines": outlines,
+        }
 
         return cached_data
 
@@ -1144,3 +1180,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
             metadata = dict(json.loads(raw))
 
         return metadata
+
+    def get_cached_outline_data(self, cache_path: Path) -> gpd.GeoDataFrame:
+        """Get glacier outlines.
+
+        This is identical to ``gdir.read_shapefile``, so the CRS should
+        later be converted to EPSG:4236"""
+        try:
+            glacier_outlines = gpd.read_feather(cache_path / "outlines.shp")
+        except FileNotFoundError:
+            return None
+
+        return glacier_outlines

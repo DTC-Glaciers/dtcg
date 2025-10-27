@@ -31,6 +31,7 @@ import pandas as pd
 import xarray as xr
 from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 from dateutil.tz import UTC
+import geopandas as gpd
 
 hv.extension("bokeh")
 hv.renderer("bokeh").webgl = True
@@ -353,6 +354,30 @@ class BokehFigureFormat:
         )
         return overlay
 
+    def decode_datacube(self, datacube: xr.Dataset) -> xr.Dataset:
+        """Get a dataset decoded into CF conventions.
+
+        This should be called after data processing to avoid changing
+        the datacube's metadata.
+
+        Parameters
+        ----------
+        datacube : dtcg.datacube.geozarr.GeoZarrHandler or xr.Dataset
+            CryoTEMPO-EOLIS observations for elevation change.
+
+        Returns
+        -------
+        xr.Dataset
+            Dataset decoded into CF conventions.
+
+        """
+        if isinstance(datacube, xr.Dataset):
+            dataset = xr.decode_cf(datacube)
+        else:
+            dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
+
+        return dataset
+
 
 class BokehMap(BokehFigureFormat):
     """Plot data as a map.
@@ -380,6 +405,7 @@ class BokehMap(BokehFigureFormat):
             ("Max Elevation", "@Zmax{%.2f m}"),
             ("Min Elevation", "@Zmin{%.2f m}"),
             ("Latitude", "@CenLat{%.2f °N}"),
+            ("Longitude", "@CenLon{%.2f °E}"),
             ("Longitude", "@CenLon{%.2f °E}"),
         ]
         self.set_hover_tool(mode="mouse")
@@ -534,6 +560,158 @@ class BokehMap(BokehFigureFormat):
                 glacier_data=glacier_data, name=glacier_name, ax=overlay
             )
             overlay = overlay * fig_basin_highlight
+
+        return overlay
+
+
+class BokehMapOutlines(BokehMap):
+    """Plot glacier outlines as a map.
+
+    Attributes
+    ----------
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
+    hover_tool : bokeh.models.HoverTool
+        Hover tool for Bokeh figures.
+    palette : tuple[str]
+        Colour palette.
+    defaults : dict
+        Default options for all Bokeh figures.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.tooltips = [
+            ("Name", "@Name"),
+            ("RGI ID", "@RGIId"),
+            ("GLIMS ID", "@GLIMSId"),
+            ("Area", "@Area{%0.2f km²}"),
+            ("Max Elevation", "@Zmax{%.2f m}"),
+            ("Min Elevation", "@Zmin{%.2f m}"),
+            ("Latitude", "@CenLat{%.2f °N}"),
+            ("Longitude", "@CenLon{%.2f °E}"),
+            ("Outline Date", "@BgnDate"),
+        ]
+        self.set_hover_tool(mode="mouse")
+        self.hover_tool = self.get_hover_tool(mode="mouse")
+        self.palette = self.get_color_palette("hillshade_glacier")
+        self.set_defaults(
+            {
+                "xlabel": "Longitude (°E)",
+                "ylabel": "Latitude (°N)",
+                "xaxis": None,
+                "yaxis": None,
+            }
+        )
+
+    def plot_glacier_highlight(self, glacier_outlines):
+        overlay = (
+            gv.Polygons(glacier_outlines).opts(
+                fill_color=self.palette[2],
+                line_color="black",
+                line_width=0.8,
+                fill_alpha=0.4,
+                color_index=None,
+            )
+        ).opts(
+            tools=[self.hover_tool],
+        )
+
+        return overlay
+
+    def plot_region(self, shapefile, glacier_data, region_id: int) -> hv.Overlay:
+        """Plot a subregion with all its glaciers.
+
+        Parameters
+        ----------
+        shapefile : geopandas.GeoDataFrame
+            Subregion shapefile.
+        glacier_data: geopandas.GeoDataFrame
+            Glacier outlines.
+        subregion_name : str
+            Name of subregion.
+
+        Returns
+        -------
+        hv.Overlay
+            Interactive figure of all glaciers in a subregion.
+        """
+
+        mask = shapefile.O1Region == f"{int(region_id)}"  # single digit string
+        # region_name = shapefile[mask]["name"].values[0]
+        # title = self.get_title(title=f"{region_name}")
+
+        overlay = (
+            (
+                self.plot_shapefile(
+                    shapefile[mask],
+                    fill_color=self.palette[0],
+                    line_color="black",
+                    line_width=1.0,
+                    fill_alpha=0.4,
+                    color_index=None,
+                    scalebar=True,  # otherwise won't appear in overlay
+                    tools=[self.hover_tool],
+                )
+                * gv.tile_sources.EsriWorldTopo()
+                * self.plot_shapefile(
+                    glacier_data,
+                    fill_color=self.palette[1],
+                    line_color="black",
+                    line_width=0.3,
+                    fill_alpha=0.9,
+                    color_index=None,
+                )
+            )
+            .opts(**self.defaults)
+            .opts(
+                tools=[self.hover_tool],
+            )
+        )
+
+        return overlay
+
+    def plot_region_with_glacier(
+        self, shapefile: gpd.GeoDataFrame, rgi_id: str, region_name: str = ""
+    ) -> hv.Overlay:
+        """Plot a region with a highlighted glacier.
+
+        Parameters
+        ----------
+        shapefile: geopandas.GeoDataFrame
+            Glacier outlines. This *must* be projected to EPSG:4326.
+        rgi_id : str
+            RGI ID. Converted to RGI60.
+        region_name : str, optional
+            Name of region.
+
+        Returns
+        -------
+        hv.Overlay
+            Map of region with glacier outlines.
+        """
+
+        # Convert to RGI60
+        glacier_data = shapefile[shapefile["RGIId"] == f"RGI60-{rgi_id[6:]}"]
+
+        region_plot = self.plot_region(
+            shapefile=shapefile, glacier_data=glacier_data, region_id=rgi_id[6:8]
+        )
+        glacier_highlight = self.plot_glacier_highlight(glacier_outlines=glacier_data)
+        overlay = glacier_highlight * region_plot
+        overlay = overlay.opts(
+            # **self.defaults,
+            scalebar=True,
+            title=region_name,
+            active_tools=["pan", "wheel_zoom"],
+            backend_opts={"title.align": "center"},
+            toolbar=None,
+            show_frame=False,
+            margin=0,
+            border=0,
+            # xlim=glacier_highlight.range("Latitude")
+        )
 
         return overlay
 
@@ -1254,10 +1432,12 @@ class BokehCryotempo(BokehFigureFormat):
         )
 
         if datacube:
+            if not isinstance(datacube, xr.Dataset):
+                datacube = datacube.ds
             if not gdir:
                 raise ValueError("Provide a glacier directory.")
-            cryotempo_dates = self.get_eolis_dates(datacube.ds)
-            cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
+            cryotempo_dates = self.get_eolis_dates(datacube)
+            cryotempo_dh = self.get_eolis_mean_dh(datacube)
 
             df = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
             if resample:
@@ -1407,10 +1587,7 @@ class BokehCryotempo(BokehFigureFormat):
             of elevation change.
         """
 
-        if isinstance(datacube, xr.Dataset):
-            dataset = xr.decode_cf(datacube)
-        else:
-            dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
+        dataset = self.decode_datacube(datacube=datacube)
         plot_data = {
             "sigma": dataset.eolis_elevation_change_sigma_timeseries,
             "mean": dataset.eolis_elevation_change_timeseries,
@@ -1663,7 +1840,7 @@ class BokehCryotempo(BokehFigureFormat):
     def plot_eolis_smb(
         self,
         datacube,
-        gdir,
+        glacier_area=None,
         years=None,
         ref_year: int = 2015,
         cumulative: bool = False,
@@ -1699,8 +1876,12 @@ class BokehCryotempo(BokehFigureFormat):
             y_name="SMB",
             y_format="$snap_y{%.2f mm w.e.}",
         )
+        datacube = self.decode_datacube(datacube=datacube)
 
-        plot_data = {}
+        plot_data = {
+            "sigma": datacube.eolis_elevation_change_sigma_timeseries,
+            "mean": datacube.eolis_elevation_change_timeseries,
+        }
         figures = []
 
         if years is None:
@@ -1708,14 +1889,13 @@ class BokehCryotempo(BokehFigureFormat):
         start_year = years[0]
         end_year = years[-1]
 
-        cryotempo_dates = self.get_eolis_dates(datacube.ds)
-        cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
-        if cumulative:
-            cryotempo_dh = cryotempo_dh.cumsum()
+        # cryotempo_dates = self.get_eolis_dates(datacube)
+        cryotempo_dates = np.array([pd.Timestamp(t, tz=UTC) for t in datacube.t.values])
+        cryotempo_dh = plot_data["mean"]
 
         df = pd.DataFrame(cryotempo_dh, columns=["elevation"], index=cryotempo_dates)
         mean_by_doy = self.get_mean_smb_by_doy_from_elevation(
-            df=df, ref_year=ref_year, glacier_area=gdir.rgi_area_km2
+            df=df, ref_year=ref_year, glacier_area=glacier_area
         )
         if mean_by_doy is not None:
             plot_data["CryoTEMPO-EOLIS Observations"] = mean_by_doy["smb"]
@@ -1733,7 +1913,7 @@ class BokehCryotempo(BokehFigureFormat):
         # Get all years
         for year in np.arange(int(start_year), int(end_year + 1)):
             mean_by_doy = self.get_mean_smb_by_doy_from_elevation(
-                df=df, ref_year=year, glacier_area=gdir.rgi_area_km2
+                df=df, ref_year=year, glacier_area=glacier_area
             )
             if mean_by_doy is not None:
                 plot_data["CryoTEMPO-EOLIS Aggregate"] = mean_by_doy["smb"]
@@ -1748,7 +1928,7 @@ class BokehCryotempo(BokehFigureFormat):
                     label=label,
                 )
 
-        title = f"Monthly Specific Mass Balance Cycles"
+        title = f"Cumulative Specific Mass Balance"
         if glacier_name:
             title = f"{title}\n {glacier_name}"
 
