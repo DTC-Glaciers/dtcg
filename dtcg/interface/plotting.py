@@ -675,7 +675,6 @@ class BokehMapOutlines(BokehMap):
             shapefile=shapefile, glacier_data=glacier_data, region_id=rgi_id[6:8]
         )
         glacier_highlight = self.plot_glacier_highlight(glacier_outlines=glacier_data)
-        # )
         overlay = glacier_highlight * region_plot
         overlay = overlay.opts(
             # **self.defaults,
@@ -687,6 +686,7 @@ class BokehMapOutlines(BokehMap):
             show_frame=False,
             margin=0,
             border=0,
+            # xlim=glacier_highlight.range("Latitude")
         )
 
         return overlay
