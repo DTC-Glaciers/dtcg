@@ -354,6 +354,30 @@ class BokehFigureFormat:
         )
         return overlay
 
+    def decode_datacube(self, datacube: xr.Dataset) -> xr.Dataset:
+        """Get a dataset decoded into CF conventions.
+
+        This should be called after data processing to avoid changing
+        the datacube's metadata.
+
+        Parameters
+        ----------
+        datacube : dtcg.datacube.geozarr.GeoZarrHandler or xr.Dataset
+            CryoTEMPO-EOLIS observations for elevation change.
+
+        Returns
+        -------
+        xr.Dataset
+            Dataset decoded into CF conventions.
+
+        """
+        if isinstance(datacube, xr.Dataset):
+            dataset = xr.decode_cf(datacube)
+        else:
+            dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
+
+        return dataset
+
 
 class BokehMap(BokehFigureFormat):
     """Plot data as a map.
@@ -1408,10 +1432,12 @@ class BokehCryotempo(BokehFigureFormat):
         )
 
         if datacube:
+            if not isinstance(datacube, xr.Dataset):
+                datacube = datacube.ds
             if not gdir:
                 raise ValueError("Provide a glacier directory.")
-            cryotempo_dates = self.get_eolis_dates(datacube.ds)
-            cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
+            cryotempo_dates = self.get_eolis_dates(datacube)
+            cryotempo_dh = self.get_eolis_mean_dh(datacube)
 
             df = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
             if resample:
@@ -1561,10 +1587,7 @@ class BokehCryotempo(BokehFigureFormat):
             of elevation change.
         """
 
-        if isinstance(datacube, xr.Dataset):
-            dataset = xr.decode_cf(datacube)
-        else:
-            dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
+        dataset = self.decode_datacube(datacube=datacube)
         plot_data = {
             "sigma": dataset.eolis_elevation_change_sigma_timeseries,
             "mean": dataset.eolis_elevation_change_timeseries,
@@ -1817,7 +1840,7 @@ class BokehCryotempo(BokehFigureFormat):
     def plot_eolis_smb(
         self,
         datacube,
-        gdir,
+        glacier_area=None,
         years=None,
         ref_year: int = 2015,
         cumulative: bool = False,
@@ -1853,8 +1876,12 @@ class BokehCryotempo(BokehFigureFormat):
             y_name="SMB",
             y_format="$snap_y{%.2f mm w.e.}",
         )
+        datacube = self.decode_datacube(datacube=datacube)
 
-        plot_data = {}
+        plot_data = {
+            "sigma": datacube.eolis_elevation_change_sigma_timeseries,
+            "mean": datacube.eolis_elevation_change_timeseries,
+        }
         figures = []
 
         if years is None:
@@ -1862,14 +1889,13 @@ class BokehCryotempo(BokehFigureFormat):
         start_year = years[0]
         end_year = years[-1]
 
-        cryotempo_dates = self.get_eolis_dates(datacube.ds)
-        cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
-        if cumulative:
-            cryotempo_dh = cryotempo_dh.cumsum()
+        # cryotempo_dates = self.get_eolis_dates(datacube)
+        cryotempo_dates = np.array([pd.Timestamp(t, tz=UTC) for t in datacube.t.values])
+        cryotempo_dh = plot_data["mean"]
 
         df = pd.DataFrame(cryotempo_dh, columns=["elevation"], index=cryotempo_dates)
         mean_by_doy = self.get_mean_smb_by_doy_from_elevation(
-            df=df, ref_year=ref_year, glacier_area=gdir.rgi_area_km2
+            df=df, ref_year=ref_year, glacier_area=glacier_area
         )
         if mean_by_doy is not None:
             plot_data["CryoTEMPO-EOLIS Observations"] = mean_by_doy["smb"]
@@ -1887,7 +1913,7 @@ class BokehCryotempo(BokehFigureFormat):
         # Get all years
         for year in np.arange(int(start_year), int(end_year + 1)):
             mean_by_doy = self.get_mean_smb_by_doy_from_elevation(
-                df=df, ref_year=year, glacier_area=gdir.rgi_area_km2
+                df=df, ref_year=year, glacier_area=glacier_area
             )
             if mean_by_doy is not None:
                 plot_data["CryoTEMPO-EOLIS Aggregate"] = mean_by_doy["smb"]
@@ -1902,7 +1928,7 @@ class BokehCryotempo(BokehFigureFormat):
                     label=label,
                 )
 
-        title = f"Monthly Specific Mass Balance Cycles"
+        title = f"Cumulative Specific Mass Balance"
         if glacier_name:
             title = f"{title}\n {glacier_name}"
 
