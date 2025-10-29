@@ -127,10 +127,16 @@ class BokehFigureFormat:
             compatible with Holoviews or Geoviews objects.
         """
         default_options = {
-            "aspect": 2,
+            "height": 400,
+            "width": 800,
+            "min_width": 200,
+            "min_height": 200,
+            "max_height": 1000,
+            "max_width": 2000,
+            # "frame_width": 1000,
             "active_tools": ["pan", "wheel_zoom"],
             # "fontsize": {"title": 18},
-            "fontscale": 1.2,
+            # "fontscale": 1.2,
             # "yformatter": NumeralTickFormatter(format="0.00 N"),
             "bgcolor": "white",
             "backend_opts": {"title.align": "center", "toolbar.autohide": True},
@@ -343,7 +349,6 @@ class BokehFigureFormat:
     ):
         default_opts = self.get_default_opts()
         overlay = overlay.opts(**default_opts).opts(
-            aspect=aspect,
             xlabel=xlabel,
             ylabel=ylabel,
             title=title,
@@ -652,7 +657,7 @@ class BokehMapOutlines(BokehMap):
                     fill_alpha=0.4,
                     color_index=None,
                     scalebar=True,  # otherwise won't appear in overlay
-                    tools=[self.hover_tool],
+                    tools=[self.hover_tool, "tap"],
                 )
                 * gv.tile_sources.EsriWorldTopo()
                 * self.plot_shapefile(
@@ -900,22 +905,16 @@ class BokehGraph(BokehFigureFormat):
             )
         )
         figures.append(ref_curve)
-        overlay = (
-            hv.Overlay(figures)
-            .opts(**self.defaults)
-            .opts(
-                aspect=2,
-                shared_axes=False,
-                title=title,
-                ylabel="Runoff (Mt)",
-                xlabel="Month",
-                xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
-                legend_position="top_left",
-                autorange="y",
-                tools=["xwheel_zoom", "xpan", self.hover_tool],
-                # tools=[self.hover_tool],
-                fixed_bounds=True,
-            )
+        overlay = self.set_overlay_options(
+            overlay=hv.Overlay(figures),
+            title=title,
+            ylabel="Runoff (Mt)",
+            xlabel="Month",
+            xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
+            legend_position="top_left",
+            autorange="y",
+            shared_axes=False,
+            fixed_bounds=True,
         )
 
         return overlay
@@ -2094,7 +2093,6 @@ class BokehSynthetic(BokehCryotempo):
             hv.Overlay(figures)
             .opts(**default_opts)
             .opts(
-                aspect=2,
                 ylabel=f"{label}",
                 title=f"{title}",
                 xlabel="Month",
@@ -2163,7 +2161,14 @@ class HoloviewsDashboard(BokehFigureFormat):
         else:
             layout = hv.Layout([figures])
 
-        layout = layout.opts(sizing_mode="stretch_both")
+        layout = layout.opts(
+            sizing_mode="stretch_width",
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+            },
+        )
 
         return layout
 
@@ -2179,7 +2184,12 @@ class HoloviewsDashboard(BokehFigureFormat):
             shared_axes=False,
             title=self.title,
             fontsize={"title": 18},
-            sizing_mode="scale_both",
+            sizing_mode="stretch_width",
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+            },
             merge_tools=False,
         )
         return self.dashboard
@@ -2221,7 +2231,7 @@ class HoloviewsDashboardL2(HoloviewsDashboard, BokehCryotempo):
             shared_axes=False,
             title=self.title,
             fontsize={"title": 18},
-            sizing_mode="scale_both",
+            sizing_mode="stretch_width",
             merge_tools=False,
         )
 
@@ -2338,7 +2348,16 @@ class HoloviewsDashboardL1(HoloviewsDashboard):
         else:
             layout = hv.Layout([figures])
 
-        layout = layout.opts(sizing_mode="stretch_both", tabs=True)
+        layout = layout.opts(
+            sizing_mode="stretch_width",
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+            },
+            responsive=True,
+            # tabs=True,
+        )
 
         return layout
 
@@ -2355,8 +2374,14 @@ class HoloviewsDashboardL1(HoloviewsDashboard):
             shared_axes=False,
             title=self.title,
             fontsize={"title": 18},
-            sizing_mode="scale_both",
+            sizing_mode="stretch_width",
             merge_tools=False,
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+                "flex-direction": "column"
+            },
         )
 
         return self.dashboard
