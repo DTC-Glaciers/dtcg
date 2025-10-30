@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.2.0"
+version = "0.4.2"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -67,7 +67,7 @@ oggm = [
     "scikit-image",
     "scikit-learn",
     "configobj",
-    "dask",
+    "dask >= 2025.5",
     "bottleneck",
     "pyproj",
     "cartopy",

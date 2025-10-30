@@ -31,6 +31,7 @@ import pandas as pd
 import xarray as xr
 from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 from dateutil.tz import UTC
+import geopandas as gpd
 
 hv.extension("bokeh")
 hv.renderer("bokeh").webgl = True
@@ -126,10 +127,16 @@ class BokehFigureFormat:
             compatible with Holoviews or Geoviews objects.
         """
         default_options = {
-            "aspect": 2,
+            "height": 400,
+            "width": 800,
+            "min_width": 200,
+            "min_height": 200,
+            "max_height": 1000,
+            "max_width": 2000,
+            # "frame_width": 1000,
             "active_tools": ["pan", "wheel_zoom"],
             # "fontsize": {"title": 18},
-            "fontscale": 1.2,
+            # "fontscale": 1.2,
             # "yformatter": NumeralTickFormatter(format="0.00 N"),
             "bgcolor": "white",
             "backend_opts": {"title.align": "center", "toolbar.autohide": True},
@@ -298,6 +305,7 @@ class BokehFigureFormat:
         return help_button
 
     def to_layout(
+        self,
         overlay: list | hv.Overlay,
         cols: int = 1,
         sizing_mode: str = "stretch_width",
@@ -329,6 +337,52 @@ class BokehFigureFormat:
 
         return layout
 
+    def set_overlay_options(
+        self,
+        overlay: hv.Overlay,
+        xlabel: str,
+        ylabel: str,
+        title: str,
+        aspect: int = 2,
+        legend_position="top_left",
+        **kwargs,
+    ):
+        default_opts = self.get_default_opts()
+        overlay = overlay.opts(**default_opts).opts(
+            xlabel=xlabel,
+            ylabel=ylabel,
+            title=title,
+            tools=["xwheel_zoom", "xpan", self.hover_tool],
+            active_tools=["xwheel_zoom"],
+            legend_position=legend_position,
+            **kwargs,
+        )
+        return overlay
+
+    def decode_datacube(self, datacube: xr.Dataset) -> xr.Dataset:
+        """Get a dataset decoded into CF conventions.
+
+        This should be called after data processing to avoid changing
+        the datacube's metadata.
+
+        Parameters
+        ----------
+        datacube : dtcg.datacube.geozarr.GeoZarrHandler or xr.Dataset
+            CryoTEMPO-EOLIS observations for elevation change.
+
+        Returns
+        -------
+        xr.Dataset
+            Dataset decoded into CF conventions.
+
+        """
+        if isinstance(datacube, xr.Dataset):
+            dataset = xr.decode_cf(datacube)
+        else:
+            dataset = xr.decode_cf(datacube.ds)  # otherwise metadata changes
+
+        return dataset
+
 
 class BokehMap(BokehFigureFormat):
     """Plot data as a map.
@@ -356,6 +410,7 @@ class BokehMap(BokehFigureFormat):
             ("Max Elevation", "@Zmax{%.2f m}"),
             ("Min Elevation", "@Zmin{%.2f m}"),
             ("Latitude", "@CenLat{%.2f °N}"),
+            ("Longitude", "@CenLon{%.2f °E}"),
             ("Longitude", "@CenLon{%.2f °E}"),
         ]
         self.set_hover_tool(mode="mouse")
@@ -510,6 +565,158 @@ class BokehMap(BokehFigureFormat):
                 glacier_data=glacier_data, name=glacier_name, ax=overlay
             )
             overlay = overlay * fig_basin_highlight
+
+        return overlay
+
+
+class BokehMapOutlines(BokehMap):
+    """Plot glacier outlines as a map.
+
+    Attributes
+    ----------
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
+    hover_tool : bokeh.models.HoverTool
+        Hover tool for Bokeh figures.
+    palette : tuple[str]
+        Colour palette.
+    defaults : dict
+        Default options for all Bokeh figures.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.tooltips = [
+            ("Name", "@Name"),
+            ("RGI ID", "@RGIId"),
+            ("GLIMS ID", "@GLIMSId"),
+            ("Area", "@Area{%0.2f km²}"),
+            ("Max Elevation", "@Zmax{%.2f m}"),
+            ("Min Elevation", "@Zmin{%.2f m}"),
+            ("Latitude", "@CenLat{%.2f °N}"),
+            ("Longitude", "@CenLon{%.2f °E}"),
+            ("Outline Date", "@BgnDate"),
+        ]
+        self.set_hover_tool(mode="mouse")
+        self.hover_tool = self.get_hover_tool(mode="mouse")
+        self.palette = self.get_color_palette("hillshade_glacier")
+        self.set_defaults(
+            {
+                "xlabel": "Longitude (°E)",
+                "ylabel": "Latitude (°N)",
+                "xaxis": None,
+                "yaxis": None,
+            }
+        )
+
+    def plot_glacier_highlight(self, glacier_outlines):
+        overlay = (
+            gv.Polygons(glacier_outlines).opts(
+                fill_color=self.palette[2],
+                line_color="black",
+                line_width=0.8,
+                fill_alpha=0.4,
+                color_index=None,
+            )
+        ).opts(
+            tools=[self.hover_tool],
+        )
+
+        return overlay
+
+    def plot_region(self, shapefile, glacier_data, region_id: int) -> hv.Overlay:
+        """Plot a subregion with all its glaciers.
+
+        Parameters
+        ----------
+        shapefile : geopandas.GeoDataFrame
+            Subregion shapefile.
+        glacier_data: geopandas.GeoDataFrame
+            Glacier outlines.
+        subregion_name : str
+            Name of subregion.
+
+        Returns
+        -------
+        hv.Overlay
+            Interactive figure of all glaciers in a subregion.
+        """
+
+        mask = shapefile.O1Region == f"{int(region_id)}"  # single digit string
+        # region_name = shapefile[mask]["name"].values[0]
+        # title = self.get_title(title=f"{region_name}")
+
+        overlay = (
+            (
+                self.plot_shapefile(
+                    shapefile[mask],
+                    fill_color=self.palette[0],
+                    line_color="black",
+                    line_width=1.0,
+                    fill_alpha=0.4,
+                    color_index=None,
+                    scalebar=True,  # otherwise won't appear in overlay
+                    tools=[self.hover_tool, "tap"],
+                )
+                * gv.tile_sources.EsriWorldTopo()
+                * self.plot_shapefile(
+                    glacier_data,
+                    fill_color=self.palette[1],
+                    line_color="black",
+                    line_width=0.3,
+                    fill_alpha=0.9,
+                    color_index=None,
+                )
+            )
+            .opts(**self.defaults)
+            .opts(
+                tools=[self.hover_tool],
+            )
+        )
+
+        return overlay
+
+    def plot_region_with_glacier(
+        self, shapefile: gpd.GeoDataFrame, rgi_id: str, region_name: str = ""
+    ) -> hv.Overlay:
+        """Plot a region with a highlighted glacier.
+
+        Parameters
+        ----------
+        shapefile: geopandas.GeoDataFrame
+            Glacier outlines. This *must* be projected to EPSG:4326.
+        rgi_id : str
+            RGI ID. Converted to RGI60.
+        region_name : str, optional
+            Name of region.
+
+        Returns
+        -------
+        hv.Overlay
+            Map of region with glacier outlines.
+        """
+
+        # Convert to RGI60
+        glacier_data = shapefile[shapefile["RGIId"] == f"RGI60-{rgi_id[6:]}"]
+
+        region_plot = self.plot_region(
+            shapefile=shapefile, glacier_data=glacier_data, region_id=rgi_id[6:8]
+        )
+        glacier_highlight = self.plot_glacier_highlight(glacier_outlines=glacier_data)
+        overlay = glacier_highlight * region_plot
+        overlay = overlay.opts(
+            # **self.defaults,
+            scalebar=True,
+            title=region_name,
+            active_tools=["pan", "wheel_zoom"],
+            backend_opts={"title.align": "center"},
+            toolbar=None,
+            show_frame=False,
+            margin=0,
+            border=0,
+            # xlim=glacier_highlight.range("Latitude")
+        )
 
         return overlay
 
@@ -698,22 +905,16 @@ class BokehGraph(BokehFigureFormat):
             )
         )
         figures.append(ref_curve)
-        overlay = (
-            hv.Overlay(figures)
-            .opts(**self.defaults)
-            .opts(
-                aspect=2,
-                shared_axes=False,
-                title=title,
-                ylabel="Runoff (Mt)",
-                xlabel="Month",
-                xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
-                legend_position="top_left",
-                autorange="y",
-                tools=["xwheel_zoom", "xpan", self.hover_tool],
-                # tools=[self.hover_tool],
-                fixed_bounds=True,
-            )
+        overlay = self.set_overlay_options(
+            overlay=hv.Overlay(figures),
+            title=title,
+            ylabel="Runoff (Mt)",
+            xlabel="Month",
+            xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
+            legend_position="top_left",
+            autorange="y",
+            shared_axes=False,
+            fixed_bounds=True,
         )
 
         return overlay
@@ -1018,7 +1219,25 @@ class BokehCryotempo(BokehFigureFormat):
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
 
-    def get_date_mask(self, dataframe: pd.DataFrame, start_date: str, end_date: str):
+    def get_date_mask(
+        self, dataframe: pd.DataFrame, start_date: str, end_date: str
+    ) -> np.ndarray:
+        """Get a mask for all data between a start and end date.
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            Dataframe to get mask for.
+        start_date : str
+            Start date in Y-M-D format.
+        end_date : str
+            End date in Y-M-D format.
+
+        Returns
+        -------
+        np.ndarray
+            Mask for all data between start and end date.
+        """
         date_mask = (
             datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC)
             <= dataframe.index
@@ -1029,6 +1248,19 @@ class BokehCryotempo(BokehFigureFormat):
         return date_mask
 
     def get_mean_by_doy(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Get mean by day of year.
+
+        Parameters
+        -----
+        dataframe : pd.DataFrame
+            Time series.
+
+        Returns
+        -------
+        pd.DataFrame
+            Mean indexed by day of year.
+
+        """
         return (
             dataframe.groupby([dataframe.index.day_of_year])
             .mean()
@@ -1044,6 +1276,28 @@ class BokehCryotempo(BokehFigureFormat):
         line_width=0.8,
         **kwargs,
     ) -> list:
+        """Add Holoviews curve to a list of figures.
+
+        Parameters
+        ----------
+        figures : list
+            Holoviews figures.
+        data : dict
+            1D data to plot as a Curve.
+        key : str
+            Key used to access the correct data in `data`.
+        label : str, optional
+            Label used for the figure which will appear in the legend.
+        line_width : float, default 0.8
+            The curve's line width.
+        kwargs
+            Extra arguments passed to hv.Curve().
+
+        Returns
+        -------
+        list
+            List of Holoviews figures.
+        """
         if not label:
             label = self.get_label_from_key(key)
         curve = hv.Curve(data[key], label=label).opts(line_width=line_width, **kwargs)
@@ -1051,7 +1305,18 @@ class BokehCryotempo(BokehFigureFormat):
         return figures
 
     def get_label_from_key(self, key: str) -> str:
+        """Get a plot label for a given OGGM model type.
 
+        Parameters
+        ----------
+        key : str
+            OGGM model type.
+
+        Returns
+        -------
+        str
+            Plot label.
+        """
         key_split = key.split("_")
         model_name = key_split[0]
         if "SfcType" in model_name:
@@ -1067,15 +1332,48 @@ class BokehCryotempo(BokehFigureFormat):
             label = f"{label} ({geo_period})"
         return label
 
-    def get_eolis_dates(self, ds):
+    def get_eolis_dates(self, ds: xr.Dataset) -> np.ndarray:
+        """Get time index of EOLIS data."""
         return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
-    def get_eolis_mean_dh(self, ds):
+    def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
+        """Get time series of mean elevation change from EOLIS data."""
         mean_time_series = [
             np.nanmean(elevation_change_map.where(ds.glacier_mask == 1))
             for elevation_change_map in ds.eolis_gridded_elevation_change
         ]
         return np.array(mean_time_series)
+
+    def set_hover_date_tooltips(
+        self,
+        y_name,
+        x_name="Date",
+        x_format="$snap_x{%d %B}",
+        y_format="$snap_y{%.2f mm w.e.}",
+    ):
+        """Set hover tool tooltips for time series.
+
+        Note these are Holoviews' own formatting codes.
+
+        Parameters
+        ----------
+        y_name : str
+            Name of dependent variable.
+        x_name : str, default Date
+            Name of independent variable.
+        x_format : str, default "$snap_x{%d %B}"
+            Annotation formatting code for the independent variable.
+            The default will show the day and month.
+        y_format : str
+            Annotation formatting code for the dependent variable.
+            The default will show "mm w.e.".
+        """
+        self.set_tooltips(
+            [(x_name, x_format), (y_name, y_format)],
+            mode="vline",
+        )
+        self.set_hover_tool()
+        self.hover_tool = self.get_hover_tool(mode="vline")
 
     def plot_mb_comparison(
         self,
@@ -1110,15 +1408,14 @@ class BokehCryotempo(BokehFigureFormat):
         resample : bool, default False
             If True, resample observations to begin on the first day of the
             month.
+        cumulative : bool, default False
+            If True, calculate and display the cumulative sum of
+            specific mass balance.
         """
         self.check_holoviews()
-        self.set_tooltips(
-            [("Date", "$snap_x{%d %B}"), ("SMB", "$snap_y{%.2f mm w.e.}")],
-            mode="vline",
+        self.set_hover_date_tooltips(
+            x_format="$snap_x{%d %B}", y_name="SMB", y_format="$snap_y{%.2f mm w.e.}"
         )
-
-        self.set_hover_tool()
-        self.hover_tool = self.get_hover_tool(mode="vline")
 
         plot_data = {}
         figures = []
@@ -1134,10 +1431,12 @@ class BokehCryotempo(BokehFigureFormat):
         )
 
         if datacube:
+            if not isinstance(datacube, xr.Dataset):
+                datacube = datacube.ds
             if not gdir:
                 raise ValueError("Provide a glacier directory.")
-            cryotempo_dates = self.get_eolis_dates(datacube.ds)
-            cryotempo_dh = self.get_eolis_mean_dh(datacube.ds)
+            cryotempo_dates = self.get_eolis_dates(datacube)
+            cryotempo_dh = self.get_eolis_mean_dh(datacube)
 
             df = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
             if resample:
@@ -1198,24 +1497,6 @@ class BokehCryotempo(BokehFigureFormat):
                         tools=[hover_tool_mean],
                         # tools=[self.hover_tool],
                     )
-
-                    # date_mask = self.get_date_mask(
-                    #     df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
-                    # )
-
-                    # df_daily_mean = self.get_mean_by_doy(df[date_mask])
-                    # df_daily_mean.index = pd.to_datetime(
-                    #     df_daily_mean.index, format="%j"
-                    # )
-                    # plot_data[k] = df_daily_mean["smb"]
-                    # label = f"{ref_year}"
-                    # figures = self.add_curve_to_figures(
-                    #     data=plot_data,
-                    #     key=k,
-                    #     figures=figures,
-                    #     line_color="#d62728",
-                    #     label=label,
-                    # )
                 else:
                     label = self.get_label_from_key(k)
 
@@ -1262,32 +1543,117 @@ class BokehCryotempo(BokehFigureFormat):
                     tools=[self.hover_tool],
                 )
 
-        default_opts = self.get_default_opts()
         if glacier_name:
             glacier_name = f"{glacier_name}, "
-        title = f"Daily Specific Mass Balance"
-        # title = f"Daily Specific Mass Balance\n {glacier_name}{start_year}-{end_year}"
+        title = f"Specific Mass Balance"
         if cumulative:
             title = f"Cumulative {title}"
-        overlay = (
-            hv.Overlay(figures)
-            .opts(**default_opts)
-            .opts(
-                aspect=2,
-                ylabel="Daily SMB (mm w.e.)",
-                title=title,
-                xlabel="Month",
-                # xformatter=f"%j",
-                xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
-                tools=["xwheel_zoom", "xpan", self.hover_tool],
-                active_tools=["xwheel_zoom"],
-                legend_position="top_left",
-                autorange="y",
-                # legend_opts={
-                #     # "orientation": "vertical",
-                #     # "css_variables": {"font-size": "1em", "display": "inline"},
-                # },
+
+        overlay = self.set_overlay_options(
+            overlay=hv.Overlay(figures),
+            xlabel="Month",
+            ylabel="Daily SMB (mm w.e.)",
+            title=title,
+            xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
+            autorange="y",
+        )
+
+        return overlay
+
+    def plot_eolis_timeseries(
+        self,
+        datacube,
+        glacier_area=None,
+        mass_balance: bool = False,
+        glacier_name: str = "",
+    ) -> hv.Overlay:
+        """Plot mean and standard deviation of elevation change from EOLIS data.
+
+        Parameters
+        ----------
+        datacube : dtcg.datacube.geozarr.GeoZarrHandler
+            CryoTEMPO-EOLIS observations for elevation change.
+        mass_balance : bool, default False
+            If True, calculate and display the specific mass balance
+            from elevation change. Requires a valid glacier area.
+        glacier_name : str, default empty string
+            Name of glacier added to plot title.
+
+        Returns
+        -------
+        hv.Overlay
+            Interactive figure showing the mean and standard deviation
+            of elevation change.
+        """
+
+        dataset = self.decode_datacube(datacube=datacube)
+        plot_data = {
+            "sigma": dataset.eolis_elevation_change_sigma_timeseries,
+            "mean": dataset.eolis_elevation_change_timeseries,
+        }
+        sigma_minimum = plot_data["mean"] - plot_data["sigma"]
+        sigma_maximum = plot_data["mean"] + plot_data["sigma"]
+        if not mass_balance:
+
+            title = "Elevation Change"
+            ylabel = "Elevation Change [m]"
+            self.set_hover_date_tooltips(
+                x_format="$snap_x{%B}",
+                y_name="Elevation Change",
+                y_format="$snap_y{%.2f m}",
             )
+        else:
+            smb = self.get_smb_from_elevation_change(
+                elevation=plot_data["mean"], area=glacier_area
+            )
+
+            sigma_minimum = self.get_smb_from_elevation_change(
+                elevation=sigma_minimum, area=glacier_area
+            )
+            sigma_maximum = self.get_smb_from_elevation_change(
+                elevation=sigma_maximum, area=glacier_area
+            )
+
+            plot_data["mean"] = smb
+            title = "Specific Mass Balance"
+            ylabel = "Monthly SMB [mm w.e.]"
+            self.set_hover_date_tooltips(
+                x_format="$snap_x{%B}",
+                y_name="Monthly SMB",
+                y_format="$snap_y{%.2f mm w.e.}",
+            )
+
+        mean_period = f"{dataset.t[0].dt.year.values} - {dataset.t[-1].dt.year.values}"
+
+        figures = []
+        figures = self.add_curve_to_figures(
+            data=plot_data,
+            key="mean",
+            figures=figures,
+            line_color="black",
+            label=f"Mean ({mean_period})",
+            tools=[self.hover_tool],
+        )
+
+        area = hv.Area(
+            (dataset.t, sigma_minimum, sigma_maximum),
+            vdims=["sigma_minimum", "sigma_maximum"],
+            label="± 1σ",  # holoviews doesn't really support LaTeX
+        ).opts(color="grey", alpha=0.2)
+        figures.append(area)
+
+        if glacier_name:
+            title = f"{title}\n {glacier_name}"
+        xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
+
+        overlay = self.set_overlay_options(
+            hv.Overlay(figures),
+            xlabel="Year",
+            ylabel=ylabel,
+            title=title,
+            xformatter=xformatter,
+            autorange="y",
+            legend_opts={"orientation": "vertical"},
         )
 
         return overlay
@@ -1438,7 +1804,6 @@ class BokehCryotempo(BokehFigureFormat):
                     label=label,
                 )
 
-        default_opts = self.get_default_opts()
         if glacier_name:
             glacier_name = f"{glacier_name}, "
 
@@ -1456,26 +1821,189 @@ class BokehCryotempo(BokehFigureFormat):
             title = f"Percentage Difference in Monthly Specific Mass Balance\n {glacier_name}{ref_year}"
             xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
             legend_opts = {"orientation": "vertical", "elements": [help_button]}
-        # if not percentage_difference:
-        #     overlay = hv.Overlay(figures)
-        # else:
+
         hline = hv.HLine(0).opts(color="black", line_dash="dotted", line_width=0.8)
         overlay = hv.Overlay(figures) * hline
 
-        overlay = overlay.opts(**default_opts).opts(
-            aspect=2,
+        overlay = self.set_overlay_options(
+            overlay=overlay,
+            xlabel="Month",
             ylabel=ylabel,
             title=title,
-            xlabel="Month",
-            # xformatter=f"%j",
             xformatter=xformatter,
-            tools=["xwheel_zoom", "xpan", self.hover_tool],
-            active_tools=["xwheel_zoom"],
-            legend_position="top_left",
             legend_opts=legend_opts,
         )
 
         return overlay
+
+    def plot_eolis_smb(
+        self,
+        datacube,
+        glacier_area=None,
+        years=None,
+        ref_year: int = 2015,
+        cumulative: bool = False,
+        glacier_name: str = "",
+    ) -> hv.Overlay:
+        """Plot daily specific mass balance from EOLIS data.
+
+        Parameters
+        ----------
+        datacube : dtcg.datacube.geozarr.GeoZarrHandler
+            CryoTEMPO-EOLIS observations for elevation change.
+        gdir : GlacierDirectory, default None
+            Glacier of interest.
+        years : list, default None
+            Range of desired measurement period in years.
+        ref_year : int, default 2015
+            Reference year.
+        cumulative : bool, default False
+            If True, calculate and display the cumulative sum of
+            specific mass balance.
+        glacier_name : str, default empty string
+            Name of glacier added to plot title.
+
+        Returns
+        -------
+        hv.Overlay
+            Interactive figure showing the mean and standard deviation
+            of elevation change.
+        """
+        self.check_holoviews()
+        self.set_hover_date_tooltips(
+            x_format="$snap_x{%B}",
+            y_name="SMB",
+            y_format="$snap_y{%.2f mm w.e.}",
+        )
+        datacube = self.decode_datacube(datacube=datacube)
+
+        plot_data = {
+            "sigma": datacube.eolis_elevation_change_sigma_timeseries,
+            "mean": datacube.eolis_elevation_change_timeseries,
+        }
+        figures = []
+
+        if years is None:
+            years = np.arange(2011, 2025)
+        start_year = years[0]
+        end_year = years[-1]
+
+        # cryotempo_dates = self.get_eolis_dates(datacube)
+        cryotempo_dates = np.array([pd.Timestamp(t, tz=UTC) for t in datacube.t.values])
+        cryotempo_dh = plot_data["mean"]
+
+        df = pd.DataFrame(cryotempo_dh, columns=["elevation"], index=cryotempo_dates)
+        mean_by_doy = self.get_mean_smb_by_doy_from_elevation(
+            df=df, ref_year=ref_year, glacier_area=glacier_area
+        )
+        if mean_by_doy is not None:
+            plot_data["CryoTEMPO-EOLIS Observations"] = mean_by_doy["smb"]
+            label = f"{ref_year}"
+
+            figures = self.add_curve_to_figures(
+                data=plot_data,
+                key="CryoTEMPO-EOLIS Observations",
+                figures=figures,
+                line_color="#d62728",
+                label=label,
+                tools=[self.hover_tool],
+            )
+
+        # Get all years
+        for year in np.arange(int(start_year), int(end_year + 1)):
+            mean_by_doy = self.get_mean_smb_by_doy_from_elevation(
+                df=df, ref_year=year, glacier_area=glacier_area
+            )
+            if mean_by_doy is not None:
+                plot_data["CryoTEMPO-EOLIS Aggregate"] = mean_by_doy["smb"]
+                label = f"{start_year}-{end_year+1}"
+
+                figures = self.add_curve_to_figures(
+                    data=plot_data,
+                    key="CryoTEMPO-EOLIS Aggregate",
+                    figures=figures,
+                    muted=True,
+                    line_color="grey",
+                    label=label,
+                )
+
+        title = f"Cumulative Specific Mass Balance"
+        if glacier_name:
+            title = f"{title}\n {glacier_name}"
+
+        ylabel = f"Monthly SMB (mm w.e.)"
+        xformatter = bokeh.models.DatetimeTickFormatter(months="%B")
+        legend_opts = {"orientation": "vertical"}
+        hline = hv.HLine(0).opts(color="black", line_dash="dotted", line_width=0.8)
+        overlay = hv.Overlay(figures) * hline
+
+        overlay = self.set_overlay_options(
+            overlay=overlay,
+            xlabel="Month",
+            ylabel=ylabel,
+            title=title,
+            xformatter=xformatter,
+            legend_opts=legend_opts,
+        )
+
+        return overlay
+
+    def get_mean_smb_by_doy_from_elevation(
+        self, df: pd.DataFrame, ref_year: int, glacier_area: float
+    ) -> pd.Series:
+        """Get mean specific mass balance by day of year from elevation.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Elevation change data.
+        ref_year : int
+            Reference year.
+        glacier_area : float
+            Area of glacier, km2.
+        Returns
+        -------
+        pd.Series
+            Mean specific balance by day of year.
+        """
+        date_mask = self.get_date_mask(df, f"{ref_year}-01-15", f"{ref_year+1}-01-15")
+        df_mask = df.loc[date_mask].copy()
+
+        if not df_mask.empty:
+            df_mask["smb"] = self.get_smb_from_elevation_change(
+                elevation=df_mask["elevation"], area=glacier_area
+            )
+            mean_by_doy = self.get_mean_by_doy(df_mask)
+            mean_by_doy.index = pd.to_datetime(mean_by_doy.index, format="%j")
+        else:
+            return None
+
+        return mean_by_doy
+
+    def get_smb_from_elevation_change(self, elevation, area, ice_density=850.0):
+        """Get specific mass balance from elevation change.
+
+        Parameters
+        ----------
+        elevation : array_like
+            Elevation change data.
+        area : float
+            Area of glacier in km2.
+        ice_density : float, default 850.0
+            Density of ice.
+
+        Returns
+        -------
+        array_like
+            Specific mass balance.
+        """
+        if isinstance(elevation, xr.DataArray):
+            initial_elevation = elevation[0]
+        else:
+            initial_elevation = elevation.iloc[0]
+
+        smb = 1000 * (elevation - initial_elevation) * ice_density / area
+        return smb
 
     def get_percentage_difference(self, a, b):
         return 100 * np.absolute(b - a) / ((a + b) / 2)
@@ -1565,7 +2093,6 @@ class BokehSynthetic(BokehCryotempo):
             hv.Overlay(figures)
             .opts(**default_opts)
             .opts(
-                aspect=2,
                 ylabel=f"{label}",
                 title=f"{title}",
                 xlabel="Month",
@@ -1573,7 +2100,7 @@ class BokehSynthetic(BokehCryotempo):
                 xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
                 tools=["xwheel_zoom", "xpan"],
                 active_tools=["xwheel_zoom"],
-                legend_position="top",
+                legend_position="top_left",
                 legend_opts={
                     "orientation": "vertical",
                     # "css_variables": {"font-size": "1em", "display": "inline"},
@@ -1628,14 +2155,20 @@ class HoloviewsDashboard(BokehFigureFormat):
         """
         # columns = len(figures)
         if isinstance(figures, list):
-            layout = figures[0]
             if len(figures) > 1:
                 layout = figures
             layout = hv.Layout(layout).cols(2)
         else:
             layout = hv.Layout([figures])
 
-        layout = layout.opts(sizing_mode="stretch_both")
+        layout = layout.opts(
+            sizing_mode="stretch_width",
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+            },
+        )
 
         return layout
 
@@ -1651,7 +2184,12 @@ class HoloviewsDashboard(BokehFigureFormat):
             shared_axes=False,
             title=self.title,
             fontsize={"title": 18},
-            sizing_mode="scale_both",
+            sizing_mode="stretch_width",
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+            },
             merge_tools=False,
         )
         return self.dashboard
@@ -1679,6 +2217,25 @@ class HoloviewsDashboardL2(HoloviewsDashboard, BokehCryotempo):
         self.title = "Dashboard"
         self.figures = []
         self.dashboard = hv.Layout()
+
+    def set_dashboard(self, figures: list):
+        """Set dashboard from a sequence of figures.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        # self.dashboard = figures
+        self.dashboard = self.set_layout(figures=figures).opts(
+            shared_axes=False,
+            title=self.title,
+            fontsize={"title": 18},
+            sizing_mode="stretch_width",
+            merge_tools=False,
+        )
+
+        return self.dashboard
 
 
 class HoloviewsDashboardL1(HoloviewsDashboard):
@@ -1769,4 +2326,62 @@ class HoloviewsDashboardL1(HoloviewsDashboard):
         if glacier_name:
             self.set_dashboard_title(name=glacier_name)
         self.set_dashboard(figures=self.figures)
+        return self.dashboard
+
+    def set_layout(self, figures: list) -> hv.Layout:
+        """Compose Layout from a sequence of overlays or layouts.
+
+        Dynamically adds a sequence of overlays to a layout.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        # columns = len(figures)
+        if isinstance(figures, list):
+            if len(figures) > 1:
+                layout = figures
+            else:
+                layout = figures[0]
+            layout = hv.Layout(layout).cols(2)
+        else:
+            layout = hv.Layout([figures])
+
+        layout = layout.opts(
+            sizing_mode="stretch_width",
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+            },
+            responsive=True,
+            # tabs=True,
+        )
+
+        return layout
+
+    def set_dashboard(self, figures: list):
+        """Set dashboard from a sequence of figures.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        # self.dashboard = figures
+        self.dashboard = self.set_layout(figures=figures).opts(
+            shared_axes=False,
+            title=self.title,
+            fontsize={"title": 18},
+            sizing_mode="stretch_width",
+            merge_tools=False,
+            styles={
+                "flex": "1 1 auto",
+                "align-items": "stretch",
+                "align-content": "flex-start",
+                "flex-direction": "column"
+            },
+        )
+
         return self.dashboard

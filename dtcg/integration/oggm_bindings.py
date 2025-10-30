@@ -321,6 +321,35 @@ class BindingsOggmModel:
 
         return gdirs
 
+    def get_outline_source_date(self, glacier_data: gpd.GeoDataFrame) -> int:
+        """Get the date for an outline's source.
+
+        Parameters
+        ----------
+        glacier_data : gpd.GeoDataFrame
+            Outline data for a glacier. Must conform to
+            `RGI60 specifications <https://www.glims.org/RGI/00_rgi60_TechnicalNote.pdf>`__.
+
+        Returns
+        -------
+        int
+            The year the outline's source data was published.
+        """
+
+        outline_date = glacier_data["BgnDate"]
+
+        outline_date = glacier_data.get("EndDate", "-9999999")
+        if "EndDate" in glacier_data.keys():
+            outline_date = glacier_data["EndDate"]
+
+        if outline_date == "-9999999":
+            outline_date = glacier_data["BgnDate"]
+        
+
+        outline_date = int(outline_date[:4])
+
+        return outline_date
+
     def set_flowlines(self, gdir) -> None:
         """Compute glacier flowlines if missing from glacier directory."""
         if not os.path.exists(gdir.get_filepath("inversion_flowlines")):
@@ -865,8 +894,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
         self,
         rgi_ids: list,
         base_url: str = "",
-        prepro_level: int = 1,
-        prepro_border: int = 10,
+        prepro_level: int = 4,
+        prepro_border: int = 80,
         **kwargs,
     ):
         return super().get_glacier_directories(
@@ -1065,25 +1094,78 @@ class BindingsCryotempo(BindingsOggmWrangler):
         smb = (volume[1:] - volume[:-1]) / area[1:] * cfg.PARAMS["ice_density"] / 1000
         return smb
 
-    def get_cached_data(self, rgi_id: str, cache="../../ext/data/l2_precompute/"):
+    def get_cached_data(
+        self, rgi_id: str, cache="../../ext/data/l2_precompute/"
+    ) -> dict:
 
         if isinstance(cache, str):
             cache = Path(cache)
         cache_path = cache / rgi_id
-        with open(cache_path / "gdir.json", mode="r", encoding="utf-8") as file:
-            raw = file.read()
-            gdir = dict(json.loads(raw))
+        gdir = self.get_cached_gdir_data(cache_path=cache_path)
 
-        smb = np.load(cache_path / "smb.npz")
-        with xr.open_dataarray(cache_path / "runoff.nc") as file:
-            runoff = file.load()
-        runoff_data = {
-            "monthly_runoff": runoff,
-            "runoff_year_min": gdir["runoff_data"]["runoff_year_min"],
-            "runoff_year_max": gdir["runoff_data"]["runoff_year_max"],
+        smb = self.get_cached_smb_data(cache_path=cache_path)
+        runoff = self.get_cached_runoff_data(cache_path=cache_path)
+        runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
+        runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
+        eolis = self.get_cached_eolis_data(cache_path=cache_path)
+        outlines = self.get_cached_outline_data(cache_path=cache_path)
+
+        cached_data = {
+            "gdir": gdir,
+            "smb": smb,
+            "runoff": runoff,
+            "eolis": eolis,
+            "outlines": outlines,
         }
 
-        return gdir, smb, runoff_data
+        return cached_data
+
+    def get_cached_l1_data(self, rgi_id: str, cache="../../ext/data/l1_precompute/"):
+
+        if isinstance(cache, str):
+            cache = Path(cache)
+        cache_path = cache / rgi_id
+        gdir = self.get_cached_gdir_data(cache_path=cache_path)
+
+        return gdir
+
+    def get_cached_gdir_data(self, cache_path: Path) -> dict:
+
+        try:
+            with open(cache_path / "gdir.json", mode="r", encoding="utf-8") as file:
+                raw = file.read()
+                gdir = dict(json.loads(raw))
+        except FileNotFoundError:
+            return None
+        return gdir
+
+    def get_cached_smb_data(self, cache_path: Path) -> np.ndarray:
+        try:
+            smb = np.load(cache_path / "smb.npz")
+        except FileNotFoundError:
+            return None
+
+        return smb
+
+    def get_cached_runoff_data(self, cache_path: Path) -> dict:
+        try:
+            runoff = xr.open_dataarray(cache_path / "runoff.nc")
+        except FileNotFoundError:
+            return None
+
+        runoff_data = {"monthly_runoff": runoff}
+        return runoff_data
+
+    def get_cached_eolis_data(self, cache_path: Path) -> xr.DataArray:
+        try:
+            eolis_data = xr.open_dataset(cache_path / "eolis.nc")
+            # eolis_data = {
+            #     "eolis_elevation_change_timeseries": eolis_raw.eolis_elevation_change_timeseries,
+            #     "eolis_elevation_change_sigma_timeseries": eolis_raw.eolis_elevation_change_sigma_timeseries,
+            # }
+        except FileNotFoundError:
+            return None
+        return eolis_data
 
     def get_cached_metadata(
         self, index="glacier_index", cache="../../ext/data/l2_precompute/"
@@ -1098,3 +1180,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
             metadata = dict(json.loads(raw))
 
         return metadata
+
+    def get_cached_outline_data(self, cache_path: Path) -> gpd.GeoDataFrame:
+        """Get glacier outlines.
+
+        This is identical to ``gdir.read_shapefile``, so the CRS should
+        later be converted to EPSG:4236"""
+        try:
+            glacier_outlines = gpd.read_feather(cache_path / "outlines.shp")
+        except FileNotFoundError:
+            return None
+
+        return glacier_outlines
