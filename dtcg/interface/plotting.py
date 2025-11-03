@@ -1494,7 +1494,7 @@ class BokehCryotempo(BokehFigureFormat):
                         mode="vline",
                         attachment="right",
                     )
-                    )
+
                     figures = self.add_curve_to_figures(
                         data=plot_data,
                         key=f"{k}_mean",
