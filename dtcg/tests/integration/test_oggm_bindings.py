@@ -187,3 +187,28 @@ class TestOGGMBindings:
     #     assert isinstance(compare_gdirs, gpd.GeoDataFrame)
     #     assert not compare_gdirs.empty
     #     assert (compare_gdirs["O1Region"] == "11").all()
+
+    def test_get_outline_details(self, outline_shapefile, OggmWrangler):
+        test_shapefile = outline_shapefile
+        binder = OggmWrangler
+        details = binder.get_outline_details(polygon=test_shapefile.iloc[0])
+
+        keys = [
+            "Name",
+            "RGI ID",
+            "GLIMS ID",
+            "Area",
+            "Max Elevation",
+            "Min Elevation",
+            "Latitude",
+            "Longitude",
+            "Outline Date",
+        ]
+        assert isinstance(details, dict)
+        for key in keys:
+            assert key in details.keys()
+            assert isinstance(details[key], dict)
+            assert isinstance(details["value"], str)
+            assert isinstance(details["unit"], str)
+
+        assert details["Name"]["value"] == "Hintereisferner"
