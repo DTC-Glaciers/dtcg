@@ -188,7 +188,9 @@ class BokehFigureFormat:
 
         return palettes[name]
 
-    def get_hover_tool(self, mode="vline", tooltips=None) -> bokeh.models.HoverTool:
+    def get_hover_tool(
+        self, mode="vline", tooltips=None, attachment: str = "horizontal"
+    ) -> bokeh.models.HoverTool:
         """Get the hover tool attribute.
 
         , e.g. "mouse", "hline", "vline".
@@ -205,6 +207,7 @@ class BokehFigureFormat:
             tooltips=tooltips,
             formatters=self.get_tooltip_format(tooltips=tooltips),
             mode=mode,
+            attachment=attachment,
         )
 
     def set_hover_tool(self, mode: str = "vline"):
@@ -1416,6 +1419,7 @@ class BokehCryotempo(BokehFigureFormat):
         self.set_hover_date_tooltips(
             x_format="$snap_x{%d %B}", y_name="SMB", y_format="$snap_y{%.2f mm w.e.}"
         )
+        self.hover_tool.attachment = "left"
 
         plot_data = {}
         figures = []
@@ -1486,7 +1490,10 @@ class BokehCryotempo(BokehFigureFormat):
 
                     label = f"{start_year}-{end_year} Mean"
                     hover_tool_mean = self.get_hover_tool(
-                        tooltips=[("Mean SMB", "@smb_mean{%.2f mm w.e.}")], mode="vline"
+                        tooltips=[("Mean SMB", "@smb_mean{%.2f mm w.e.}")],
+                        mode="vline",
+                        attachment="right",
+                    )
                     )
                     figures = self.add_curve_to_figures(
                         data=plot_data,
@@ -1556,6 +1563,7 @@ class BokehCryotempo(BokehFigureFormat):
             title=title,
             xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
             autorange="y",
+            apply_hard_bounds=True,
         )
 
         return overlay
@@ -2167,6 +2175,8 @@ class HoloviewsDashboard(BokehFigureFormat):
                 "flex": "1 1 auto",
                 "align-items": "stretch",
                 "align-content": "flex-start",
+                "width": "100%",
+                "height": "50%",
             },
         )
 
@@ -2380,7 +2390,7 @@ class HoloviewsDashboardL1(HoloviewsDashboard):
                 "flex": "1 1 auto",
                 "align-items": "stretch",
                 "align-content": "flex-start",
-                "flex-direction": "column"
+                "flex-direction": "column",
             },
         )
 
