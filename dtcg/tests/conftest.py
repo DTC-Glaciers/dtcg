@@ -55,6 +55,20 @@ def conftest_sample_data_path(pytestconfig):
     yield test_data_path
 
 
+@pytest.fixture(name="outline_shapefile", scope="function", autouse=False)
+def conftest_outline_shapefile(sample_data_path):
+    """Yield sample glacier outline.
+
+    Yields
+    ------
+    Generator[gpd.GeoDataFrame]
+        Sample glacier outline.
+    """
+    test_outline = gpd.read_feather(sample_data_path / "outlines.shp")
+    assert isinstance(test_outline, gpd.GeoDataFrame)
+    yield test_outline
+
+
 # Function patches
 @pytest.fixture(scope="function", autouse=False)
 def conftest_mock_check_file_exists():
@@ -87,7 +101,7 @@ def conftest_hide_plot():
 def fixture_conftest_rng_seed():
     """Set seed for random number generator to 444.
 
-    Returns:
+    Yields:
         np.random.Generator: Random number generator with seed=444.
     """
 

@@ -344,7 +344,6 @@ class BindingsOggmModel:
 
         if outline_date == "-9999999":
             outline_date = glacier_data["BgnDate"]
-        
 
         outline_date = int(outline_date[:4])
 
@@ -398,6 +397,33 @@ class BindingsOggmWrangler(BindingsOggmModel):
         shapefile = gpd.read_file(path)
 
         return shapefile
+
+    def get_cached_outline_data(self, cache_path: Path) -> gpd.GeoDataFrame:
+        """Get glacier outlines.
+
+        This is identical to ``gdir.read_shapefile``, so the CRS should
+        later be converted to EPSG:4236"""
+        try:
+            glacier_outlines = gpd.read_feather(cache_path / "outlines.shp")
+        except FileNotFoundError:
+            return None
+
+        return glacier_outlines
+
+    def get_outline_details(self, polygon):
+        outline_details = {
+            "Name": {"value": polygon["Name"], "unit": ""},
+            "RGI ID": {"value": polygon["RGIId"], "unit": ""},
+            "GLIMS ID": {"value": polygon["GLIMSId"], "unit": ""},
+            "Area": {"value": polygon["Area"], "unit": "km²"},
+            "Max Elevation": {"value": polygon["Zmax"], "unit": "m"},
+            "Min Elevation": {"value": polygon["Zmin"], "unit": "m"},
+            "Latitude": {"value": polygon["CenLat"], "unit": "°N"},
+            "Longitude": {"value": polygon["CenLon"], "unit": "°E"},
+            "Outline Date": {"value": polygon["BgnDate"][:4], "unit": ""},
+        }
+
+        return outline_details
 
     def set_subregion_constraints(
         self,
@@ -1180,15 +1206,3 @@ class BindingsCryotempo(BindingsOggmWrangler):
             metadata = dict(json.loads(raw))
 
         return metadata
-
-    def get_cached_outline_data(self, cache_path: Path) -> gpd.GeoDataFrame:
-        """Get glacier outlines.
-
-        This is identical to ``gdir.read_shapefile``, so the CRS should
-        later be converted to EPSG:4236"""
-        try:
-            glacier_outlines = gpd.read_feather(cache_path / "outlines.shp")
-        except FileNotFoundError:
-            return None
-
-        return glacier_outlines
