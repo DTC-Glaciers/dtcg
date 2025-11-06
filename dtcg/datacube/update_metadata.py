@@ -121,7 +121,7 @@ class MetadataMapper:
         shared_metadata = {
             "Conventions": "CF-1.12",
             "comment": (
-                "The DTC-Glaciers project is developed under the European Space "
+                "The DTC Glaciers project is developed under the European Space "
                 "Agency's Digital Twin Earth initiative, as part of the Digital Twin "
                 "Components (DTC) Early Development Actions."
             ),
@@ -129,10 +129,10 @@ class MetadataMapper:
         }
         if ds_name == "L1":
             shared_metadata.update({
-                "title": "Datacube of Glacier-domain variables.",
+                "title": "Datacube of glacier-domain variables.",
                 "summary": (
-                    "Resampled Glacier-domain variables from multiple sources. "
-                    "Generated as part of the DTC-Glaciers project."
+                    "Resampled glacier-domain variables from multiple sources. "
+                    "Generated for the DTC Glaciers project."
                 ),
             })
         elif ds_name == "L2":
@@ -140,7 +140,7 @@ class MetadataMapper:
                 "title": "Datacube of observation-informed modelled variables.",
                 "summary": (
                     "Observation-informed modelled variables. "
-                    "Generated as part of the DTC-Glaciers project."
+                    "Generated for the DTC Glaciers project."
                 ),
             })
 
