@@ -70,7 +70,7 @@ class GeoZarrHandler(MetadataMapper):
         self.zarr_format = zarr_format
 
         ds = self._validate_dataset(ds)
-        ds = self._update_metadata(ds)
+        ds = self._update_metadata(ds, ds_name)
         self.encoding = {}
         self._define_encodings(ds, ds_name)
 
@@ -181,7 +181,7 @@ class GeoZarrHandler(MetadataMapper):
                 "compressor": self.compressor,
             }
 
-    def _update_metadata(self, ds: xr.Dataset) -> xr.Dataset:
+    def _update_metadata(self, ds: xr.Dataset, ds_name: str) -> xr.Dataset:
         """Update metadata to Climate and Forecast convention.
 
         Parameters
@@ -189,12 +189,14 @@ class GeoZarrHandler(MetadataMapper):
         ds : xarray.Dataset
             Input dataset with dimensions ('x', 'y') or ('t', 'x', 'y').
             Must include coordinate variables.
+        ds_name : str
+            Layer name for this node of the tree.
 
         Metadata is first updated using the ``update_metadata`` method.
         Each data variable is tagged with the ``grid_mapping`` attribute
         for spatial referencing.
         """
-        ds = self.update_metadata(ds)
+        ds = self.update_metadata(ds, ds_name)
         for var in ds.data_vars:
             var_dims = ds[var].dims
             if "x" in var_dims or "y" in var_dims:
@@ -246,7 +248,7 @@ class GeoZarrHandler(MetadataMapper):
 
         # prepare new dataset
         ds = self._validate_dataset(ds)
-        ds = self._update_metadata(ds)
+        ds = self._update_metadata(ds, ds_name)
 
         # append additional encodings to the encodings class attribute
         self._define_encodings(ds, ds_name)
