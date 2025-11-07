@@ -414,7 +414,7 @@ class BokehMap(BokehFigureFormat):
             ("Min Elevation", "@Zmin{%.2f m}"),
             ("Latitude", "@CenLat{%.2f °N}"),
             ("Longitude", "@CenLon{%.2f °E}"),
-            ("Longitude", "@CenLon{%.2f °E}"),
+            ("Outline Date", "@BgnDate"),
         ]
         self.set_hover_tool(mode="mouse")
         self.hover_tool = self.get_hover_tool(mode="mouse")
@@ -789,8 +789,23 @@ class BokehGraph(BokehFigureFormat):
 
         return dataset
 
-    def get_time_index(self, data: xr.DataArray, end_date: int):
-        index = [datetime.date(end_date, i, 1) for i in data.index.values]
+    def get_time_index(self, data: ArrayLike, year: int) -> list[date]:
+        """Get a time index from a year and array of months.
+
+        Parameters
+        ----------
+        data : array_like
+            Data indexed by month number.
+        year : int
+            Year of interest.
+
+        Returns
+        -------
+        list[date]
+            Monthly time index for a given year.
+        """
+
+        index = [datetime.date(year, i, 1) for i in data.index.values]
         return index
 
     def plot_runoff_timeseries(
@@ -870,33 +885,32 @@ class BokehGraph(BokehFigureFormat):
                 )
             )
             figures.append(mean_curve)
-            if year_maximum_runoff and year_minimum_runoff:
-                min_curve = (
-                    hv.Curve(
-                        (index, runoff_minimum),
-                        group="runoff",
-                        label=f"Minimum ({time_period})",
-                    )
-                    .opts(**self.defaults)
-                    .opts(
-                        color="black",
-                        line_width=0.8,
-                    )
+            min_curve = (
+                hv.Curve(
+                    (index, runoff_minimum),
+                    group="runoff",
+                    label=f"Minimum ({time_period})",
                 )
-                figures.append(min_curve)
-                max_curve = (
-                    hv.Curve(
-                        (index, runoff_maximum),
-                        group="runoff",
-                        label=f"Maximum ({time_period})",
-                    )
-                    .opts(**self.defaults)
-                    .opts(
-                        color=self.palette[2],
-                        line_width=0.8,
-                    )
+                .opts(**self.defaults)
+                .opts(
+                    color="black",
+                    line_width=0.8,
                 )
-                figures.append(max_curve)
+            )
+            figures.append(min_curve)
+            max_curve = (
+                hv.Curve(
+                    (index, runoff_maximum),
+                    group="runoff",
+                    label=f"Maximum ({time_period})",
+                )
+                .opts(**self.defaults)
+                .opts(
+                    color=self.palette[2],
+                    line_width=0.8,
+                )
+            )
+            figures.append(max_curve)
 
         ref_curve = (
             hv.Curve((index, runoff_ref_year), group="runoff", label=f"{ref_year}")
@@ -1302,12 +1316,13 @@ class BokehCryotempo(BokehFigureFormat):
             List of Holoviews figures.
         """
         if not label:
-            label = self.get_label_from_key(key)
+            label = self.get_label_from_oggm_model(key)
         curve = hv.Curve(data[key], label=label).opts(line_width=line_width, **kwargs)
         figures.append(curve)
+
         return figures
 
-    def get_label_from_key(self, key: str) -> str:
+    def get_label_from_oggm_model(self, key: str) -> str:
         """Get a plot label for a given OGGM model type.
 
         Parameters
@@ -1333,6 +1348,7 @@ class BokehCryotempo(BokehFigureFormat):
             years = [i.split("-")[0] for i in key_split[-2:]]
             geo_period = "-".join(years)
             label = f"{label} ({geo_period})"
+
         return label
 
     def get_eolis_dates(self, ds: xr.Dataset) -> np.ndarray:
@@ -1505,7 +1521,7 @@ class BokehCryotempo(BokehFigureFormat):
                         # tools=[self.hover_tool],
                     )
                 else:
-                    label = self.get_label_from_key(k)
+                    label = self.get_label_from_oggm_model(k)
 
                     df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
 
@@ -1759,7 +1775,7 @@ class BokehCryotempo(BokehFigureFormat):
 
         for k, v in smb.items():
             if ("Daily" in k) or ("SfcType") in k:
-                label = self.get_label_from_key(k)
+                label = self.get_label_from_oggm_model(k)
 
                 df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
                 # align with Cryosat data
