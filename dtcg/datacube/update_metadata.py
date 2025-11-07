@@ -96,7 +96,7 @@ class MetadataMapper:
         self.metadata_mappings = config_dict
 
     @staticmethod
-    def _update_shared_metadata(dataset: xr.Dataset) -> None:
+    def _update_shared_metadata(dataset: xr.Dataset, ds_name: str) -> None:
         """Add shared metadata attributes to the dataset and ensure CRS is set.
 
         Parameters
@@ -104,6 +104,8 @@ class MetadataMapper:
         dataset : xarray.Dataset
             The dataset to which shared metadata and CRS should be
             applied.
+        ds_name : str
+            Name of dataset.
 
         Notes
         -----
@@ -118,19 +120,31 @@ class MetadataMapper:
         # update metadata shared across all variables
         shared_metadata = {
             "Conventions": "CF-1.12",
-            "title": "Datacube of Glacier-domain variables.",
-            "summary": (
-                "Resampled Glacier-domain variables from multiple sources. "
-                "Generated as part of the DTC-Glaciers project."
-            ),
             "comment": (
-                "The DTC-Glaciers project is developed under the European Space "
+                "The DTC Glaciers project is developed under the European Space "
                 "Agency's Digital Twin Earth initiative, as part of the Digital Twin "
                 "Components (DTC) Early Development Actions."
             ),
             "date_created": datetime.now().isoformat(),
         }
+        if ds_name == "L1":
+            shared_metadata.update({
+                "title": "Datacube of glacier-domain variables.",
+                "summary": (
+                    "Resampled glacier-domain variables from multiple sources. "
+                    "Generated for the DTC Glaciers project."
+                ),
+            })
+        elif ds_name == "L2":
+            shared_metadata.update({
+                "title": "Datacube of observation-informed modelled variables.",
+                "summary": (
+                    "Observation-informed modelled variables. "
+                    "Generated for the DTC Glaciers project."
+                ),
+            })
 
+        dataset.attrs.clear()   # clear old metadata
         dataset.attrs.update(shared_metadata)
 
         if "x" in dataset.dims:
@@ -156,13 +170,15 @@ class MetadataMapper:
                 "units": "seconds since 1970-01-01 00:00:00",
             })
 
-    def update_metadata(self: MetadataMapper, dataset: xr.Dataset) -> xr.Dataset:
+    def update_metadata(self: MetadataMapper, dataset: xr.Dataset, ds_name: str) -> xr.Dataset:
         """Apply variable and shared metadata to an xarray Dataset.
 
         Parameters
         ----------
         dataset : xarray.Dataset
             Dataset to which the metadata should be applied.
+        ds_name : str
+            Name of dataset.
 
         Returns
         -------
@@ -197,6 +213,6 @@ class MetadataMapper:
             if data_name in dataset.data_vars:
                 dataset[data_name].attrs.update(metadata)
 
-        self._update_shared_metadata(dataset)
+        self._update_shared_metadata(dataset, ds_name)
 
         return dataset

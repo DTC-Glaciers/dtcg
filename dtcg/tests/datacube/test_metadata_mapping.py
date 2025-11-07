@@ -70,7 +70,7 @@ class TestMetadataMapper:
     def test_apply_metadata_to_variables(
             self, temp_metadata_file, test_dataset):
         mapper = MetadataMapper(temp_metadata_file)
-        result = mapper.update_metadata(test_dataset)
+        result = mapper.update_metadata(test_dataset.copy(), "L1")
 
         expected = mapper.metadata_mappings["var1"]
         for key, val in expected.items():
@@ -80,7 +80,7 @@ class TestMetadataMapper:
             self, temp_metadata_file, test_dataset):
         # Ensure CRS is preserved or written correctly
         mapper = MetadataMapper(temp_metadata_file)
-        result = mapper.update_metadata(test_dataset)
+        result = mapper.update_metadata(test_dataset.copy(), "L1")
 
         for attr in ["Conventions", "title", "summary", "comment", "date_created"]:
             assert attr in result.attrs
@@ -100,6 +100,6 @@ class TestMetadataMapper:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            mapper.update_metadata(ds)
+            mapper.update_metadata(ds, "L1")
             assert ("Metadata mapping is missing for the following variables: "
                     "['var2', 'var3']" in str(w[0].message))
