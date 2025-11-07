@@ -20,7 +20,7 @@ import logging
 import geopandas as gpd
 import numpy as np
 import pytest
-from oggm import GlacierDirectory, cfg, utils
+from oggm import cfg, utils
 
 import dtcg.integration.oggm_bindings as integration_ob
 

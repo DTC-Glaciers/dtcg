@@ -22,7 +22,6 @@ Executes an OGGM-API request.
 
 import csv
 import json
-import os
 from pathlib import Path
 
 import geopandas as gpd
@@ -30,8 +29,8 @@ import numpy as np
 import pandas as pd
 import shapely.geometry as shpg
 import xarray as xr
-from oggm import cfg, tasks, utils, workflow
-from oggm.shop import its_live, w5e5
+from oggm import GlacierDirectory, cfg, tasks, utils, workflow
+from oggm.shop import its_live, rgitopo, w5e5
 
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
 import dtcg.integration.calibration
@@ -335,24 +334,23 @@ class BindingsOggmModel:
         int
             The year the outline's source data was published.
         """
-
-        outline_date = glacier_data["BgnDate"]
-
         outline_date = glacier_data.get("EndDate", "-9999999")
-        if "EndDate" in glacier_data.keys():
-            outline_date = glacier_data["EndDate"]
-
         if outline_date == "-9999999":
-            outline_date = glacier_data["BgnDate"]
-
+            outline_date = glacier_data.get("BgnDate", "-9999999")
         outline_date = int(outline_date[:4])
 
         return outline_date
 
-    def set_flowlines(self, gdir) -> None:
-        """Compute glacier flowlines if missing from glacier directory."""
-        if not os.path.exists(gdir.get_filepath("inversion_flowlines")):
-            if not os.path.exists(gdir.get_filepath("elevation_band_flowline")):
+    def set_flowlines(self, gdir: GlacierDirectory) -> None:
+        """Compute glacier flowlines if missing from glacier directory.
+
+        Parameters
+        ----------
+        gdir : GlacierDirectory
+            Glacier directory.
+        """
+        if not Path(gdir.get_filepath("inversion_flowlines")).exists():
+            if not Path(gdir.get_filepath("elevation_band_flowline")).exists():
                 tasks.elevation_band_flowline(gdir=gdir, preserve_totals=True)
             tasks.fixed_dx_elevation_band_flowline(gdir, preserve_totals=True)
 
@@ -415,12 +413,15 @@ class BindingsOggmWrangler(BindingsOggmModel):
             "Name": {"value": polygon["Name"], "unit": ""},
             "RGI ID": {"value": polygon["RGIId"], "unit": ""},
             "GLIMS ID": {"value": polygon["GLIMSId"], "unit": ""},
-            "Area": {"value": polygon["Area"], "unit": "km²"},
+            "Area": {"value": float(polygon["Area"]), "unit": "km²"},
             "Max Elevation": {"value": polygon["Zmax"], "unit": "m"},
             "Min Elevation": {"value": polygon["Zmin"], "unit": "m"},
-            "Latitude": {"value": polygon["CenLat"], "unit": "°N"},
-            "Longitude": {"value": polygon["CenLon"], "unit": "°E"},
-            "Outline Date": {"value": polygon["BgnDate"][:4], "unit": ""},
+            "Latitude": {"value": float(polygon["CenLat"]), "unit": "°N"},
+            "Longitude": {"value": float(polygon["CenLon"]), "unit": "°E"},
+            "Outline Date": {
+                "value": self.get_outline_source_date(polygon),
+                "unit": "",
+            },
         }
 
         return outline_details
@@ -928,8 +929,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
             rgi_ids, base_url, prepro_level, prepro_border, **kwargs
         )
 
-    def get_glacier_data(self, gdirs: list) -> None:
+    def get_glacier_data(self, gdirs: list, dem=False) -> None:
         """Add velocity data, monthly and daily W5E5 data."""
+        if dem:
+            workflow.execute_entity_task(
+                rgitopo.select_dem_from_dir,
+                gdirs,
+                dem_source="COPDEM90",
+                keep_dem_folders=True,
+            )
         workflow.execute_entity_task(tasks.glacier_masks, gdirs)
         workflow.execute_entity_task(its_live.itslive_velocity_to_gdir, gdirs)
 
