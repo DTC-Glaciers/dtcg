@@ -54,13 +54,16 @@ class BindingsOggmModel:
         Base URL for shapefile data.
     WORKING_DIR : str, default None
         Temporary working directory.
+    oggm_params : dict, default None
+        OGGM configuration parameters.
+
     """
 
     def __init__(
         self,
         base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
         working_dir: str = "",
-        oggm_params: dict = None,
+        oggm_params: dict | None = None,
     ):
         super().__init__()
         self.DEFAULT_BASE_URL = base_url
@@ -71,10 +74,20 @@ class BindingsOggmModel:
             self.oggm_params = oggm_params
 
     def set_oggm_params(self, **new_params: dict) -> None:
+        """Define OGGM configuration parameters.
+
+        This will overwrite existing values that have the same key.
+        To configure OGGM, use ``set_oggm_kwargs()``.
+
+        Parameters
+        ----------
+        **new_params
+            Parameters passed to OGGM's configuration.
+        """
         self.oggm_params.update(new_params)
 
     def set_oggm_kwargs(self) -> None:
-        """Set OGGM configuration parameters.
+        """Set OGGM configuration.
 
         .. note:: This may eventually be moved to ``api.internal._parse_oggm``.
 
@@ -99,7 +112,8 @@ class BindingsOggmModel:
         ----------
         dirname : str
             Name of temporary directory
-
+        **kwargs
+            Extra arguments passed to OGGM's configuration.
         """
 
         cfg.initialize(logging_level="CRITICAL")
@@ -120,7 +134,7 @@ class BindingsOggmModel:
 
         Subregion names take priority over region names.
 
-        TODO: Fuzzy-finding
+        .. todo:: Fuzzy-finding.
 
         Parameters
         ----------
@@ -225,6 +239,11 @@ class BindingsOggmModel:
             Path to database with subregion names and O1/O2 codes.
         from_web : bool, default False
             Use data from oggm-sample-data.
+
+        Returns
+        -------
+        list
+            RGI metadata for all glaciers.
         """
 
         if from_web:  # fallback to sample-data
@@ -252,7 +271,8 @@ class BindingsOggmModel:
 
         Returns
         -------
-            List of RGI shapefiles.
+        list
+            RGI shapefiles.
 
         Raises
         ------
@@ -284,7 +304,7 @@ class BindingsOggmModel:
         prepro_level: int = 4,
         prepro_border: int = 80,
         **kwargs,
-    ):
+    ) -> list[GlacierDirectory]:
         """Get OGGM glacier directories.
 
         Parameters
@@ -303,9 +323,8 @@ class BindingsOggmModel:
 
         Returns
         -------
-        list
-            :py:class:`oggm.GlacierDirectory` objects for the
-            initialised glacier directories.
+        list[GlacierDirectory]
+            Glacier directories for the given RGI IDs.
         """
 
         if not base_url:
@@ -356,7 +375,13 @@ class BindingsOggmModel:
 
 
 class BindingsOggmWrangler(BindingsOggmModel):
-    """Wrangles input data for OGGM workflows."""
+    """Wrangles input data for OGGM workflows.
+
+    Attributes
+    ----------
+    SHAPEFILE_PATH : str
+        Region or subregion's glacier outlines.
+    """
 
     def __init__(
         self,
@@ -490,7 +515,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
         """Get the difference of overlapping polygons.
 
         .. note:: GPD's overlay() only acts on GeoDataFrames, but this
-        function manipulates GeoSeries.
+           function manipulates GeoSeries.
 
         Parameters
         ----------
@@ -518,6 +543,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
 
         If two polygons overlap, the overlapping area is removed from the
         second polygon.
+
         Parameters
         ----------
         frame : gpd.GeoDataFrame
@@ -573,7 +599,9 @@ class BindingsOggmWrangler(BindingsOggmModel):
             glacier = self.get_glacier_by_rgi_id(data=data, rgi_id=name)
         return glacier
 
-    def get_glacier_by_rgi_id(self, data, rgi_id: str) -> gpd.GeoDataFrame:
+    def get_glacier_by_rgi_id(
+        self, data: gpd.GeoDataFrame, rgi_id: str
+    ) -> gpd.GeoDataFrame:
         """Get glacier data by RGI ID.
 
         Parameters

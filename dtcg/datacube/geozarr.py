@@ -40,7 +40,7 @@ class GeoZarrHandler(MetadataMapper):
         metadata_mapping_file_path: str = None,
         zarr_format: int = 2,
     ):
-        """Initialise a GeoZarrWriter object.
+        """Initialise a GeoZarrHandler object.
 
         Parameters
         ----------
