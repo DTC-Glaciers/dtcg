@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 
 # -- Remove Copyright Boilerplate --------------------------------------------
 
+
 def remove_boilerplate(app, what, name, obj, options, lines):
     if what == "module":
         del lines[:16]
@@ -22,6 +23,7 @@ def remove_boilerplate(app, what, name, obj, options, lines):
 def setup(app):
     app.connect("autodoc-process-docstring", remove_boilerplate)
 
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -29,6 +31,7 @@ project = "DTCG"
 copyright = f"{date.today().year}, DTCG Contributors"
 author = "DTCG Contributors"
 release = "0.4.3"
+version = os.environ.get("READTHEDOCS_VERSION", "latest")
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -74,8 +77,27 @@ pygments_style = "sphinx"
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "sphinx_book_theme"
+html_theme = "breeze"
 html_static_path = ["_static"]
+
+# support_icon = """<img src="https://github.com/DTC-Glaciers/dtc-glaciers.github.io/blob/main/img/favicon.png"></img>"""
+html_theme_options = {
+    "sidebar_secondary": False,
+    # "external_links": [
+    #     {
+    #         "name": "DTC Glaciers",
+    #         "url": "https://dtcglaciers.org",
+    #         "html": support_icon,
+    #     },
+    # ],
+}
+html_context = {
+    "github_user": "DTC-Glaciers",
+    "github_repo": "dtcg",
+    "github_version": "main",
+    "doc_path": "docs",
+    "current_version": version,
+}
 
 master_doc = "index"
 trim_footnote_reference_space = True
