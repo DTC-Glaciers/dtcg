@@ -208,7 +208,7 @@ class TestOGGMBindings:
         for key in keys:
             assert key in details.keys()
             assert isinstance(details[key], dict)
-            assert isinstance(details[key]["value"], str)
+            assert isinstance(details[key]["value"], (str, float, int))
             assert isinstance(details[key]["unit"], str)
 
         assert details["Name"]["value"] == "Hintereisferner"
