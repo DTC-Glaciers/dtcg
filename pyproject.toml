@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.4.4"
+version = "0.4.6"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -55,7 +55,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tests = [
-    "pytest",
+    "pytest<9.0",
     "coverage",
     "coveralls",
 ]

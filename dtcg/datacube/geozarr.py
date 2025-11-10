@@ -54,7 +54,7 @@ class GeoZarrHandler(MetadataMapper):
         compressor : Blosc, default None
             Compressor to apply on arrays. If None, the compression will
             be Blosc with zstd.
-        metadata_mapping_file_path: str, default None
+        metadata_mapping_file_path : str, default None
             Path to the YAML file containing variable metadata mappings.
             If None, defaults to 'metadata_mapping.yaml' in the current
             directory.
