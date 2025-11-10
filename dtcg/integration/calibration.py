@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from dateutil.tz import UTC
-from oggm import cfg, utils
+from oggm import cfg, utils, GlacierDirectory
 from oggm.core import massbalance
 from tqdm import tqdm
 
@@ -76,7 +76,7 @@ class Calibrator:
 
     def get_calibrated_models(
         self,
-        gdir,
+        gdir: GlacierDirectory,
         model_class,
         ref_mb: pd.DataFrame,
         geodetic_period: str = "",
@@ -96,7 +96,7 @@ class Calibrator:
 
         Parameters
         ----------
-        gdir : oggm.GlacierDirectory
+        gdir : GlacierDirectory
             Glacier directory.
         model_class : oggm.MassBalanceModel
             Any mass balance model that subclasses MonthlyTIModel.
@@ -215,7 +215,7 @@ class Calibrator:
 
         return model_calib, model_flowlines, smb
 
-    def get_geodetic_mb(self, gdir) -> pd.DataFrame:
+    def get_geodetic_mb(self, gdir: GlacierDirectory) -> pd.DataFrame:
         """Get geodetic mass balances for a glacier.
 
         Returns
@@ -247,12 +247,14 @@ class Calibrator:
         geodetic_mb = ref_mb.loc[ref_mb.period == geo_period].dmdtda * 1000
         return geodetic_mb
 
-    def calibrate(self, gdir, model_matrix: dict, ref_mb: float) -> tuple:
+    def calibrate(
+        self, gdir: GlacierDirectory, model_matrix: dict, ref_mb: float
+    ) -> tuple:
         """Calibrate an OGGM glacier model.
 
         Parameters
         ----------
-        gdir : oggm.GlacierDirectory
+        gdir : GlacierDirectory
             Glacier directory.
         model_matrix : dict
             Model parameters for different run configurations.
@@ -289,7 +291,6 @@ class Calibrator:
                 smb=smb,
                 daily=model_params.get("daily", False),
                 calibration_filesuffix=calibration_filesuffix,
-                extra_model_kwargs=model_params.get("extra_kwargs", None),
             )
 
         return mb_model_calib, mb_model_flowlines, smb
@@ -442,13 +443,17 @@ class CalibratorCryotempo(Calibrator):
         return dmdtda
 
     def set_geodetic_mb_from_dataset(
-        self, gdir, dataset: xr.Dataset, year_start: int = 2011, year_end: int = 2020
+        self,
+        gdir: GlacierDirectory,
+        dataset: xr.Dataset,
+        year_start: int = 2011,
+        year_end: int = 2020,
     ) -> pd.DataFrame:
         """Set the geodetic mass balance from enhanced gridded data.
 
         Parameters
         ----------
-        gdir : oggm.GlacierDirectory
+        gdir : GlacierDirectory
             Glacier directory.
         dataset : xr.Dataset
             CryoTEMPO-EOLIS dataset.
@@ -492,12 +497,14 @@ class CalibratorCryotempo(Calibrator):
 
         return pd.DataFrame.from_records(geodetic_mb, index="rgiid")
 
-    def get_geodetic_mb(self, gdir, dataset: xr.Dataset = None) -> pd.DataFrame:
+    def get_geodetic_mb(
+        self, gdir: GlacierDirectory, dataset: xr.Dataset = None
+    ) -> pd.DataFrame:
         """Get geodetic mass balances for a glacier.
 
         Parameters
         ----------
-        gdir : oggm.GlacierDirectory
+        gdir : GlacierDirectory
             Glacier directory.
         dataset : xr.Dataset
             CryoTEMPO-EOLIS data.
@@ -549,12 +556,14 @@ class CalibratorCryotempo(Calibrator):
         )
         return geodetic_mb
 
-    def calibrate(self, gdir, model_matrix: dict, ref_mb: pd.DataFrame) -> tuple:
+    def calibrate(
+        self, gdir: GlacierDirectory, model_matrix: dict, ref_mb: pd.DataFrame
+    ) -> tuple:
         """Calibrate and run OGGM models using a model matrix.
 
         Parameters
         ----------
-        gdir : oggm.GlacierDirectory
+        gdir : GlacierDirectory
             Glacier directory.
         model_matrix : dict
             Model parameters for various calibration runs.
@@ -593,17 +602,18 @@ class CalibratorCryotempo(Calibrator):
                 smb=smb,
                 daily=daily,
                 calibration_filesuffix=calibration_filesuffix,
-                extra_model_kwargs=model_params.get("extra_kwargs", None),
             )
 
         return mb_model_calib, mb_model_flowlines, smb
 
-    def run_calibration(self, gdir, datacube, model=massbalance.SfcTypeTIModel):
+    def run_calibration(
+        self, gdir: GlacierDirectory, datacube, model=massbalance.SfcTypeTIModel
+    ):
         """Run calibration.
 
         Parameters
         ----------
-        gdir : oggm.GlacierDirectory
+        gdir : GlacierDirectory
             Glacier directory.
         datacube : GeoZarrHandler
             L1 or L2 datacube.
