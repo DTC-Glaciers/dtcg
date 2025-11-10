@@ -55,7 +55,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tests = [
-    "pytest",
+    "pytest<9.0",
     "coverage",
     "coveralls",
 ]
