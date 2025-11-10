@@ -22,11 +22,11 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 from dateutil.tz import UTC
 from oggm import cfg, utils
 from oggm.core import massbalance
 from tqdm import tqdm
-import xarray as xr
 
 
 class Calibrator:
@@ -43,7 +43,7 @@ class Calibrator:
         else:
             self.model_matrix = model_matrix
 
-    def set_model_matrix(self, name:str, model, geo_period:str, **kwargs):
+    def set_model_matrix(self, name: str, model, geo_period: str, **kwargs):
         """Set model parameters for calibration.
 
         Parameters
@@ -80,12 +80,12 @@ class Calibrator:
         model_class,
         ref_mb: pd.DataFrame,
         geodetic_period: str = "",
-        years: list=None,
-        model_calib:dict=None,
-        model_flowlines:dict=None,
-        smb:dict=None,
-        daily:bool=False,
-        calibration_filesuffix:str="",
+        years: list = None,
+        model_calib: dict = None,
+        model_flowlines: dict = None,
+        smb: dict = None,
+        daily: bool = False,
+        calibration_filesuffix: str = "",
         calibration_parameters: dict = None,
         **kwargs,
     ) -> tuple:
@@ -335,7 +335,7 @@ class CalibratorCryotempo(Calibrator):
             **kwargs,
         )
 
-    def get_eolis_dates(self, ds:xr.Dataset) -> np.ndarray:
+    def get_eolis_dates(self, ds: xr.Dataset) -> np.ndarray:
         """Get time index from CryoTEMPO-EOLIS dataset.
 
         Parameters
@@ -350,7 +350,7 @@ class CalibratorCryotempo(Calibrator):
         """
         return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
-    def get_eolis_mean_dh(self, ds:xr.Dataset) -> np.ndarray:
+    def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
         """Get
 
         Parameters
@@ -442,7 +442,7 @@ class CalibratorCryotempo(Calibrator):
         return dmdtda
 
     def set_geodetic_mb_from_dataset(
-        self, gdir, dataset:xr.Dataset, year_start: int = 2011, year_end: int = 2020
+        self, gdir, dataset: xr.Dataset, year_start: int = 2011, year_end: int = 2020
     ) -> pd.DataFrame:
         """Set the geodetic mass balance from enhanced gridded data.
 
@@ -492,7 +492,7 @@ class CalibratorCryotempo(Calibrator):
 
         return pd.DataFrame.from_records(geodetic_mb, index="rgiid")
 
-    def get_geodetic_mb(self, gdir, dataset:xr.Dataset=None) -> pd.DataFrame:
+    def get_geodetic_mb(self, gdir, dataset: xr.Dataset = None) -> pd.DataFrame:
         """Get geodetic mass balances for a glacier.
 
         Parameters
@@ -520,7 +520,9 @@ class CalibratorCryotempo(Calibrator):
 
         return pd_geodetic.loc[gdir.rgi_id]
 
-    def get_calibration_mb(self, ref_mb:pd.DataFrame, geo_period: str, source: str) -> float:
+    def get_calibration_mb(
+        self, ref_mb: pd.DataFrame, geo_period: str, source: str
+    ) -> float:
         """
 
         Parameters
@@ -547,7 +549,7 @@ class CalibratorCryotempo(Calibrator):
         )
         return geodetic_mb
 
-    def calibrate(self, gdir, model_matrix: dict, ref_mb:pd.DataFrame) -> tuple:
+    def calibrate(self, gdir, model_matrix: dict, ref_mb: pd.DataFrame) -> tuple:
         """Calibrate and run OGGM models using a model matrix.
 
         Parameters

@@ -20,9 +20,11 @@ Plotting utilities for the frontend.
 
 import sys
 from datetime import date, datetime
+from typing import Any
 
 import bokeh.models
 import bokeh.plotting
+import geopandas as gpd
 import geoviews as gv
 import holoviews as hv
 import matplotlib.pyplot as plt
@@ -31,7 +33,9 @@ import pandas as pd
 import xarray as xr
 from bokeh.models import NumeralTickFormatter, PrintfTickFormatter
 from dateutil.tz import UTC
-import geopandas as gpd
+from numpy.typing import ArrayLike
+
+from dtcg.datacube.geozarr import GeoZarrHandler
 
 hv.extension("bokeh")
 hv.renderer("bokeh").webgl = True
@@ -41,6 +45,17 @@ class BokehFigureFormat:
     """Regulates plot annotations and formatting for Bokeh plots.
 
     This also works for Holoviews when using Bokeh as a backend.
+
+    Attributes
+    ----------
+    defaults : dict
+        Default options for all Bokeh figures.
+    hover_tool : bokeh.models.HoverTool
+        Hover tool for Bokeh figures.
+    palette : tuple[str]
+        Colour palette.
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
     """
 
     def __init__(self):
@@ -49,9 +64,16 @@ class BokehFigureFormat:
         self.tooltips = []
         self.hover_tool = bokeh.models.HoverTool()
 
-    def check_holoviews(self):
+    def check_holoviews(self) -> None:
+        """Check holoviews is installed to prevent silent failures.
+
+        Raises
+        ------
+        ImportError
+            If Holoviews is not installed.
+        """
         if "holoviews" not in sys.modules:
-            raise SystemError("Holoviews is not installed.")
+            raise ImportError("Holoviews is not installed.")
 
     def initialise_formatting(
         self, figure: bokeh.plotting.figure
@@ -65,13 +87,20 @@ class BokehFigureFormat:
         ----------
         figure : bokeh.plotting.figure
             An unformatted Bokeh plot.
+
+        Returns
+        -------
+        bokeh.plotting.figure
+            Figure with default options applied.
         """
         default_options = self.get_default_opts()
         figure = figure.opts(default_options)
 
         return figure
 
-    def set_formatting_kwargs(self, figure: bokeh.plotting.figure, **kwargs):
+    def set_formatting_kwargs(
+        self, figure: bokeh.plotting.figure, **kwargs
+    ) -> bokeh.plotting.figure:
         """Set kwargs for generic formatting.
 
         Applies annotations, titles, labels.
@@ -80,6 +109,13 @@ class BokehFigureFormat:
         ----------
         figure : bokeh.plotting.figure
             An unformatted Bokeh plot.
+        kwargs
+            Additional arguments passed to Bokeh figures.
+
+        Returns
+        -------
+        bokeh.plotting.figure
+            Figure with default options applied.
         """
         figure = figure.opts(**kwargs)
 
@@ -96,7 +132,7 @@ class BokehFigureFormat:
             Title of figure.
         suffix : str
             Comment appended to returned title. Default empty string.
-        timestamp : str, datetime.datetime, optional
+        timestamp : str or datetime.datetime, optional
             Timestamp. Default empty string.
         location : str
             Location. Default empty string.
@@ -152,9 +188,19 @@ class BokehFigureFormat:
     def get_all_palettes(self) -> dict:
         """Get all valid preset colour palettes.
 
+        These are custom presets and do not include those accessible
+        via Bokeh or Holoviews.
+
+        These are:
+
+        * brown_blue_pastel
+        * brown_blue_vivid
+        * hillshade_glacier
+        * lines_jet_r
+
         Returns
         -------
-        dict
+        dict[tuple[str]]
             Preset colour palettes.
         """
         palettes = {
@@ -175,8 +221,13 @@ class BokehFigureFormat:
 
         Returns
         -------
-        tuple[str]
+        list[str]
             Palette of hex colours.
+
+        Raises
+        ------
+        KeyError
+            If no matching palette is found.
         """
         palettes = self.get_all_palettes()
         if name.lower() not in palettes.keys():
@@ -189,11 +240,22 @@ class BokehFigureFormat:
         return palettes[name]
 
     def get_hover_tool(
-        self, mode="vline", tooltips=None, attachment: str = "horizontal"
+        self,
+        mode: str = "vline",
+        tooltips: list[tuple[str, str]] | None = None,
+        attachment: str = "horizontal",
     ) -> bokeh.models.HoverTool:
         """Get the hover tool attribute.
 
-        , e.g. "mouse", "hline", "vline".
+        Parameters
+        ----------
+        mode : str, default "vline"
+            Hover mode for hover tool, e.g. "mouse", "hline", "vline".
+        tooltips : list[tuple[str,str]], optional
+            Hover tooltips.
+        attachment : str, default "horizontal"
+            Position of hover tooltip relative to cursor. Can be
+            "horizontal", "vertical", "above", or "below".
 
         Returns
         -------
@@ -216,18 +278,20 @@ class BokehFigureFormat:
         Parameters
         ----------
         mode : str, default "vline"
-            Hover mode, e.g. "mouse", "hline", "vline".
+            Hover mode for hover tool, e.g. "mouse", "hline", "vline".
         """
         self.hover_tool = bokeh.models.HoverTool(
             tooltips=self.tooltips, formatters=self.get_tooltip_format(), mode=mode
         )
 
-    def set_tooltips(self, tooltips: list, mode: str = "vline"):
+    def set_tooltips(
+        self, tooltips: list[tuple[str, str]], mode: str = "vline"
+    ) -> None:
         """Set the tooltips attribute and update the hover tool.
 
         Parameters
         ----------
-        tooltips : list
+        tooltips : list[tuple[str,str]]
             List of Bokeh figure tooltips. The tooltips should only
             contain printf formatters.
         mode : str, default "vline"
@@ -236,7 +300,7 @@ class BokehFigureFormat:
         self.tooltips = tooltips
         self.set_hover_tool(mode=mode)
 
-    def get_tooltip_format(self, tooltips: list = None) -> dict:
+    def get_tooltip_format(self, tooltips: list[tuple[str]] | None = None) -> dict:
         """Get a tooltip formatter from the tooltips attribute.
 
         This ensures all tooltips with a format string (in curly
@@ -245,7 +309,7 @@ class BokehFigureFormat:
 
         Parameters
         ----------
-        tooltips : list, optional.
+        tooltips : list[tuple[str,str]], optional.
             List of Bokeh figure tooltips.
 
         Returns
@@ -264,28 +328,29 @@ class BokehFigureFormat:
                 formatters[label[1].split("{")[0]] = "datetime"
         return formatters
 
-    def set_defaults(self, updated_options: dict):
+    def set_defaults(self, updated_options: dict) -> None:
         """Set and overwrite default options for Bokeh figures.
 
         Parameters
         ----------
         updated_options : dict
-            New key/value pairs which will overwrite the default options.
+            New key/value pairs which will overwrite the default
+            options.
         """
         self.defaults.update(updated_options)
 
     def get_help_button(
-        self, text: list, position: str = "right", add_colors=None
+        self, text: list, position: str = "right", add_colors: hv.Cycle | None = None
     ) -> bokeh.models.HelpButton:
-        """Get an interactive help button from a list of fields
+        """Get an interactive help button from a list of fields.
 
         Parameters
         ----------
         text : list[str]
             Help text.
-        position : str
-            Tooltip position.
-        add_colors : hv.Cycle, default None
+        position : str, default "right"
+            Help button position.
+        add_colors : hv.Cycle or None, default None
             Add coloured boxes next to text. Used for legend entries.
 
         Returns
@@ -349,7 +414,32 @@ class BokehFigureFormat:
         aspect: int = 2,
         legend_position="top_left",
         **kwargs,
-    ):
+    ) -> hv.Overlay:
+        """Set plot options for Holoviews overlays.
+
+        Parameters
+        ----------
+        overlay : hv.Overlay
+            Holoviews plot.
+        xlabel : str
+            X-axis label.
+        ylabel : str
+            Y-axis label.
+        title : str
+            Plot title.
+        aspect : int, default 2
+            Aspect ratio. Currently disabled due to several Holoviews
+            bugs.
+        legend_position : str, default "top_left"
+            Location of legend box.
+        kwargs
+            Additional parameters passed to hv.Overlay objects.
+
+        Returns
+        -------
+        hv.Overlay
+            Holoviews plot with updated options.
+        """
         default_opts = self.get_default_opts()
         overlay = overlay.opts(**default_opts).opts(
             xlabel=xlabel,
@@ -360,9 +450,10 @@ class BokehFigureFormat:
             legend_position=legend_position,
             **kwargs,
         )
+
         return overlay
 
-    def decode_datacube(self, datacube: xr.Dataset) -> xr.Dataset:
+    def decode_datacube(self, datacube: GeoZarrHandler | xr.Dataset) -> xr.Dataset:
         """Get a dataset decoded into CF conventions.
 
         This should be called after data processing to avoid changing
@@ -370,7 +461,7 @@ class BokehFigureFormat:
 
         Parameters
         ----------
-        datacube : dtcg.datacube.geozarr.GeoZarrHandler or xr.Dataset
+        datacube : GeoZarrHandler or xr.Dataset
             CryoTEMPO-EOLIS observations for elevation change.
 
         Returns
@@ -388,18 +479,29 @@ class BokehFigureFormat:
 
 
 class BokehMap(BokehFigureFormat):
-    """Plot data as a map.
+    """Handler for plotting geospatial data on a map.
 
     Attributes
     ----------
-    tooltips : list
-        A list of tooltips corresponding to a polygon's metadata.
+    defaults : dict
+        Default options for all Bokeh figures.
     hover_tool : bokeh.models.HoverTool
         Hover tool for Bokeh figures.
     palette : tuple[str]
         Colour palette.
-    defaults : dict
-        Default options for all Bokeh figures.
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata. By
+        default, these are:
+
+        * Name
+        * RGI ID
+        * GLIMS ID
+        * Area
+        * Max Elevation
+        * Min Elevation
+        * Latitude
+        * Longitude
+        * Outline Date
     """
 
     def __init__(self):
@@ -414,7 +516,7 @@ class BokehMap(BokehFigureFormat):
             ("Min Elevation", "@Zmin{%.2f m}"),
             ("Latitude", "@CenLat{%.2f °N}"),
             ("Longitude", "@CenLon{%.2f °E}"),
-            ("Longitude", "@CenLon{%.2f °E}"),
+            ("Outline Date", "@BgnDate"),
         ]
         self.set_hover_tool(mode="mouse")
         self.hover_tool = self.get_hover_tool(mode="mouse")
@@ -573,18 +675,29 @@ class BokehMap(BokehFigureFormat):
 
 
 class BokehMapOutlines(BokehMap):
-    """Plot glacier outlines as a map.
+    """Handler for plotting glacier outlines on a map.
 
     Attributes
     ----------
-    tooltips : list
-        A list of tooltips corresponding to a polygon's metadata.
+    defaults : dict
+        Default options for all Bokeh figures.
     hover_tool : bokeh.models.HoverTool
         Hover tool for Bokeh figures.
     palette : tuple[str]
         Colour palette.
-    defaults : dict
-        Default options for all Bokeh figures.
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata. By
+        default, these are:
+
+        * Name
+        * RGI ID
+        * GLIMS ID
+        * Area
+        * Max Elevation
+        * Min Elevation
+        * Latitude
+        * Longitude
+        * Outline Date
     """
 
     def __init__(self):
@@ -613,7 +726,19 @@ class BokehMapOutlines(BokehMap):
             }
         )
 
-    def plot_glacier_highlight(self, glacier_outlines):
+    def plot_glacier_highlight(self, glacier_outlines: gpd.GeoDataFrame) -> hv.Overlay:
+        """Highlight a glacier.
+
+        Parameters
+        ----------
+        glacier_outlines : gpd.GeoDataFrame
+            Glacier geometry.
+
+        Returns
+        -------
+        hv.Overlay
+            Glacier outline in white with black highlight.
+        """
         overlay = (
             gv.Polygons(glacier_outlines).opts(
                 fill_color=self.palette[2],
@@ -629,26 +754,24 @@ class BokehMapOutlines(BokehMap):
         return overlay
 
     def plot_region(self, shapefile, glacier_data, region_id: int) -> hv.Overlay:
-        """Plot a subregion with all its glaciers.
+        """Plot a region with all its glaciers.
 
         Parameters
         ----------
         shapefile : geopandas.GeoDataFrame
-            Subregion shapefile.
+            Glacier shapefile, which may contain more than one region.
         glacier_data: geopandas.GeoDataFrame
-            Glacier outlines.
-        subregion_name : str
-            Name of subregion.
+            Glacier geometry for a glacier of interest.
+        region_id : int
+            RGI region ID of the region of interest.
 
         Returns
         -------
         hv.Overlay
-            Interactive figure of all glaciers in a subregion.
+            Interactive figure of all glaciers in a region.
         """
 
         mask = shapefile.O1Region == f"{int(region_id)}"  # single digit string
-        # region_name = shapefile[mask]["name"].values[0]
-        # title = self.get_title(title=f"{region_name}")
 
         overlay = (
             (
@@ -690,7 +813,7 @@ class BokehMapOutlines(BokehMap):
         shapefile: geopandas.GeoDataFrame
             Glacier outlines. This *must* be projected to EPSG:4326.
         rgi_id : str
-            RGI ID. Converted to RGI60.
+            RGI ID, converted to RGI60.
         region_name : str, optional
             Name of region.
 
@@ -729,13 +852,12 @@ class BokehGraph(BokehFigureFormat):
 
     Attributes
     ----------
-
     defaults : dict
         Default options for all Bokeh figures.
-    tooltips : list
-        A list of tooltips corresponding to a polygon's metadata.
     hover_tool : bokeh.models.HoverTool
         Hover tool for Bokeh figures.
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
     palette : tuple
         Colour palette.
     """
@@ -758,12 +880,12 @@ class BokehGraph(BokehFigureFormat):
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
 
-    def set_time_constraint(self, dataset, nyears: int = 20):
+    def set_time_constraint(self, dataset: ArrayLike, nyears: int = 20):
         """Set a dataset's time period to a specific number of years.
 
         Parameters
         ----------
-        dataset : Any
+        dataset : array_like
             Data with a time index in years.
         nyears : int, default 20
             Time period in years. The end date is always the most
@@ -771,7 +893,7 @@ class BokehGraph(BokehFigureFormat):
 
         Returns
         -------
-        Any
+        array_like
             Data for the given time period up to the most recent
             available year.
         """
@@ -789,19 +911,32 @@ class BokehGraph(BokehFigureFormat):
 
         return dataset
 
-    def get_time_index(self, data: xr.DataArray, end_date: int):
-        index = [datetime.date(end_date, i, 1) for i in data.index.values]
+    def get_time_index(self, data: ArrayLike, year: int) -> list[date]:
+        """Get a time index from a year and array of months.
+
+        Parameters
+        ----------
+        data : array_like
+            Data indexed by month number.
+        year : int
+            Year of interest.
+
+        Returns
+        -------
+        list[date]
+            Monthly time index for a given year.
+        """
+
+        index = [datetime.date(year, i, 1) for i in data.index.values]
         return index
 
     def plot_runoff_timeseries(
         self,
         runoff: xr.Dataset,
         name: str = "",
-        nyears=20,
-        ref_year=2015,
-        cumulative=False,
-        year_minimum_runoff=None,
-        year_maximum_runoff=None,
+        nyears: int = 20,
+        ref_year: int = 2015,
+        cumulative: bool = False,
     ) -> hv.Overlay:
         """Plot the runoff of a glacier or basin.
 
@@ -814,11 +949,18 @@ class BokehGraph(BokehFigureFormat):
         nyears : int, default 20
             Time period in years. The end date is always the most
             recent available year.
+        ref_year : int
+            Year of interest which will be highlighted on the plot.
+        cumulative : bool, default False
+            Plot cumulative runoff.
 
         Returns
         -------
         hv.Curve
-            Time series of runoff for a given number of years.
+            Time series of mean, minimum, and maximum runoff for a given
+            number of years. The minimum and maximum runoffs are the
+            months with minimum and maximum runoff over the entire time
+            period.
         """
         runoff = self.set_time_constraint(dataset=runoff, nyears=nyears)
         latest_year = int(runoff.time.values[-1])
@@ -870,33 +1012,32 @@ class BokehGraph(BokehFigureFormat):
                 )
             )
             figures.append(mean_curve)
-            if year_maximum_runoff and year_minimum_runoff:
-                min_curve = (
-                    hv.Curve(
-                        (index, runoff_minimum),
-                        group="runoff",
-                        label=f"Minimum ({time_period})",
-                    )
-                    .opts(**self.defaults)
-                    .opts(
-                        color="black",
-                        line_width=0.8,
-                    )
+            min_curve = (
+                hv.Curve(
+                    (index, runoff_minimum),
+                    group="runoff",
+                    label=f"Minimum ({time_period})",
                 )
-                figures.append(min_curve)
-                max_curve = (
-                    hv.Curve(
-                        (index, runoff_maximum),
-                        group="runoff",
-                        label=f"Maximum ({time_period})",
-                    )
-                    .opts(**self.defaults)
-                    .opts(
-                        color=self.palette[2],
-                        line_width=0.8,
-                    )
+                .opts(**self.defaults)
+                .opts(
+                    color="black",
+                    line_width=0.8,
                 )
-                figures.append(max_curve)
+            )
+            figures.append(min_curve)
+            max_curve = (
+                hv.Curve(
+                    (index, runoff_maximum),
+                    group="runoff",
+                    label=f"Maximum ({time_period})",
+                )
+                .opts(**self.defaults)
+                .opts(
+                    color=self.palette[2],
+                    line_width=0.8,
+                )
+            )
+            figures.append(max_curve)
 
         ref_curve = (
             hv.Curve((index, runoff_ref_year), group="runoff", label=f"{ref_year}")
@@ -1112,14 +1253,19 @@ class BokehGraph(BokehFigureFormat):
 
         return overlay
 
-    def plot_limits(self, plot, element):
+    def plot_limits(self, plot, element) -> None:
+        """Hook to set axis limits"""
         plot.handles["x_range"].min_interval = 0
         plot.handles["x_range"].max_interval = 20
         plot.handles["y_range"].min_interval = 0
         plot.handles["y_range"].max_interval = 40
 
     def plot_mass_balance(
-        self, mass_balance, observations, nyears: int = 20, name: str = ""
+        self,
+        mass_balance: xr.Dataset,
+        observations: xr.Dataset,
+        nyears: int = 20,
+        name: str = "",
     ) -> hv.Overlay:
         """Plot specific mass balance and WGMS observations.
 
@@ -1129,11 +1275,11 @@ class BokehGraph(BokehFigureFormat):
             Specific mass balance data.
         observations : xr.DataSet
             WGMS observations.
-        name: str, optional
-            Name of glacier. Defaults to empty string.
         nyears: int, default 20
             Time period in years. The end date is always the most
             recent available year.
+        name: str, optional
+            Name of glacier. Defaults to empty string.
 
         Returns
         -------
@@ -1189,19 +1335,18 @@ class BokehGraph(BokehFigureFormat):
 
 
 class BokehCryotempo(BokehFigureFormat):
-    """Wrangle data and plot with Bokeh.
+    """Wrangle data and plot CryoTEMPO-EOLIS data with Bokeh.
 
     Attributes
     ----------
-
     defaults : dict
         Default options for all Bokeh figures.
-    tooltips : list
-        A list of tooltips corresponding to a polygon's metadata.
     hover_tool : bokeh.models.HoverTool
         Hover tool for Bokeh figures.
     palette : tuple
         Colour palette.
+    tooltips : list
+        A list of tooltips corresponding to a polygon's metadata.
     """
 
     def __init__(self):
@@ -1224,13 +1369,13 @@ class BokehCryotempo(BokehFigureFormat):
 
     def get_date_mask(
         self, dataframe: pd.DataFrame, start_date: str, end_date: str
-    ) -> np.ndarray:
+    ) -> np.ndarray[date]:
         """Get a mask for all data between a start and end date.
 
         Parameters
         ----------
         dataframe : pd.DataFrame
-            Dataframe to get mask for.
+            Dataframe for which to get the mask.
         start_date : str
             Start date in Y-M-D format.
         end_date : str
@@ -1238,8 +1383,8 @@ class BokehCryotempo(BokehFigureFormat):
 
         Returns
         -------
-        np.ndarray
-            Mask for all data between start and end date.
+        np.ndarray[date]
+            Mask for all data between the start and end date.
         """
         date_mask = (
             datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC)
@@ -1254,7 +1399,7 @@ class BokehCryotempo(BokehFigureFormat):
         """Get mean by day of year.
 
         Parameters
-        -----
+        ----------
         dataframe : pd.DataFrame
             Time series.
 
@@ -1262,7 +1407,6 @@ class BokehCryotempo(BokehFigureFormat):
         -------
         pd.DataFrame
             Mean indexed by day of year.
-
         """
         return (
             dataframe.groupby([dataframe.index.day_of_year])
@@ -1276,9 +1420,9 @@ class BokehCryotempo(BokehFigureFormat):
         data: dict,
         key: str,
         label: str = "",
-        line_width=0.8,
+        line_width: float = 0.8,
         **kwargs,
-    ) -> list:
+    ) -> list[hv.Curve]:
         """Add Holoviews curve to a list of figures.
 
         Parameters
@@ -1288,26 +1432,27 @@ class BokehCryotempo(BokehFigureFormat):
         data : dict
             1D data to plot as a Curve.
         key : str
-            Key used to access the correct data in `data`.
+            Key used to access the correct data in ``data``.
         label : str, optional
             Label used for the figure which will appear in the legend.
         line_width : float, default 0.8
             The curve's line width.
         kwargs
-            Extra arguments passed to hv.Curve().
+            Extra arguments passed to ``hv.Curve()``.
 
         Returns
         -------
-        list
-            List of Holoviews figures.
+        list[hv.Curve]
+            Holoviews figures.
         """
         if not label:
-            label = self.get_label_from_key(key)
+            label = self.get_label_from_oggm_model(key)
         curve = hv.Curve(data[key], label=label).opts(line_width=line_width, **kwargs)
         figures.append(curve)
+
         return figures
 
-    def get_label_from_key(self, key: str) -> str:
+    def get_label_from_oggm_model(self, key: str) -> str:
         """Get a plot label for a given OGGM model type.
 
         Parameters
@@ -1333,10 +1478,11 @@ class BokehCryotempo(BokehFigureFormat):
             years = [i.split("-")[0] for i in key_split[-2:]]
             geo_period = "-".join(years)
             label = f"{label} ({geo_period})"
+
         return label
 
-    def get_eolis_dates(self, ds: xr.Dataset) -> np.ndarray:
-        """Get time index of EOLIS data."""
+    def get_eolis_dates(self, ds: xr.Dataset) -> np.ndarray[date]:
+        """Get time index of an EOLIS dataset."""
         return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
     def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
@@ -1381,14 +1527,14 @@ class BokehCryotempo(BokehFigureFormat):
     def plot_mb_comparison(
         self,
         smb: dict,
-        years=None,
+        years: list | None = None,
         glacier_name: str = "",
         geodetic_period: str = "2000-01-01_2020-01-01",
         ref_year: int = 2015,
-        datacube=None,
+        datacube: GeoZarrHandler | None = None,
         gdir=None,
         resample: bool = False,
-        cumulative=False,
+        cumulative: bool = False,
     ):
         """Plot daily SMB for a specific year and geodetic mean.
 
@@ -1505,7 +1651,7 @@ class BokehCryotempo(BokehFigureFormat):
                         # tools=[self.hover_tool],
                     )
                 else:
-                    label = self.get_label_from_key(k)
+                    label = self.get_label_from_oggm_model(k)
 
                     df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
 
@@ -1579,7 +1725,7 @@ class BokehCryotempo(BokehFigureFormat):
 
         Parameters
         ----------
-        datacube : dtcg.datacube.geozarr.GeoZarrHandler
+        datacube : GeoZarrHandler
             CryoTEMPO-EOLIS observations for elevation change.
         mass_balance : bool, default False
             If True, calculate and display the specific mass balance
@@ -1759,7 +1905,7 @@ class BokehCryotempo(BokehFigureFormat):
 
         for k, v in smb.items():
             if ("Daily" in k) or ("SfcType") in k:
-                label = self.get_label_from_key(k)
+                label = self.get_label_from_oggm_model(k)
 
                 df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
                 # align with Cryosat data
@@ -1857,10 +2003,8 @@ class BokehCryotempo(BokehFigureFormat):
 
         Parameters
         ----------
-        datacube : dtcg.datacube.geozarr.GeoZarrHandler
+        datacube : GeoZarrHandler
             CryoTEMPO-EOLIS observations for elevation change.
-        gdir : GlacierDirectory, default None
-            Glacier of interest.
         years : list, default None
             Range of desired measurement period in years.
         ref_year : int, default 2015
@@ -2013,8 +2157,28 @@ class BokehCryotempo(BokehFigureFormat):
         smb = 1000 * (elevation - initial_elevation) * ice_density / area
         return smb
 
-    def get_percentage_difference(self, a, b):
-        return 100 * np.absolute(b - a) / ((a + b) / 2)
+    def get_percentage_difference(self, a: Any, b: Any) -> Any:
+        """Get the percentage difference between two numerical values.
+
+        .. math::
+
+            \\frac{\\left | B-A \\right |}{\\left ( \\frac{A+B}{2} \\right )}
+
+        Parameters
+        ----------
+        a : Any
+            Numerical value or array of values.
+        b : Any
+            Numerical value or array of values. Must have the same
+            dimensions as `a`.
+
+        Returns
+        -------
+        Any
+            Percentage difference between two numerical values.
+        """
+        # return 100 * np.absolute(b - a) / ((a + b) / 2)
+        return 200 * np.absolute(b - a) / (a + b)
 
 
 class BokehSynthetic(BokehCryotempo):

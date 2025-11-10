@@ -22,7 +22,6 @@ Executes an OGGM-API request.
 
 import csv
 import json
-import os
 from pathlib import Path
 
 import geopandas as gpd
@@ -30,8 +29,8 @@ import numpy as np
 import pandas as pd
 import shapely.geometry as shpg
 import xarray as xr
-from oggm import cfg, tasks, utils, workflow
-from oggm.shop import its_live, w5e5
+from oggm import GlacierDirectory, cfg, tasks, utils, workflow
+from oggm.shop import its_live, rgitopo, w5e5
 
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
 import dtcg.integration.calibration
@@ -55,13 +54,16 @@ class BindingsOggmModel:
         Base URL for shapefile data.
     WORKING_DIR : str, default None
         Temporary working directory.
+    oggm_params : dict, default None
+        OGGM configuration parameters.
+
     """
 
     def __init__(
         self,
         base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
         working_dir: str = "",
-        oggm_params: dict = None,
+        oggm_params: dict | None = None,
     ):
         super().__init__()
         self.DEFAULT_BASE_URL = base_url
@@ -72,10 +74,20 @@ class BindingsOggmModel:
             self.oggm_params = oggm_params
 
     def set_oggm_params(self, **new_params: dict) -> None:
+        """Define OGGM configuration parameters.
+
+        This will overwrite existing values that have the same key.
+        To configure OGGM, use ``set_oggm_kwargs()``.
+
+        Parameters
+        ----------
+        **new_params
+            Parameters passed to OGGM's configuration.
+        """
         self.oggm_params.update(new_params)
 
     def set_oggm_kwargs(self) -> None:
-        """Set OGGM configuration parameters.
+        """Set OGGM configuration.
 
         .. note:: This may eventually be moved to ``api.internal._parse_oggm``.
 
@@ -100,7 +112,8 @@ class BindingsOggmModel:
         ----------
         dirname : str
             Name of temporary directory
-
+        **kwargs
+            Extra arguments passed to OGGM's configuration.
         """
 
         cfg.initialize(logging_level="CRITICAL")
@@ -121,7 +134,7 @@ class BindingsOggmModel:
 
         Subregion names take priority over region names.
 
-        TODO: Fuzzy-finding
+        .. todo:: Fuzzy-finding.
 
         Parameters
         ----------
@@ -226,6 +239,11 @@ class BindingsOggmModel:
             Path to database with subregion names and O1/O2 codes.
         from_web : bool, default False
             Use data from oggm-sample-data.
+
+        Returns
+        -------
+        list
+            RGI metadata for all glaciers.
         """
 
         if from_web:  # fallback to sample-data
@@ -253,7 +271,8 @@ class BindingsOggmModel:
 
         Returns
         -------
-            List of RGI shapefiles.
+        list
+            RGI shapefiles.
 
         Raises
         ------
@@ -285,7 +304,7 @@ class BindingsOggmModel:
         prepro_level: int = 4,
         prepro_border: int = 80,
         **kwargs,
-    ):
+    ) -> list[GlacierDirectory]:
         """Get OGGM glacier directories.
 
         Parameters
@@ -304,9 +323,8 @@ class BindingsOggmModel:
 
         Returns
         -------
-        list
-            :py:class:`oggm.GlacierDirectory` objects for the
-            initialised glacier directories.
+        list[GlacierDirectory]
+            Glacier directories for the given RGI IDs.
         """
 
         if not base_url:
@@ -335,30 +353,35 @@ class BindingsOggmModel:
         int
             The year the outline's source data was published.
         """
-
-        outline_date = glacier_data["BgnDate"]
-
         outline_date = glacier_data.get("EndDate", "-9999999")
-        if "EndDate" in glacier_data.keys():
-            outline_date = glacier_data["EndDate"]
-
         if outline_date == "-9999999":
-            outline_date = glacier_data["BgnDate"]
-
+            outline_date = glacier_data.get("BgnDate", "-9999999")
         outline_date = int(outline_date[:4])
 
         return outline_date
 
-    def set_flowlines(self, gdir) -> None:
-        """Compute glacier flowlines if missing from glacier directory."""
-        if not os.path.exists(gdir.get_filepath("inversion_flowlines")):
-            if not os.path.exists(gdir.get_filepath("elevation_band_flowline")):
+    def set_flowlines(self, gdir: GlacierDirectory) -> None:
+        """Compute glacier flowlines if missing from glacier directory.
+
+        Parameters
+        ----------
+        gdir : GlacierDirectory
+            Glacier directory.
+        """
+        if not Path(gdir.get_filepath("inversion_flowlines")).exists():
+            if not Path(gdir.get_filepath("elevation_band_flowline")).exists():
                 tasks.elevation_band_flowline(gdir=gdir, preserve_totals=True)
             tasks.fixed_dx_elevation_band_flowline(gdir, preserve_totals=True)
 
 
 class BindingsOggmWrangler(BindingsOggmModel):
-    """Wrangles input data for OGGM workflows."""
+    """Wrangles input data for OGGM workflows.
+
+    Attributes
+    ----------
+    SHAPEFILE_PATH : str
+        Region or subregion's glacier outlines.
+    """
 
     def __init__(
         self,
@@ -415,12 +438,15 @@ class BindingsOggmWrangler(BindingsOggmModel):
             "Name": {"value": polygon["Name"], "unit": ""},
             "RGI ID": {"value": polygon["RGIId"], "unit": ""},
             "GLIMS ID": {"value": polygon["GLIMSId"], "unit": ""},
-            "Area": {"value": polygon["Area"], "unit": "km²"},
+            "Area": {"value": float(polygon["Area"]), "unit": "km²"},
             "Max Elevation": {"value": polygon["Zmax"], "unit": "m"},
             "Min Elevation": {"value": polygon["Zmin"], "unit": "m"},
-            "Latitude": {"value": polygon["CenLat"], "unit": "°N"},
-            "Longitude": {"value": polygon["CenLon"], "unit": "°E"},
-            "Outline Date": {"value": polygon["BgnDate"][:4], "unit": ""},
+            "Latitude": {"value": float(polygon["CenLat"]), "unit": "°N"},
+            "Longitude": {"value": float(polygon["CenLon"]), "unit": "°E"},
+            "Outline Date": {
+                "value": self.get_outline_source_date(polygon),
+                "unit": "",
+            },
         }
 
         return outline_details
@@ -489,7 +515,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
         """Get the difference of overlapping polygons.
 
         .. note:: GPD's overlay() only acts on GeoDataFrames, but this
-        function manipulates GeoSeries.
+           function manipulates GeoSeries.
 
         Parameters
         ----------
@@ -517,6 +543,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
 
         If two polygons overlap, the overlapping area is removed from the
         second polygon.
+
         Parameters
         ----------
         frame : gpd.GeoDataFrame
@@ -572,7 +599,9 @@ class BindingsOggmWrangler(BindingsOggmModel):
             glacier = self.get_glacier_by_rgi_id(data=data, rgi_id=name)
         return glacier
 
-    def get_glacier_by_rgi_id(self, data, rgi_id: str) -> gpd.GeoDataFrame:
+    def get_glacier_by_rgi_id(
+        self, data: gpd.GeoDataFrame, rgi_id: str
+    ) -> gpd.GeoDataFrame:
         """Get glacier data by RGI ID.
 
         Parameters
@@ -928,8 +957,15 @@ class BindingsCryotempo(BindingsOggmWrangler):
             rgi_ids, base_url, prepro_level, prepro_border, **kwargs
         )
 
-    def get_glacier_data(self, gdirs: list) -> None:
+    def get_glacier_data(self, gdirs: list, dem=False) -> None:
         """Add velocity data, monthly and daily W5E5 data."""
+        if dem:
+            workflow.execute_entity_task(
+                rgitopo.select_dem_from_dir,
+                gdirs,
+                dem_source="COPDEM90",
+                keep_dem_folders=True,
+            )
         workflow.execute_entity_task(tasks.glacier_masks, gdirs)
         workflow.execute_entity_task(its_live.itslive_velocity_to_gdir, gdirs)
 

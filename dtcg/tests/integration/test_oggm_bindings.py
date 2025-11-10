@@ -20,7 +20,7 @@ import logging
 import geopandas as gpd
 import numpy as np
 import pytest
-from oggm import GlacierDirectory, cfg, utils
+from oggm import cfg, utils
 
 import dtcg.integration.oggm_bindings as integration_ob
 
@@ -208,7 +208,7 @@ class TestOGGMBindings:
         for key in keys:
             assert key in details.keys()
             assert isinstance(details[key], dict)
-            assert isinstance(details[key]["value"], str)
+            assert isinstance(details[key]["value"], (str, float, int))
             assert isinstance(details[key]["unit"], str)
 
         assert details["Name"]["value"] == "Hintereisferner"
