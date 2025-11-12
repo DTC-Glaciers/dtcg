@@ -1133,7 +1133,7 @@ class BokehGraph(BokehFigureFormat):
         runoff = self.set_time_constraint(dataset=runoff, nyears=nyears)
         latest_year = int(runoff.time.values[-1])
         mean_runoff = runoff.mean(dim="time")
-        index = [datetime.date(latest_year, i, 1) for i in mean_runoff.month_2d.values]
+        index = [date(latest_year, i, 1) for i in mean_runoff.month_2d.values]
 
         title = self.get_title(
             title=f"Mean Monthly Runoff Cycles ({int(runoff.time.values[0])} - {latest_year})",
@@ -1297,8 +1297,8 @@ class BokehGraph(BokehFigureFormat):
                 mass_balance = next(item for item in mass_balance if item is not None)
         except StopIteration:
             return None
-        index = [datetime.date(i, 1, 1) for i in observations.index.values]
-        title = self.get_title(title="Mass Balance")
+        index = [date(int(i), 1, 1) for i in observations.index.values]
+        title = self.get_title(title="Monthly Specific Mass Balance")
 
         defaults = self.defaults
         defaults.update({"ylim": (None, None)})
@@ -2315,7 +2315,7 @@ class HoloviewsDashboard(BokehFigureFormat):
             location = ""
         self.title = self.get_title(title=location)
 
-    def set_layout(self, figures: list) -> hv.Layout:
+    def set_layout(self, figures: list, jupyter=False) -> hv.Layout:
         """Compose Layout from a sequence of overlays or layouts.
 
         Dynamically adds a sequence of overlays to a layout.
@@ -2324,6 +2324,8 @@ class HoloviewsDashboard(BokehFigureFormat):
         ----------
         figures : list[hv.Overlay|hv.Layout]
             A sequence of figures.
+        jupyter : bool, default False
+            Use styling for Jupyter interfaces.
         """
         # columns = len(figures)
         if isinstance(figures, list):
@@ -2333,39 +2335,46 @@ class HoloviewsDashboard(BokehFigureFormat):
         else:
             layout = hv.Layout([figures])
 
-        layout = layout.opts(
-            sizing_mode="stretch_width",
-            styles={
-                "flex": "1 1 auto",
-                "align-items": "stretch",
-                "align-content": "flex-start",
-                "width": "100%",
-                "height": "50%",
-            },
-        )
+        layout = layout.opts(sizing_mode="stretch_width")
+        if not jupyter:
+            layout = layout.opts(
+                styles={
+                    "flex": "1 1 auto",
+                    "align-items": "stretch",
+                    "align-content": "flex-start",
+                    "width": "100%",
+                    "height": "50%",
+                },
+            )
 
         return layout
 
-    def set_dashboard(self, figures: list):
+    def set_dashboard(self, figures: list, jupyter=False):
         """Set dashboard from a sequence of figures.
 
         Parameters
         ----------
         figures : list[hv.Overlay|hv.Layout]
             A sequence of figures.
+        jupyter : bool, default False
+            Use styling for Jupyter interfaces.
         """
-        self.dashboard = self.set_layout(figures=figures).opts(
+        layout = self.set_layout(figures=figures).opts(
             shared_axes=False,
             title=self.title,
             fontsize={"title": 18},
             sizing_mode="stretch_width",
-            styles={
-                "flex": "1 1 auto",
-                "align-items": "stretch",
-                "align-content": "flex-start",
-            },
             merge_tools=False,
         )
+        if not jupyter:
+            layout = layout.opts(
+                styles={
+                    "flex": "1 1 auto",
+                    "align-items": "stretch",
+                    "align-content": "flex-start",
+                },
+            )
+        self.dashboard = layout
         return self.dashboard
 
 
@@ -2388,47 +2397,6 @@ class HoloviewsDashboardL2(HoloviewsDashboard, BokehCryotempo):
         self.plot_graph = BokehGraph()
         self.plot_cryosat = BokehCryotempo
         self.plot_synthetic = BokehSynthetic()
-        self.title = "Dashboard"
-        self.figures = []
-        self.dashboard = hv.Layout()
-
-    def set_dashboard(self, figures: list):
-        """Set dashboard from a sequence of figures.
-
-        Parameters
-        ----------
-        figures : list[hv.Overlay|hv.Layout]
-            A sequence of figures.
-        """
-        # self.dashboard = figures
-        self.dashboard = self.set_layout(figures=figures).opts(
-            shared_axes=False,
-            title=self.title,
-            fontsize={"title": 18},
-            sizing_mode="stretch_width",
-            merge_tools=False,
-        )
-
-        return self.dashboard
-
-
-class HoloviewsDashboardL1(HoloviewsDashboard):
-    """Holoviews dashboard for runoff data.
-
-    Attributes
-    ----------
-    plot_map : BokehMap
-    plot_graph : BokehGraph
-    title : str
-    figures : list
-    dashboard : hv.Layout
-    """
-
-    def __init__(self):
-        super().__init__()
-
-        self.plot_map = BokehMap()
-        self.plot_graph = BokehGraph()
         self.title = "Dashboard"
         self.figures = []
         self.dashboard = hv.Layout()
@@ -2501,6 +2469,47 @@ class HoloviewsDashboardL1(HoloviewsDashboard):
             self.set_dashboard_title(name=glacier_name)
         self.set_dashboard(figures=self.figures)
         return self.dashboard
+
+    def set_dashboard(self, figures: list):
+        """Set dashboard from a sequence of figures.
+
+        Parameters
+        ----------
+        figures : list[hv.Overlay|hv.Layout]
+            A sequence of figures.
+        """
+        # self.dashboard = figures
+        self.dashboard = self.set_layout(figures=figures, jupyter=True).opts(
+            shared_axes=False,
+            title=self.title,
+            fontsize={"title": 18},
+            sizing_mode="stretch_width",
+            merge_tools=False,
+        )
+
+        return self.dashboard
+
+
+class HoloviewsDashboardL1(HoloviewsDashboard):
+    """Holoviews dashboard for runoff data.
+
+    Attributes
+    ----------
+    plot_map : BokehMap
+    plot_graph : BokehGraph
+    title : str
+    figures : list
+    dashboard : hv.Layout
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.plot_map = BokehMap()
+        self.plot_graph = BokehGraph()
+        self.title = "Dashboard"
+        self.figures = []
+        self.dashboard = hv.Layout()
 
     def set_layout(self, figures: list) -> hv.Layout:
         """Compose Layout from a sequence of overlays or layouts.

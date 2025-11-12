@@ -298,12 +298,7 @@ class BindingsOggmModel:
         return rgi_files
 
     def get_glacier_directories(
-        self,
-        rgi_ids: list,
-        base_url: str = "",
-        prepro_level: int = 4,
-        prepro_border: int = 80,
-        **kwargs,
+        self, rgi_ids: list, **kwargs
     ) -> list[GlacierDirectory]:
         """Get OGGM glacier directories.
 
@@ -327,15 +322,11 @@ class BindingsOggmModel:
             Glacier directories for the given RGI IDs.
         """
 
-        if not base_url:
-            base_url = self.DEFAULT_BASE_URL
-        gdirs = workflow.init_glacier_directories(
-            rgi_ids,
-            prepro_base_url=base_url,
-            from_prepro_level=prepro_level,
-            prepro_border=prepro_border,
-            **kwargs,
-        )
+        prepro_base_url = kwargs.get("prepro_base_url", "")
+        if not prepro_base_url:
+            kwargs["prepro_base_url"] = self.DEFAULT_BASE_URL
+
+        gdirs = workflow.init_glacier_directories(rgi_ids, **kwargs)
 
         return gdirs
 
@@ -572,8 +563,8 @@ class BindingsOggmWrangler(BindingsOggmModel):
         **kwargs
             Additional arguments passed to ``workflow.init_glacier_directories``.
         """
-        glacier = self.get_glacier_by_name(data=data, name=name)
-        gdirs = self.get_glacier_directories(glaciers=[glacier], **kwargs)
+        rgi_id = self.get_glacier_by_name(data=data, name=name)["RGIId"].values
+        gdirs = self.get_glacier_directories(rgi_ids=rgi_id, **kwargs)
 
         return gdirs[0]
 
@@ -945,17 +936,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
     def init_oggm(self, dirname="", **kwargs):
         return super().init_oggm(dirname, **kwargs)
 
-    def get_glacier_directories(
-        self,
-        rgi_ids: list,
-        base_url: str = "",
-        prepro_level: int = 4,
-        prepro_border: int = 80,
-        **kwargs,
-    ):
-        return super().get_glacier_directories(
-            rgi_ids, base_url, prepro_level, prepro_border, **kwargs
-        )
+    def get_glacier_directories(self, rgi_ids: list, **kwargs):
+        return super().get_glacier_directories(rgi_ids, **kwargs)
 
     def get_glacier_data(self, gdirs: list, dem=False) -> None:
         """Add velocity data, monthly and daily W5E5 data."""
