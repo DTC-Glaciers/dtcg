@@ -585,6 +585,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
         gpd.GeoDataFrame
             Glacier with matching name or RGI ID.
         """
+        name = name.replace("ö", "oe")
         glacier = data[data["Name"] == name]
         if glacier.empty:  # fallback in case of RGI ID
             glacier = self.get_glacier_by_rgi_id(data=data, rgi_id=name)
