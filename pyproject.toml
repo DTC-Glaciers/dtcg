@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.4.10"
+version = "0.4.11"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -51,6 +51,8 @@ dependencies = [
     "zarr",
     "schema",
     "pyyaml",
+    "requests",
+    "aiohttp",
 ]
 
 [project.optional-dependencies]
