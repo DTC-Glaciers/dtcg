@@ -94,6 +94,7 @@ dev = [
     "isort",
 ]
 jupyter = [
+    "dtcg[oggm]",
     "ipywidgets",
     "ipykernel",
     "jupyter_bokeh",
