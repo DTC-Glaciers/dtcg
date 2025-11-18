@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from dateutil.tz import UTC
-from oggm import cfg, utils, GlacierDirectory
+from oggm import GlacierDirectory, cfg, utils
 from oggm.core import massbalance
 from tqdm import tqdm
 
@@ -189,21 +189,30 @@ class Calibrator:
                 gdir,
                 settings_filesuffix=calibration_filesuffix,
             )
+            model_flowlines[model_key] = massbalance.MultipleFlowlineMassBalance(
+                gdir,
+                mb_model_class=model_class,
+                use_inversion_flowlines=True,
+                settings_filesuffix=calibration_filesuffix,
+            )
         else:
             model_calib[model_key] = model_class(
                 gdir,
                 settings_filesuffix=calibration_filesuffix,
                 **kwargs,
             )
-        model_flowlines[model_key] = massbalance.MultipleFlowlineMassBalance(
-            gdir,
-            mb_model_class=model_class,
-            use_inversion_flowlines=True,
-            settings_filesuffix=calibration_filesuffix,
-        )
+            model_flowlines[model_key] = massbalance.MultipleFlowlineMassBalance(
+                gdir,
+                mb_model_class=model_class,
+                use_inversion_flowlines=True,
+                settings_filesuffix=calibration_filesuffix,
+                **kwargs,
+            )
         fls = gdir.read_pickle("inversion_flowlines")
         if not years:
-            years = np.arange(1979, 2020)
+            years = utils.float_years_timeseries(
+                y0=2000, y1=2019, include_last_year=True, monthly=False
+            )
         if not daily:
             smb[model_key] = model_flowlines[model_key].get_specific_mb(
                 fls=fls, year=years
@@ -557,7 +566,7 @@ class CalibratorCryotempo(Calibrator):
         return geodetic_mb
 
     def calibrate(
-        self, gdir: GlacierDirectory, model_matrix: dict, ref_mb: pd.DataFrame
+        self, gdir: GlacierDirectory, model_matrix: dict, ref_mb: pd.DataFrame, **kwargs
     ) -> tuple:
         """Calibrate and run OGGM models using a model matrix.
 
@@ -592,6 +601,11 @@ class CalibratorCryotempo(Calibrator):
                 ref_mb=ref_mb, geo_period=geo_period, source=source
             )
 
+            if issubclass(mb_model_class, massbalance.SfcTypeTIModel) and daily:
+                sfc_kwargs = {"climate_resolution": "daily"}
+            else:
+                sfc_kwargs = {}
+
             mb_model_calib, mb_model_flowlines, smb = self.get_calibrated_models(
                 gdir=gdir,
                 model_class=mb_model_class,
@@ -602,6 +616,8 @@ class CalibratorCryotempo(Calibrator):
                 smb=smb,
                 daily=daily,
                 calibration_filesuffix=calibration_filesuffix,
+                **kwargs,
+                **sfc_kwargs,
             )
 
         return mb_model_calib, mb_model_flowlines, smb
