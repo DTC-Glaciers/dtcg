@@ -1150,8 +1150,8 @@ class BindingsCryotempo(BindingsOggmWrangler):
 
         smb = self.get_cached_smb_data(cache_path=cache_path)
         runoff = self.get_cached_runoff_data(cache_path=cache_path)
-        runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
-        runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
+        # runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
+        # runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
         eolis = self.get_cached_eolis_data(cache_path=cache_path)
         outlines = self.get_cached_outline_data(cache_path=cache_path)
 
