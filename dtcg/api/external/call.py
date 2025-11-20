@@ -67,8 +67,19 @@ class StreamDatacube:
             decode_cf=True,
         )
 
-    def get_url(self, rgi_id) -> str:
-        """Get"""
+    def get_url(self, rgi_id: str) -> str:
+        """Get URL for a Zarr datacube.
+
+        Parameters
+        ----------
+        rgi_id : str
+            Glacier RGI ID.
+
+        Returns
+        -------
+        str
+            Server URL of Zarr datacube.
+        """
 
         url = f"{self.server}{rgi_id}.zarr/"
         return url
