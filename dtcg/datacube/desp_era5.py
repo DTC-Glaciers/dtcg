@@ -89,7 +89,7 @@ def get_desp_datastream(dataset: str = "ERA5_DESP") -> xr.Dataset:
 def process_desp_era5_data(
     gdir,
     settings_filesuffix: str = "",
-    dataset: str = "ERA5_DESP",
+    frequency: str = "monthly",
     y0: int = None,
     y1: int = None,
     output_filesuffix: str = None,
@@ -102,61 +102,95 @@ def process_desp_era5_data(
     ----------
     gdir : GlacierDirectory
         the glacier directory to process
-    settings_filesuffix: str
+    settings_filesuffix: str, optional
         You can use a different set of settings by providing a filesuffix. This
         is useful for sensitivity experiments. Code-wise the settings_filesuffix
         is set in the @entity-task decorater.
-    dataset : str, default ERA5_DESP
-        Dataset name.
-    y0 : int
-        the starting year of the timeseries to write. The default is to take
-        the entire time period available in the file, but with this kwarg
-        you can shorten it (to save space or to crop bad data).
-    y1 : int
-        the starting year of the timeseries to write. The default is to take
-        the entire time period available in the file, but with this kwarg
-        you can shorten it (to save space or to crop bad data).
+    frequency : str, default "monthly"
+        'monthly' (default) to use monthly DESP dataset, or "daily" to
+        use the hourly DESP dataset resampled to daily aggregates.
+    y0 : int, default None
+        The starting year of the desired timeseries. The default is to
+        take the entire time period available in the file, but with
+        this argument you can shorten it to save space or to crop bad
+        data.
+    y1 : int, default None
+        The end year of the desired timeseries. The default is to
+        take the entire time period available in the file, but with
+        this argument you can shorten it to save space or to crop bad
+        data.
     output_filesuffix : str
-        add a suffix to the output file (useful to avoid overwriting
+        Add a suffix to the output file (useful to avoid overwriting
         previous experiments).
     """
 
     longitude = gdir.cenlon + 360 if gdir.cenlon < 0 else gdir.cenlon
     latitude = gdir.cenlat
 
-    with get_desp_datastream(dataset) as ds:
-        # DESTINE recommends spatial selection first
-        ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
-        years = ds["valid_time.year"]
+    if frequency == "monthly":
+        with get_desp_datastream("ERA5_DESP") as ds:
+            # DESTINE recommends spatial selection first
+            ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
+            years = ds["valid_time.year"]
 
-        y0 = years[0].astype("int").values if y0 is None else y0
-        y1 = years[-1].astype("int").values if y1 is None else y1
-        ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
-        # oggm.shop.ecmwf._check_ds_validity(ds)
+            y0 = years[0].astype("int").values if y0 is None else y0
+            y1 = years[-1].astype("int").values if y1 is None else y1
+            ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
+            # oggm.shop.ecmwf._check_ds_validity(ds)
 
-        temperature = ds.t2m.astype("float32") - 273.15
-        precipitation = ds.tp.astype("float32") * 1000 * ds["valid_time.daysinmonth"]
+            temperature = ds.t2m.astype("float32") - 273.15
+            precipitation = (
+                ds.tp.astype("float32") * 1000 * ds["valid_time.daysinmonth"]
+            )
+            time = ds.valid_time.compute().data
 
-        temperature = temperature.compute().data
-        precipitation = precipitation.compute().data
+            ref_lon = ds.longitude.astype("float32").compute()
+            ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
+            ref_lat = ds.latitude.astype("float32").compute()
 
-        time = ds.valid_time.compute().data
+        with get_desp_datastream("ERA5_DESP_hourly") as ds:
+            # height is not included in monthly data
+            ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
+            years = ds["valid_time.year"]
 
-        ref_lon = ds.longitude.astype("float32").compute()
-        ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
-        ref_lat = ds.latitude.astype("float32").compute()
+            # don't recalculate years in case of mismatch
+            ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
+            height = ds.z.astype("float32") / cfg.G
 
-    with get_desp_datastream("ERA5_DESP_hourly") as ds:
-        # height is not included in monthly data
-        ds = ds.sel(longitude=longitude, latitude=latitude, method="nearest")
-        years = ds["valid_time.year"]
+    elif frequency == "daily":
+        # use the hourly dataset, resample to daily
+        with get_desp_datastream("ERA5_DESP_hourly") as ds_hr:
+            ds_hr = ds_hr.sel(longitude=longitude, latitude=latitude, method="nearest")
+            years = ds_hr["valid_time.year"]
 
-        # don't recalculate years in case of mismatch
-        ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
-        height = ds.z.astype("float32") / cfg.G
-        height = height.compute().data
+            y0 = years[0].astype("int").values if y0 is None else y0
+            y1 = years[-1].astype("int").values if y1 is None else y1
+            ds_hr = ds_hr.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-31"))
 
-    temp_std = None
+            # hourly fields
+            temp_hour = ds_hr.t2m.astype("float32") - 273.15
+            # assume meters per time-step
+            # convert precipitation to mm (meters -> mm)
+            tp_hour = ds_hr.tp.astype("float32") * 1000
+
+            # resample to daily: temperature mean, precipitation sum
+            temperature = temp_hour.resample(valid_time="1D").mean()
+            precipitation = tp_hour.resample(valid_time="1D").sum()
+            time = precipitation.valid_time.compute().data
+            ref_lon = ds_hr.longitude.astype("float32").compute()
+            ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
+            ref_lat = ds_hr.latitude.astype("float32").compute()
+
+            height = ds_hr.z.astype("float32") / cfg.G
+
+    else:
+        raise InvalidParamsError("frequency must be 'monthly' or 'daily'")
+
+    temperature = temperature.compute().data
+    precipitation = precipitation.compute().data
+    
+    height = height.compute().data
+
     # OK, ready to write
     gdir.write_climate_file(
         time,
@@ -166,6 +200,7 @@ def process_desp_era5_data(
         ref_lon,
         ref_lat,
         filesuffix=output_filesuffix,
-        temp_std=temp_std,
-        source=dataset,
+        temp_std=None,
+        source=f"DESP_{frequency}",
+        daily=frequency == "daily",
     )
