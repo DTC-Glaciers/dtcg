@@ -93,6 +93,10 @@ class Test_DatacubeDespERA5:
         else:
             assert ds.yr_1 == arg_y1
 
+    @pytest.mark.skipif(
+        not has_desp_access,
+        reason="No access to DESP. Check your .netrc file has a valid API key.",
+    )
     @pytest.mark.parametrize(
         "arg_years", [(None, 1941), (2023, None), (2023, 2024), (None, None)]
     )
