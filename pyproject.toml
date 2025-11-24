@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.4.8"
+version = "0.5.0"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -51,6 +51,7 @@ dependencies = [
     "zarr",
     "schema",
     "pyyaml",
+    "requests",
     "aiohttp",
 ]
 
@@ -95,6 +96,7 @@ dev = [
     "isort",
 ]
 jupyter = [
+    "dtcg[oggm]",
     "ipywidgets",
     "ipykernel",
     "jupyter_bokeh",
