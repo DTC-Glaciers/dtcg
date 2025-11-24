@@ -19,7 +19,7 @@ from datetime import date
 import pytest
 import xarray as xr
 
-import dtcg.datacube.desp_era5 as desp_era5
+import dtcg.datacube.desp as desp
 
 pytest_plugins = "oggm.tests.conftest"  # for hef_gdir
 
@@ -29,7 +29,7 @@ def check_desp_api_key():
 
     try:
         with xr.open_dataset(
-            f"{desp_era5.DESP_SERVER}era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
+            f"{desp.DESP_SERVER}era5/reanalysis-era5-single-levels-monthly-means-v0.zarr",
             storage_options={"client_kwargs": {"trust_env": True}},
             chunks={},
             engine="zarr",
@@ -57,34 +57,51 @@ class Test_DatacubeDespERA5:
         reason="No access to DESP. Check your .netrc file has a valid API key.",
     )
     def test_get_desp_datastream(self, conftest_boilerplate, monkeypatch):
-        conftest_boilerplate.patch_variable(
-            monkeypatch, desp_era5, self.basenames_patch
-        )
+        conftest_boilerplate.patch_variable(monkeypatch, desp, self.basenames_patch)
 
-        for d in desp_era5.BASENAMES.keys():
-            assert isinstance(desp_era5.get_desp_datastream(d), xr.Dataset)
+        for d in desp.BASENAMES.keys():
+            assert isinstance(desp.get_desp_datastream(d), xr.Dataset)
 
         with pytest.raises(ValueError):
-            desp_era5.get_desp_datastream("ERA5")
+            desp.get_desp_datastream("ERA5")
         with pytest.raises(ValueError):
-            desp_era5.get_desp_datastream("Wrong_Set")
+            desp.get_desp_datastream("Wrong_Set")
 
     @pytest.mark.skipif(
         not has_desp_access,
         reason="No access to DESP. Check your .netrc file has a valid API key.",
     )
-    @pytest.mark.parametrize("arg_dataset", ["ERA5_DESP"])
-    @pytest.mark.parametrize(
-        "arg_years", [(None, 1941), (2023, None), (2023, 2024), (None, None)]
-    )
-    # @pytest.mark.parametrize("arg_y1", [None, 2024])
-    def test_process_desp_era5_data(self, arg_dataset, arg_years, hef_gdir):
+    @pytest.mark.parametrize("arg_frequency", ["monthly", "daily"])
+    def test_process_desp_era5_data(self, arg_frequency, hef_gdir):
 
         gdir = hef_gdir
 
+        arg_y0, arg_y1 = (2023, 2024)
+        desp.process_desp_era5_data(
+            gdir=gdir, frequency=arg_frequency, y0=arg_y0, y1=arg_y1
+        )
+        with xr.open_dataset(gdir.get_filepath("climate_historical")) as ds:
+            ds = ds.load()
+
+        if not arg_y0:
+            assert ds.yr_0 == 1940
+        else:
+            assert ds.yr_0 == arg_y0
+        if not arg_y1:
+            # This may fail each new year's day
+            assert ds.yr_1 == int(date.today().year)
+        else:
+            assert ds.yr_1 == arg_y1
+
+    @pytest.mark.parametrize(
+        "arg_years", [(None, 1941), (2023, None), (2023, 2024), (None, None)]
+    )
+    def test_process_desp_era5_data_years(self, arg_years, hef_gdir):
+        gdir = hef_gdir
+
         arg_y0, arg_y1 = arg_years
-        desp_era5.process_desp_era5_data(
-            gdir=gdir, dataset=arg_dataset, y0=arg_y0, y1=arg_y1
+        desp.process_desp_era5_data(
+            gdir=gdir, frequency="monthly", y0=arg_y0, y1=arg_y1
         )
         with xr.open_dataset(gdir.get_filepath("climate_historical")) as ds:
             ds = ds.load()
