@@ -626,7 +626,7 @@ class DatacubeCryotempoEolis:
             eolis_gridded_data: gpd.GeoDataFrame,
             elevation_change_var_name: str,
             elevation_change_sigma_var_name: str,
-            length_scale: int | float = 2e4
+            length_scale: int | float = 6e3
     ) -> tuple[list[float], list[float]]:
         """Compute a 1D elevation change time series with propagated
         uncertainties.

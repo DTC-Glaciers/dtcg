@@ -1571,7 +1571,7 @@ class BokehCryotempo(BokehFigureFormat):
         figures = []
 
         if years is None:
-            years = np.arange(1979, 2020)
+            years = np.arange(2000, 2020)
         geodetic_period = geodetic_period.split("_")
         start_year = geodetic_period[0][:4]
         end_year = geodetic_period[1][:4]
@@ -1854,7 +1854,7 @@ class BokehCryotempo(BokehFigureFormat):
         figures = []
 
         if years is None:
-            years = np.arange(1979, 2020)
+            years = np.arange(2000, 2020)
         geodetic_period = geodetic_period.split("_")
         start_year = geodetic_period[0][:4]
         end_year = geodetic_period[1][:4]
