@@ -126,6 +126,7 @@ class MetadataMapper:
                 "Components (DTC) Early Development Actions."
             ),
             "date_created": datetime.now().isoformat(),
+            "glacier_info": dataset.attrs.get("glacier_info", {})
         }
         if ds_name == "L1":
             shared_metadata.update({
