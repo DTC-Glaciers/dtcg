@@ -18,8 +18,13 @@ limitations under the License.
 Create and read DTCG requests.
 """
 
-import dtcg.integration.oggm_bindings as oggm_bindings
+from pathlib import Path
+
 import xarray as xr
+import zarr
+from zarr.errors import GroupNotFoundError
+
+import dtcg.integration.oggm_bindings as oggm_bindings
 
 
 class StreamDatacube:
@@ -66,6 +71,58 @@ class StreamDatacube:
             consolidated=True,
             decode_cf=True,
         )
+
+    def get_zip_path(self, zip_path: Path, rgi_id: str):
+        if not zip_path.suffix != ".zip":  # zarr is a directory
+            Path(zip_path).mkdir(exist_ok=True)
+            zip_path = zip_path.with_suffix(".zip")
+        zip_path = Path(f"{zip_path}/{rgi_id}.zarr.zip")
+        return zip_path
+
+    def zip_datacube(self, rgi_id: str, zip_path: Path = ""):
+        """Download and zip a datacube.
+
+        Parameters
+        ----------
+        stream_url : str
+            URL to a zarr folder.
+        rgi_id : str, optional
+            RGI-ID of glacier.
+        zip_path : Path, optional
+            Output path for zip file.
+
+        Returns
+        -------
+        Path
+            Path to output zipfile.
+        """
+
+        if rgi_id:
+            stream_url = self.get_url(rgi_id=rgi_id)
+        try:
+            zip_path = self.get_zip_path(zip_path=zip_path, rgi_id=rgi_id)
+
+            store = zarr.storage.ZipStore(zip_path, mode="w")
+            with xr.open_datatree(
+                stream_url,
+                group=None,
+                chunks={},
+                engine="zarr",
+                consolidated=True,
+                decode_cf=True,
+            ) as stream:
+                stream.compute().to_zarr(
+                    store=store,
+                    mode="w",
+                    consolidated=True,
+                    zarr_format=2,
+                    # encoding=stream.encoding,
+                )
+
+        except GroupNotFoundError as e:
+            print(f"Error when zipping: {e}")
+
+        return zip_path
 
     def get_url(self, rgi_id: str) -> str:
         """Get URL for a Zarr datacube.
