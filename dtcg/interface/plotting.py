@@ -867,7 +867,7 @@ class BokehGraph(BokehFigureFormat):
 
         self.set_defaults(
             {
-                "ylabel": "Runoff (Mt)",
+                "ylabel": "Glacier Runoff (Mt)",
                 "yformatter": PrintfTickFormatter(format="%.2f"),
                 "padding": (0.1, (0, 0.1)),
                 "ylim": (0, None),
@@ -875,7 +875,7 @@ class BokehGraph(BokehFigureFormat):
             }
         )
         self.tooltips = [
-            ("Runoff", "$snap_y{%.2f Mt}"),
+            ("Glacier Runoff", "$snap_y{%.2f Mt}"),
         ]
         self.set_hover_tool(mode="vline")
         self.palette = self.get_color_palette("lines_jet_r")
@@ -971,9 +971,9 @@ class BokehGraph(BokehFigureFormat):
         runoff_minimum = runoff.min(dim="time", skipna=True)
         runoff_maximum = runoff.max(dim="time", skipna=True)
 
-        title = self.get_title(title="Runoff", suffix=name)
+        title = self.get_title(title="Glacier Runoff", suffix=name)
         figures = []
-        ylabel = "Runoff (Mt)"
+        ylabel = "Glacier Runoff (Mt)"
         time_period = f"{latest_year-nyears}-{latest_year}"
         if cumulative:
             ylabel = f"Cumulative {ylabel}"
@@ -1049,16 +1049,25 @@ class BokehGraph(BokehFigureFormat):
             )
         )
         figures.append(ref_curve)
+
+        help_button = self.get_help_button(
+            text=["help"],
+            position="left",
+            # add_colors=palette,
+        )
+        
+
         overlay = self.set_overlay_options(
             overlay=hv.Overlay(figures),
             title=title,
-            ylabel="Runoff (Mt)",
+            ylabel="Glacier Runoff (Mt)",
             xlabel="Month",
             xformatter=bokeh.models.DatetimeTickFormatter(months="%B"),
             legend_position="top_left",
             autorange="y",
             shared_axes=False,
             fixed_bounds=True,
+            # legend_opts={"elements": [help_button]},
         )
 
         return overlay
@@ -1084,7 +1093,7 @@ class BokehGraph(BokehFigureFormat):
             Time series of annual runoff for a given number of years.
         """
         runoff = self.set_time_constraint(dataset=runoff, nyears=nyears).sum(axis=1)
-        title = self.get_title(title="Total Annual Runoff", suffix=name)
+        title = self.get_title(title="Total Annual Glacier Runoff", suffix=name)
         curve = (
             hv.Curve(runoff, group="runoff")
             .opts(**self.defaults)
