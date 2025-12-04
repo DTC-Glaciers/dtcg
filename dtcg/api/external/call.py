@@ -29,10 +29,10 @@ import dtcg.integration.oggm_bindings as oggm_bindings
 
 class StreamDatacube:
 
-    def __init__(self):
+    def __init__(self, server="https://cluster.klima.uni-bremen.de/~dtcg/test_zarr/"):
         self.binder = oggm_bindings.BindingsCryotempo()
         self.binder.init_oggm()
-        self.server = "https://cluster.klima.uni-bremen.de/~dtcg/test_zarr/"
+        self.server = server
 
     def stream_datacube(
         self, glacier: str, layer: str = "", region_name: str = "Iceland"
@@ -120,7 +120,8 @@ class StreamDatacube:
                 )
 
         except GroupNotFoundError as e:
-            print(f"Error when zipping: {e}")
+            # pipe different error to frontends
+            raise FileNotFoundError(f"Error when zipping: {e}")
 
         return zip_path
 
