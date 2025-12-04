@@ -82,7 +82,7 @@ class TestMetadataMapper:
         mapper = MetadataMapper(temp_metadata_file)
         result = mapper.update_metadata(test_dataset.copy(), "L1")
 
-        for attr in ["Conventions", "title", "summary", "comment", "date_created"]:
+        for attr in ["Conventions", "title", "summary", "comment", "date_created", "glacier_info"]:
             assert attr in result.attrs
 
         assert result.rio.crs is not None
