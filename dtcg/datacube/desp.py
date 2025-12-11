@@ -155,7 +155,7 @@ def process_desp_era5_data(
 
             # don't recalculate years in case of mismatch
             ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
-            height = ds.z.astype("float32") / cfg.G
+            height = ds.z.isel(valid_time=0).astype("float32") / cfg.G
 
     elif frequency == "daily":
         # use the hourly dataset, resample to daily
@@ -181,7 +181,7 @@ def process_desp_era5_data(
             ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
             ref_lat = ds_hr.latitude.astype("float32").compute()
 
-            height = ds_hr.z.astype("float32") / cfg.G
+            height = ds_hr.z.isel(valid_time=0).astype("float32") / cfg.G
 
     else:
         raise InvalidParamsError("frequency must be 'monthly' or 'daily'")
