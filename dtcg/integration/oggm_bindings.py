@@ -324,7 +324,7 @@ class BindingsOggmModel:
 
         prepro_base_url = kwargs.get("prepro_base_url", "")
         if not prepro_base_url:
-            kwargs["prepro_base_url"] = self.DEFAULT_BASE_URL
+            kwargs["prepro_base_url"] = 'https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/'
 
         gdirs = workflow.init_glacier_directories(rgi_ids, **kwargs)
 
