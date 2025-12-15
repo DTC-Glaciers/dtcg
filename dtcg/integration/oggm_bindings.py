@@ -144,8 +144,8 @@ class BindingsOggmModel:
         cfg.initialize(logging_level="CRITICAL")
         cfg.PARAMS["border"] = kwargs.get("border", 80)
         if working_dir is None:
-            working_dir = self.rgi_id
-        self.WORKING_DIR = utils.gettempdir(working_dir)
+            working_dir = utils.gettempdir(self.rgi_id)
+        self.WORKING_DIR = working_dir
         utils.mkdir(
             self.WORKING_DIR, reset=True
         )  # TODO: this should be an API parameter
