@@ -61,7 +61,7 @@ class BindingsOggmModel:
 
     def __init__(
         self,
-        rgi_id: str,
+        rgi_id: str = None,
         base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
         working_dir: str = None,
         oggm_params: dict | None = None,
@@ -69,22 +69,25 @@ class BindingsOggmModel:
         **kwargs
     ):
         self.DEFAULT_BASE_URL = base_url
-        if isinstance(rgi_id, list):
-            rgi_id = rgi_id[0]
-        self.rgi_id = rgi_id
-        if oggm_params is None:
-            self.oggm_params = {}
-        else:
-            self.oggm_params = oggm_params
 
-        self.init_oggm(working_dir=working_dir)
-        self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id],
-                                                 **kwargs)[0]
+        # this needs to be adapted/deleted (tests need to be adapted)
+        if rgi_id is not None:
+            if isinstance(rgi_id, list):
+                rgi_id = rgi_id[0]
+            self.rgi_id = rgi_id
+            if oggm_params is None:
+                self.oggm_params = {}
+            else:
+                self.oggm_params = oggm_params
 
-        if l1_datacube is None:
-            self.l1_datacube = self.get_oggm_datacube(gdir=self.gdir)
-        else:
-            self.l1_datacube = l1_datacube
+            self.init_oggm(working_dir=working_dir)
+            self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id],
+                                                     **kwargs)[0]
+
+            if l1_datacube is None:
+                self.l1_datacube = self.get_oggm_datacube(gdir=self.gdir)
+            else:
+                self.l1_datacube = l1_datacube
 
     def set_oggm_params(self, **new_params: dict) -> None:
         """Define OGGM configuration parameters.

@@ -64,15 +64,15 @@ class TestMetadataMapper:
 
     def test_load_metadata(self, temp_metadata_file):
         mapper = MetadataMapper(temp_metadata_file)
-        assert "var1" in mapper.metadata_mappings
-        assert isinstance(mapper.metadata_mappings["var1"], dict)
+        assert "var1" in mapper.metadata_mappings_data
+        assert isinstance(mapper.metadata_mappings_data["var1"], dict)
 
     def test_apply_metadata_to_variables(
             self, temp_metadata_file, test_dataset):
         mapper = MetadataMapper(temp_metadata_file)
         result = mapper.update_metadata(test_dataset.copy(), "L1")
 
-        expected = mapper.metadata_mappings["var1"]
+        expected = mapper.metadata_mappings_data["var1"]
         for key, val in expected.items():
             assert result["var1"].attrs[key] == val
 

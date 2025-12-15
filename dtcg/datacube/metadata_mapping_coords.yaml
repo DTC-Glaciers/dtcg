@@ -1,0 +1,29 @@
+# coord_name:
+#   standard_name: https://cfconventions.org/Data/cf-standard-names/current/build/cf-standard-name-table.html
+#   long_name: longer descriptive name of variable
+#   units: consult https://doi.org/10.5065/D6KD1WN0 for standard units or the standard name table
+
+x:
+  standard_name: projection_x_coordinate
+  long_name: x coordinate of projection
+  units: m
+
+y:
+  standard_name: projection_y_coordinate
+  long_name: y coordinate of projection
+  units: m
+
+t:
+  standard_name: time
+  long_name: time since the unix epoch of eolis observations
+  units: seconds since 1970-01-01 00:00:00
+
+t_wgms:
+  standard_name: time
+  long_name: the hydrological year of WGMS observations
+  units: year
+
+t_sfc_type:
+  standard_name: time
+  long_name: Timestamp of surface type observations
+  units: np.datetime64

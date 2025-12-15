@@ -37,7 +37,7 @@ class GeoZarrHandler(MetadataMapper):
         ds_name: str = "L1",
         target_chunk_mb: float = 5.0,
         compressor: Optional[Blosc] = None,
-        metadata_mapping_file_path: str = None,
+        metadata_mapping_data_file_path: str = None,
         zarr_format: int = 2,
     ):
         """Initialise a GeoZarrHandler object.
@@ -54,14 +54,14 @@ class GeoZarrHandler(MetadataMapper):
         compressor : Blosc, default None
             Compressor to apply on arrays. If None, the compression will
             be Blosc with zstd.
-        metadata_mapping_file_path : str, default None
+        metadata_mapping_data_file_path : str, default None
             Path to the YAML file containing variable metadata mappings.
-            If None, defaults to 'metadata_mapping.yaml' in the current
+            If None, defaults to 'metadata_mapping_data.yaml' in the current
             directory.
         zarr_format : int, default 2
             Zarr format version to use (2 or 3).
         """
-        super().__init__(metadata_mapping_file_path=metadata_mapping_file_path)
+        super().__init__(metadata_mapping_data_file_path=metadata_mapping_data_file_path)
         self.ds_name = ds_name
         self.target_chunk_mb = target_chunk_mb
         self.compressor = compressor or Blosc(
@@ -94,12 +94,6 @@ class GeoZarrHandler(MetadataMapper):
             - If any dimension does not have an associated coordinate
               variable.
         """
-        accepted_dims = {"x", "y", "t"}
-        if not set(ds.dims).issubset(accepted_dims):
-            raise ValueError(
-                "Incorrect dataset dimensions."
-                f" Accepted data dimensions are: {accepted_dims}"
-            )
         for dim in ds.dims:
             if dim not in ds.coords:
                 raise ValueError(
@@ -127,7 +121,13 @@ class GeoZarrHandler(MetadataMapper):
             optionally 't'.
         """
         target_bytes = self.target_chunk_mb * 1024 * 1024
-        t_size = var.sizes.get("t", 1)  # Defaults to 1 if no 't' dimension
+        t_var = "t"
+        if "t_sfc_type" in var.dims:
+            t_var = "t_sfc_type"
+        elif "t_wgms" in var.dims:
+            t_var = "t_wgms"
+        # Defaults to 1 if no 't' dimension
+        t_size = var.sizes.get(t_var, 1)
         chunk_sizes = {}
 
         if "x" in var.dims and "y" in var.dims:
@@ -146,10 +146,10 @@ class GeoZarrHandler(MetadataMapper):
             chunk_sizes["x"] = chunk_x
             chunk_sizes["y"] = chunk_y
 
-        if "t" in var.dims:
+        if t_var in var.dims:
             # Use the full length of 't' - this allows more efficient loading,
             # assuming the user is always interested in the full time series
-            chunk_sizes["t"] = t_size
+            chunk_sizes[t_var] = t_size
 
         return chunk_sizes
 
@@ -257,7 +257,12 @@ class GeoZarrHandler(MetadataMapper):
         for var in ds.data_vars:
             attrs = ds[var].attrs.copy()
             attrs.pop("grid_mapping", None)
-            self.METADATA_SCHEMA.validate(attrs)
+            self.METADATA_SCHEMA_DATA.validate(attrs)
+
+        for coord in ds.coords:
+            if coord not in ['spatial_ref']:
+                attrs = ds[coord].attrs.copy()
+                self.METADATA_SCHEMA_COORDS.validate(attrs)
 
         self.data_tree[ds_name] = xr.DataTree(dataset=ds)
 

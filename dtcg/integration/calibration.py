@@ -730,8 +730,8 @@ class Calibrator:
     def get_ref_mb(
             self,
             gdir: GlacierDirectory,
-            l1_datacube: xr.Dataset,
-            ref_mb_period: str,
+            ref_mb_period: str = None,
+            l1_datacube: xr.Dataset = None,
             source: str = 'Hugonnet') -> tuple:
         """Get observed mass balance for a specific reference period.
 
@@ -970,16 +970,16 @@ class CalibratorCryotempo(Calibrator):
         ref_mb = (dh * bulk_density)
         ref_mb_unit = "kg m-2"
 
-        # for now we just use the sigma of the last year times 0.66
-        ref_mb_err = calib_frame["dh_sigma"].loc[data_end] * bulk_density# * 0.66
+        # for now we just use the sigma of the last year
+        ref_mb_err = calib_frame["dh_sigma"].loc[data_end] * bulk_density
 
         return ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period
 
     def get_ref_mb(
             self,
             gdir: GlacierDirectory,
-            l1_datacube: xr.Dataset,
-            ref_mb_period: str,
+            ref_mb_period: str = None,
+            l1_datacube: xr.Dataset = None,
             source: str = 'Hugonnet'
     ) -> tuple:
         """Get observed mass balance for a specific reference period.

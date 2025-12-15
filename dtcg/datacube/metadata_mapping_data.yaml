@@ -82,3 +82,93 @@ glacier_ext:
   source: Rasterized glacier boundary from RGI. RGI definitions are manually and semi-automatically delineated glacier outlines from satellite imagery.
   comment: Marks the boundary pixels of the glacier outline, excluding nunataks.
   references: https://doi.org/10.7265/4m1f-gd79
+
+consensus_ice_thickness:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+hugonnet_dhdt:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+millan_ice_thickness:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+millan_v:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+millan_vx:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+millan_vy:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+wgms_mb:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+wgms_mb_unc:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+sfc_type_data:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
+sfc_type_uncertainty:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO

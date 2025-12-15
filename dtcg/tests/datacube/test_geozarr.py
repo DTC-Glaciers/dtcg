@@ -85,7 +85,7 @@ class TestGeoZarrWriter:
 
         writer = GeoZarrHandler(
             ds=ds,
-            metadata_mapping_file_path=metadata_path,
+            metadata_mapping_data_file_path=metadata_path,
         )
 
         writer.export(store_dir)
@@ -106,14 +106,6 @@ class TestGeoZarrWriter:
         for coord in ["x", "y", "t"]:
             assert coord in root_group
             assert root_group[coord].attrs["_ARRAY_DIMENSIONS"] == [coord]
-
-    def test_missing_required_dims_raises(self, test_dataset):
-        """Test that missing required dimensions raises ValueError."""
-        ds, _ = test_dataset
-        ds = ds.rename({"x": "x_coordinate"})
-
-        with pytest.raises(ValueError, match="Incorrect dataset dimensions"):
-            GeoZarrHandler(ds=ds)
 
     @pytest.mark.filterwarnings("ignore:Metadata mapping is missing")
     def test_correct_chunking(self, test_dataset, tmp_path):
@@ -152,10 +144,11 @@ class TestGeoZarrWriter:
         """Test that add layer functionality works correctly."""
         ds, metadata_path = test_dataset
         ds2 = ds.copy(deep=True)
+        ds2.attrs['calibration_strategy'] = 'test copy'
 
         handler = GeoZarrHandler(
             ds=ds,
-            metadata_mapping_file_path=metadata_path,
+            metadata_mapping_data_file_path=metadata_path,
         )
 
         handler.add_layer(ds2, "L2")
@@ -175,7 +168,7 @@ class TestGeoZarrWriter:
 
         handler = GeoZarrHandler(
             ds=ds,
-            metadata_mapping_file_path=metadata_path,
+            metadata_mapping_data_file_path=metadata_path,
         )
 
         datacube = handler.get_layer(ds_name="L1")
@@ -193,7 +186,7 @@ class TestGeoZarrWriter:
 
         handler = GeoZarrHandler(
             ds=ds,
-            metadata_mapping_file_path=metadata_path,
+            metadata_mapping_data_file_path=metadata_path,
         )
 
         # Search for a non-existent layer
