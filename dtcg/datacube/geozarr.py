@@ -151,6 +151,10 @@ class GeoZarrHandler(MetadataMapper):
             # assuming the user is always interested in the full time series
             chunk_sizes[t_var] = t_size
 
+        for dim in var.dims:
+            if dim not in [t_var, 'x', 'y']:
+                chunk_sizes[dim] = 1
+
         return chunk_sizes
 
     def _define_encodings(self: GeoZarrHandler, ds: xr.Dataset, ds_name: str) -> None:

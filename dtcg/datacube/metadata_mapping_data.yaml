@@ -172,3 +172,186 @@ sfc_type_uncertainty:
   source: TODO
   comment: TODO
   references: TODO
+
+# OGGM Model output
+# 'units' and 'long_name' use the model output attributes (in update_metadata)
+
+area:
+  standard_name: area
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled glacier area.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+volume:
+  standard_name: volume
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled glacier volume.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+length:
+  standard_name: length
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled glacier length.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+specific_mb:
+  standard_name: specific_mb
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled specific glacier wide mass-balance.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+off_area:
+  standard_name: off_area
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier area.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+on_area:
+  standard_name: on_area
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier area.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+melt_off_glacier:
+  standard_name: melt_off_glacier
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier melt.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+melt_on_glacier:
+  standard_name: melt_on_glacier
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier melt.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+liq_prcp_off_glacier:
+  standard_name: liq_prcp_off_glacier
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier liquid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+liq_prcp_on_glacier:
+  standard_name: liq_prcp_on_glacier
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier liquid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+snowfall_off_glacier:
+  standard_name: snowfall_off_glacier
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier solid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+snowfall_on_glacier:
+  standard_name: snowfall_on_glacier
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier solid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+runoff:
+  standard_name: runoff
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: Annual glacier runoff from sum of annual melt and liquid precipitation on and off the glacier using a fixed-gauge with a glacier minimum reference area from year 2000
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+melt_off_glacier_monthly:
+  standard_name: melt_off_glacier_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier monthly melt.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+melt_on_glacier_monthly:
+  standard_name: melt_on_glacier_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier monthly melt.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+liq_prcp_off_glacier_monthly:
+  standard_name: liq_prcp_off_glacier_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier monthly liquid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+liq_prcp_on_glacier_monthly:
+  standard_name: liq_prcp_on_glacier_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier monthly liquid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+snowfall_off_glacier_monthly:
+  standard_name: snowfall_off_glacier_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled off-glacier monthly solid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+snowfall_on_glacier_monthly:
+  standard_name: snowfall_on_glacier_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: OGGM modelled on-glacier monthly solid precipitation.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."
+
+runoff_monthly:
+  standard_name: runoff_monthly
+  long_name: N/A
+  units: N/A
+  institution: OGGM / DTC-Glaciers
+  source: Monthly glacier runoff from sum of monthly melt and liquid precipitation on and off the glacier using a fixed-gauge with a glacier minimum reference area from year 2000.
+  comment: N/A
+  references: "Maussion, F., Butenko, A., Champollion, N., Dusch, M., Eis, J., Fourteau, K., Gregor, P., Jarosch, A. H., Landmann, J., Oesterle, F., Recinos, B., Rothenpieler, T., Vlug, A., Wild, C. T., and Marzeion, B.: The Open Global Glacier Model (OGGM) v1.1, Geosci. Model Dev., 12, 909-931, https://doi.org/10.5194/gmd-12-909-2019, 2019."

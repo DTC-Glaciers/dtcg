@@ -153,9 +153,6 @@ class MetadataMapper:
         `pyproj_srs` attribute. Shared metadata includes CF conventions,
         title, and summary.
         """
-        # create a spatial_ref layer in the dataset
-        if not dataset.rio.crs and not {"x", "y"}.isdisjoint(dataset.dims):
-            dataset.rio.write_crs(dataset.pyproj_srs, inplace=True)
 
         # update metadata shared across all variables
         shared_metadata = {
@@ -166,12 +163,19 @@ class MetadataMapper:
                 "Components (DTC) Early Development Actions."
             ),
             "date_created": datetime.now().isoformat(),
+            "RGI-ID": dataset.attrs['RGI-ID'],
         }
         if "L1" in ds_name:
+            if not ("spatial_ref" in dataset.data_vars or
+                    "spatial_ref" in dataset.coords):
+                # create a spatial_ref layer in the dataset
+                if not dataset.rio.crs and not {"x", "y"}.isdisjoint(dataset.dims):
+                    dataset.rio.write_crs(dataset.pyproj_srs, inplace=True)
             shared_metadata.update({
                 "title": "Datacube of glacier-domain variables.",
                 "summary": (
-                    "Resampled glacier-domain variables from multiple sources. "
+                    "Resampled glacier-domain variables from multiple sources "
+                    f"for RGI6-ID '{dataset.attrs['RGI-ID']}'. "
                     "Generated for the DTC Glaciers project."
                 ),
             })
@@ -179,7 +183,8 @@ class MetadataMapper:
             shared_metadata.update({
                 "title": "Datacube of observation-informed modelled variables.",
                 "summary": (
-                    "Observation-informed modelled variables. "
+                    "Observation-informed modelled variables for RGI6-ID "
+                    f"'{dataset.attrs['RGI-ID']}'. "
                     "Generated for the DTC Glaciers project."
                 ),
             })
@@ -231,7 +236,7 @@ class MetadataMapper:
                           'eolis_elevation_change_timeseries',
                           'eolis_gridded_elevation_change',
                           'eolis_gridded_elevation_change_sigma',
-                          'spatial_ref'
+                          'spatial_ref',
                           ]
             difference = [x for x in difference if x not in not_needed]
             if difference:
@@ -245,12 +250,39 @@ class MetadataMapper:
                     warnings.simplefilter("always")
                     warnings.warn(warning_msg, UserWarning, stacklevel=2)
 
+        # special treatment for model parameters, to convert some of their attrs
+        model_variables = [
+            'volume', 'area', 'length', 'off_area', 'on_area',
+            'melt_off_glacier', 'melt_on_glacier', 'liq_prcp_off_glacier',
+            'liq_prcp_on_glacier', 'snowfall_off_glacier',
+            'snowfall_on_glacier', 'melt_off_glacier_monthly',
+            'melt_on_glacier_monthly', 'liq_prcp_off_glacier_monthly',
+            'liq_prcp_on_glacier_monthly', 'snowfall_off_glacier_monthly',
+            'snowfall_on_glacier_monthly', 'runoff_monthly', 'runoff',
+            'specific_mb',
+        ]
+        model_coordinates = [
+            'member', 'time', 'rgi_id', 'hydro_year', 'hydro_month',
+            'calendar_year', 'calendar_month', 'month_2d', 'calendar_month_2d',
+        ]
+
+        # small helper function to rename some model output attributes
+        def rename_key(attrs, new_key, old_key):
+            attrs[new_key] = attrs.pop(old_key, 'N/A')
+
         # simple function to apply metadata to all layers in an xarray dataset
         for metadata_mappings in [self.metadata_mappings_data,
                                   self.metadata_mappings_coords]:
             for data_name, metadata in metadata_mappings.items():
                 if data_name in dataset.data_vars or data_name in dataset.coords:
                     dataset[data_name].attrs.update(metadata)
+
+                    # special treatment of model output attributes
+                    if data_name in model_variables:
+                        rename_key(dataset[data_name].attrs, 'units', 'unit')
+                    if data_name in model_coordinates + model_variables:
+                        rename_key(dataset[data_name].attrs, 'long_name',
+                                   'description')
 
         self._update_shared_metadata(dataset, ds_name)
 

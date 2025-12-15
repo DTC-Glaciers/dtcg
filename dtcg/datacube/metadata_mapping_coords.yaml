@@ -27,3 +27,51 @@ t_sfc_type:
   standard_name: time
   long_name: Timestamp of surface type observations
   units: np.datetime64
+
+# Model coordinates
+# for 'long_name' we use the 'description' output of OGGM dataset
+
+time:
+  standard_name: time
+  long_name: N/A
+  units: Float year
+
+hydro_year:
+  standard_name: hydro_year
+  long_name: N/A
+  units: Hydrological year
+
+hydro_month:
+  standard_name: hydro_month
+  long_name: N/A
+  units: Hydrological month
+
+calendar_year:
+  standard_name: calendar_year
+  long_name: N/A
+  units: Calendar year
+
+calendar_month:
+  standard_name: calendar_month
+  long_name: N/A
+  units: Calendar month
+
+month_2d:
+  standard_name: month_2d
+  long_name: N/A
+  units: Calendar month
+
+calendar_month_2d:
+  standard_name: month_2d
+  long_name: N/A
+  units: Calendar month
+
+rgi_id:
+  standard_name: rgi_id
+  long_name: N/A
+  units: N/A
+
+member:
+  standard_name: member
+  long_name: N/A
+  units: N/A

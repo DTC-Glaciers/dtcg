@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from dateutil.tz import UTC
+from dateutil import tz
 from oggm import GlacierDirectory, cfg, utils, workflow, tasks
 from oggm.core import massbalance
 from tqdm import tqdm
@@ -40,12 +41,17 @@ class Calibrator:
     ----------
     """
 
-    def __init__(self, model_matrix: dict = None):
-        super().__init__()
+    def __init__(self, model_matrix: dict = None, l1_datacube=None):
         if not model_matrix:
             self.model_matrix = {}
         else:
             self.model_matrix = model_matrix
+
+        self.l1_datacube = l1_datacube
+        if l1_datacube is not None:
+            self.RGI_ID_attrs = l1_datacube.attrs["RGI-ID"]
+        else:
+            self.RGI_ID_attrs = 'Not provided'
 
     def set_model_matrix(self, name: str, model, geo_period: str, **kwargs):
         """Set model parameters for calibration.
@@ -391,6 +397,7 @@ class Calibrator:
         first_guess_settings: str = "",
         datacubes_requested: str | list = 'monthly',
         calibration_filesuffix: str = "",
+        calibration_strategy: str = None,
         mcs_sampling_settings: dict = None,
         calibration_parameters_control: dict = None,
         calibration_parameters_mcs: dict = None,
@@ -423,6 +430,9 @@ class Calibrator:
             Default: 'monthly'
         calibration_filesuffix: str
             the filesuffix used for all outputs of this datacube creation
+        calibration_strategy: str
+            A string describing the current calibration strategy.
+            E.g. "OGGM model X calibrated with data from Y over the period Z."
         mcs_sampling_settings: dict
             Defines the settings of the Monte Carlo simulation parameter
             sampling. For default values look at signature of
@@ -454,6 +464,12 @@ class Calibrator:
             calibration, including uncertainties.
 
         """
+
+        if calibration_strategy is None:
+            raise ValueError("You must provide a description of the currently "
+                             "applied calibration strategy in the argument "
+                             "'calibration_strategy'. (e.g. OGGM model X "
+                             "calibrated with data from Y over the period Z.)")
 
         if not calibration_filesuffix:
             model_name = mb_model_class.__name__
@@ -717,6 +733,12 @@ class Calibrator:
                                "using median input values."
             }
 
+            # add RGI-ID attribute
+            ds_all.attrs["RGI-ID"] = self.RGI_ID_attrs
+
+            # add calibration strategy
+            ds_all.attrs["calibration_strategy"] = calibration_strategy
+
             datacube_dict[datacube_request] = ds_all
 
             if show_log:
@@ -767,7 +789,7 @@ class Calibrator:
     def calibrate(
             self,
             gdir: GlacierDirectory,
-            model_matrix: dict,
+            model_matrix: dict = None,
             l1_datacube: xr.Dataset = None,
             **kwargs
     ) -> dict:
@@ -795,6 +817,12 @@ class Calibrator:
         # Store results
         l2_datacubes = {}
 
+        if l1_datacube is None:
+            l1_datacube = self.l1_datacube
+
+        if model_matrix is None:
+            model_matrix = self.model_matrix
+
         for matrix_name, model_params in tqdm(model_matrix.items()):
             mb_model_class = model_params["model"]
             ref_mb_period = model_params["ref_mb_period"]
@@ -806,6 +834,16 @@ class Calibrator:
                 source=source
             )
 
+            if source == 'Hugonnet':
+                source_description = 'Hugonnet et al. (2021)'
+            else:
+                source_description = source
+            calibration_strategy = (
+                f"OGGM mass-balance model '{mb_model_class.__name__}' "
+                f"calibrated to match data from {source_description} in the "
+                f"period {ref_mb_period}."
+            )
+
             l2_datacubes[matrix_name] = self.calibrate_mb_and_create_datacubes(
                 gdir=gdir,
                 mb_model_class=mb_model_class,
@@ -814,6 +852,7 @@ class Calibrator:
                 ref_mb_unit=ref_mb_unit,
                 ref_mb_period=ref_mb_period,
                 calibration_filesuffix=calibration_filesuffix,
+                calibration_strategy=calibration_strategy,
                 ** kwargs,
             )
 
@@ -822,8 +861,8 @@ class Calibrator:
 
 class CalibratorCryotempo(Calibrator):
 
-    def __init__(self, model_matrix: dict = None):
-        super().__init__(model_matrix=model_matrix)
+    def __init__(self, model_matrix: dict = None, l1_datacube=None):
+        super().__init__(model_matrix=model_matrix, l1_datacube=l1_datacube)
 
     def set_model_matrix(
         self,
@@ -873,7 +912,12 @@ class CalibratorCryotempo(Calibrator):
         np.ndarray
             Time index adjusted to UTC.
         """
-        return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
+        if isinstance(ds.t.values[0], int):
+            return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
+        else:
+            # we assume np.datetime
+            out = pd.to_datetime(ds.t.values, utc=True).to_pydatetime()
+            return np.array([dt.astimezone(tz.tzutc()) for dt in out])
 
     def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
         """Get

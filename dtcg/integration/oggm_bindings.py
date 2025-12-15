@@ -70,6 +70,10 @@ class BindingsOggmModel:
     ):
         self.DEFAULT_BASE_URL = base_url
 
+        if rgi_id is None:
+            if l1_datacube is not None:
+                rgi_id = l1_datacube.attrs['RGI-ID']
+
         # this needs to be adapted/deleted (tests need to be adapted)
         if rgi_id is not None:
             if isinstance(rgi_id, list):
@@ -88,6 +92,11 @@ class BindingsOggmModel:
                 self.l1_datacube = self.get_oggm_datacube(gdir=self.gdir)
             else:
                 self.l1_datacube = l1_datacube
+            self.l1_datacube = self.add_rgi_id_to_dataset(dataset=self.l1_datacube)
+
+    def add_rgi_id_to_dataset(self, dataset):
+        dataset.attrs['RGI-ID'] = self.gdir.rgi_id
+        return dataset
 
     def set_oggm_params(self, **new_params: dict) -> None:
         """Define OGGM configuration parameters.
@@ -141,6 +150,9 @@ class BindingsOggmModel:
             self.WORKING_DIR, reset=True
         )  # TODO: this should be an API parameter
         cfg.PATHS["working_dir"] = self.WORKING_DIR
+
+        # some params for datacube creation
+        cfg.PARAMS["store_model_geometry"] = True
 
         self.set_oggm_params(**kwargs)
         self.set_oggm_kwargs()
