@@ -201,6 +201,9 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
     #         arg_period=arg_period, Calibrator=Calibrator
     #     )
 
+    @pytest.mark.xfail(
+        reason="Issue with OGGM where 'auto_skip_task' not present in cfg.PARAMS"
+    )
     @pytest.mark.parametrize("arg_rgiid", ["RGI60-11.00897"])
     def test_get_geodetic_mb(self, Calibrator, hef_gdir, arg_rgiid):
         test_calibrator = Calibrator

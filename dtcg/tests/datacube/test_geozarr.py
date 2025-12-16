@@ -46,7 +46,8 @@ class TestGeoZarrWriter:
             ),
             attrs={
                 "pyproj_srs": "+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 "
-                "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+                "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs",
+                "RGI-ID": "RGI60-11-00001"
             },
         )
 
@@ -151,16 +152,19 @@ class TestGeoZarrWriter:
             metadata_mapping_data_file_path=metadata_path,
         )
 
-        handler.add_layer(ds2, "L2")
+        handler.add_layer({'monthly': ds2}, "L2")
 
         assert "L2" in handler.data_tree
         assert isinstance(handler.data_tree["L2"], xr.DataTree)
-        assert isinstance(handler.data_tree["L2"].ds, xr.Dataset)
+        assert isinstance(handler.data_tree["L2"]["monthly"].ds, xr.Dataset)
         for var in ["temperature", "precipitation", "x", "y", "t"]:
-            xr.testing.assert_equal(ds2[var], handler.data_tree["L2"].ds[var])
+            xr.testing.assert_equal(ds2[var], handler.data_tree["L2"]["monthly"].ds[var])
         for var in ["temperature", "precipitation"]:
-            assert "grid_mapping" in handler.data_tree["L2"].ds[var].attrs
-        assert "spatial_ref" in handler.data_tree["L2"].ds.coords
+            assert "grid_mapping" in handler.data_tree["L2"]["monthly"].ds[var].attrs
+
+        # L2 datacubes are expected to be only OGGM model output at the moment
+        # with no x, y coordinates and not "spatial_ref"
+        # assert "spatial_ref" in handler.data_tree["L2"]["monthly"].ds.coords
 
     def test_get_layer(self, test_dataset):
         """Test getting a datatree layer."""

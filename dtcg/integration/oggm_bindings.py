@@ -143,6 +143,7 @@ class BindingsOggmModel:
 
         cfg.initialize(logging_level="CRITICAL")
         cfg.PARAMS["border"] = kwargs.get("border", 80)
+        cfg.PARAMS["auto"]
         if working_dir is None:
             working_dir = utils.gettempdir(self.rgi_id)
         self.WORKING_DIR = working_dir
