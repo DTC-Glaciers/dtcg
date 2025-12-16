@@ -791,6 +791,7 @@ class Calibrator:
             gdir: GlacierDirectory,
             model_matrix: dict = None,
             l1_datacube: xr.Dataset = None,
+            ignore_errors:bool = False,
             **kwargs
     ) -> dict:
         """Calibrate the mass balance model and create L2 datacubes  using a
@@ -844,17 +845,22 @@ class Calibrator:
                 f"period {ref_mb_period}."
             )
 
-            l2_datacubes[matrix_name] = self.calibrate_mb_and_create_datacubes(
-                gdir=gdir,
-                mb_model_class=mb_model_class,
-                ref_mb=ref_mb,
-                ref_mb_err=ref_mb_err,
-                ref_mb_unit=ref_mb_unit,
-                ref_mb_period=ref_mb_period,
-                calibration_filesuffix=calibration_filesuffix,
-                calibration_strategy=calibration_strategy,
-                ** kwargs,
-            )
+            try:
+                l2_datacubes[matrix_name] = self.calibrate_mb_and_create_datacubes(
+                    gdir=gdir,
+                    mb_model_class=mb_model_class,
+                    ref_mb=ref_mb,
+                    ref_mb_err=ref_mb_err,
+                    ref_mb_unit=ref_mb_unit,
+                    ref_mb_period=ref_mb_period,
+                    calibration_filesuffix=calibration_filesuffix,
+                    calibration_strategy=calibration_strategy,
+                    ** kwargs,
+                )
+            except Exception as e:
+                if not ignore_errors:
+                    raise
+                print(f"Calibration for {matrix_name} not successful: {e}")
 
         return l2_datacubes
 

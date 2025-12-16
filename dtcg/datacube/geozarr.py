@@ -157,7 +157,8 @@ class GeoZarrHandler(MetadataMapper):
 
         return chunk_sizes
 
-    def _define_encodings(self: GeoZarrHandler, ds: xr.Dataset, ds_name: str) -> None:
+    def _define_encodings(self: GeoZarrHandler, ds: xr.Dataset, ds_name: str,
+                          ds_type: str = None) -> None:
         """Define encoding settings for each data variable in the
         dataset, including chunking and compression.
 
@@ -174,13 +175,16 @@ class GeoZarrHandler(MetadataMapper):
         Chunk sizes are computed using `_calculate_chunk_sizes`, and the
         compressor is set according to the class-level setting.
         """
-        if ds_name not in self.encoding:
-            self.encoding[f"/{ds_name}"] = {}
+        encoding_key = f"/{ds_name}"
+        if ds_type is not None:
+            encoding_key = f"{encoding_key}/{ds_type}"
+        if encoding_key not in self.encoding:
+            self.encoding[encoding_key] = {}
 
         for var in ds.data_vars:
             chunk_sizes = self._calculate_chunk_sizes(ds[var])
             chunks = tuple(chunk_sizes.get(dim) for dim in ds[var].dims)
-            self.encoding[f"/{ds_name}"][var] = {
+            self.encoding[encoding_key][var] = {
                 "chunks": chunks,
                 "compressor": self.compressor,
             }
@@ -234,41 +238,65 @@ class GeoZarrHandler(MetadataMapper):
         )
 
     def add_layer(
-        self: GeoZarrHandler, ds: xr.Dataset, ds_name: str, overwrite: bool = False
+        self: GeoZarrHandler, datacubes: dict, datacube_name: str,
+        overwrite: bool = False
     ) -> None:
         """Add a new dataset as a child group of the DataTree at the root.
 
         Parameters
         ----------
-        ds : xarray.Dataset
-            New dataset layer to be added to the existing data tree.
-        ds_name : str
+        datacubes : dict
+            A dictionary with keys one of the currently supported L2 datacubes
+            ('monthly', 'annual_hydro', 'daily_smb') and values the
+            corresponding xr.Dataset.
+        datacube_name : str
             Layer name to be used for this node of the tree.
         overwrite : bool
             If True, allow a layer of the same name to be overwritten.
         """
-        if ds_name in self.data_tree.children and not overwrite:
-            raise ValueError(f"Group '{ds_name}' already exists.")
+        if 'L2' not in datacube_name:
+            datacube_name = f"L2_{datacube_name}"
 
-        # prepare new dataset
-        ds = self._validate_dataset(ds)
-        ds = self._update_metadata(ds, ds_name)
+        if datacube_name in self.data_tree.children and not overwrite:
+            raise ValueError(f"Group '{datacube_name}' already exists.")
 
-        # append additional encodings to the encodings class attribute
-        self._define_encodings(ds, ds_name)
+        if not isinstance(datacubes, dict):
+            raise ValueError(f"Datacubes need to be provided as dict with keys "
+                             f"one of 'monthly, 'annual_hydro' or 'daily_smb'.")
 
-        # validate dataset attributes
-        for var in ds.data_vars:
-            attrs = ds[var].attrs.copy()
-            attrs.pop("grid_mapping", None)
-            self.METADATA_SCHEMA_DATA.validate(attrs)
+        # prepare leaves of new layer
+        new_leaves = {}
+        for datacube_type in datacubes:
+            if datacube_type not in ['monthly', 'annual_hydro', 'daily_smb']:
+                raise ValueError("We currently only support model output "
+                                 "datacubes of the types 'monthly', "
+                                 "'annual_hydro' and 'daily_smb'.")
+            datacube_tmp = datacubes[datacube_type]
+            datacube_tmp = self._validate_dataset(datacube_tmp)
+            datacube_tmp = self._update_metadata(datacube_tmp, datacube_name)
 
-        for coord in ds.coords:
-            if coord not in ['spatial_ref']:
-                attrs = ds[coord].attrs.copy()
-                self.METADATA_SCHEMA_COORDS.validate(attrs)
+            # append additional encodings to the encodings class attribute
+            self._define_encodings(ds=datacube_tmp, ds_name=datacube_name,
+                                   ds_type=datacube_type)
 
-        self.data_tree[ds_name] = xr.DataTree(dataset=ds)
+            # validate dataset attributes
+            for var in datacube_tmp.data_vars:
+                attrs = datacube_tmp[var].attrs.copy()
+                attrs.pop("grid_mapping", None)
+                self.METADATA_SCHEMA_DATA.validate(attrs)
+
+            for coord in datacube_tmp.coords:
+                if coord not in ['spatial_ref']:
+                    attrs = datacube_tmp[coord].attrs.copy()
+                    self.METADATA_SCHEMA_COORDS.validate(attrs)
+
+            # after validation add to leaves
+            new_leaves[datacube_type] = xr.DataTree(
+                name=datacube_type,
+                dataset=datacube_tmp)
+
+        self.data_tree[datacube_name] = xr.DataTree(name=datacube_name,
+                                                    children=new_leaves)
 
     def get_layer(self: GeoZarrHandler, ds_name: str) -> xr.Dataset:
         """Get a dataset from a DataTree.
