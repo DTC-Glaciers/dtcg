@@ -912,7 +912,7 @@ class CalibratorCryotempo(Calibrator):
         np.ndarray
             Time index adjusted to UTC.
         """
-        if isinstance(ds.t.values[0], int):
+        if isinstance(ds.t.values[0].item(), int):
             return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
         else:
             # we assume np.datetime
