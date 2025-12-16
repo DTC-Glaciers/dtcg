@@ -28,6 +28,7 @@ import rioxarray  # noqa: F401
 import xarray as xr
 import yaml
 from schema import Optional, Schema
+from importlib import resources
 
 
 class MetadataMapper:
@@ -68,10 +69,8 @@ class MetadataMapper:
         """
 
         if metadata_mapping_data_file_path is None:
-            metadata_mapping_data_file_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "metadata_mapping_data.yaml"
-            )
+            metadata_mapping_data_file_path = resources.files(
+                "dtcg.datacube").joinpath("metadata_mapping_data.yaml")
         self.METADATA_SCHEMA_DATA = Schema(
             {
                 "standard_name": str,
@@ -89,10 +88,8 @@ class MetadataMapper:
             metadata_mapping_data_file_path)
 
         if metadata_mapping_coords_file_path is None:
-            metadata_mapping_coords_file_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "metadata_mapping_coords.yaml"
-            )
+            metadata_mapping_coords_file_path = resources.files(
+                "dtcg.datacube").joinpath("metadata_mapping_coords.yaml")
         self.METADATA_SCHEMA_COORDS = Schema(
             {
                 "standard_name": str,
