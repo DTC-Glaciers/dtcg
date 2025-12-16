@@ -58,7 +58,9 @@ class TestMetadataMapper:
             {"var1": (["y", "x"], data)},
             coords={"x": np.arange(3), "y": np.arange(3)},
             attrs={
-                "pyproj_srs": "+proj=longlat +datum=WGS84 +no_defs +type=crs"}
+                "pyproj_srs": "+proj=longlat +datum=WGS84 +no_defs +type=crs",
+                "RGI-ID": "RGI60-11-00001",
+            }
         )
         return ds
 
@@ -94,7 +96,8 @@ class TestMetadataMapper:
             "var1": (["x", "y"], [[1.0, 2.0], [3.0, 4.0]]),
             "var2": (["x", "y"], [[4.0, 5.0], [6.0, 2.0]]),
             "var3": (["x", "y"], [[4.0, 5.0], [6.0, 3.0]])},
-            attrs={"pyproj_srs": CRS(3413).to_proj4()})
+            attrs={"pyproj_srs": CRS(3413).to_proj4(),
+                   "RGI-ID": "RGI60-11-00001",})
 
         mapper = MetadataMapper(temp_metadata_file)
 
