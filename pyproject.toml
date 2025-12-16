@@ -53,6 +53,7 @@ dependencies = [
     "pyyaml",
     "requests",
     "aiohttp",
+    "SALib"
 ]
 
 [project.optional-dependencies]
@@ -109,6 +110,13 @@ jupyter = [
 
 [tool.hatch.build.targets.sdist]
 packages = ["dtcg"]
+
+# Ensure package data (e.g., YAML mapping files) is included in the sdist
+include = [
+    "dtcg/**/*.yaml",
+    "dtcg/**/*.yml",
+]
+
 exclude = [
     "logs",
     "*.png",
@@ -122,6 +130,12 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["dtcg"]
+
+# Ensure package data (e.g., YAML mapping files) is included in the wheel
+include = [
+    "dtcg/**/*.yaml",
+    "dtcg/**/*.yml",
+]
 
 [tool.hatch.envs.default]
 env-vars-file = ".env"
