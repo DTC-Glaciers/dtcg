@@ -38,6 +38,7 @@ class GeoZarrHandler(MetadataMapper):
         target_chunk_mb: float = 5.0,
         compressor: Optional[Blosc] = None,
         metadata_mapping_data_file_path: str = None,
+        metadata_mapping_coords_file_path: str = None,
         zarr_format: int = 2,
     ):
         """Initialise a GeoZarrHandler object.
@@ -61,7 +62,9 @@ class GeoZarrHandler(MetadataMapper):
         zarr_format : int, default 2
             Zarr format version to use (2 or 3).
         """
-        super().__init__(metadata_mapping_data_file_path=metadata_mapping_data_file_path)
+        super().__init__(
+            metadata_mapping_data_file_path=metadata_mapping_data_file_path,
+            metadata_mapping_coords_file_path=metadata_mapping_coords_file_path)
         self.ds_name = ds_name
         self.target_chunk_mb = target_chunk_mb
         self.compressor = compressor or Blosc(
