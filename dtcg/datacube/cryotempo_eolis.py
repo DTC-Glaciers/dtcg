@@ -105,6 +105,15 @@ class DatacubeCryotempoEolis:
             "version",
         ]
 
+    def add_data_to_datacube(self, datacube, gdir):
+        """Every datacube must support this method.
+
+        It should be able to add data to the provided datacube and returns the
+        final datacube.
+        """
+        return self.retrieve_prepare_eolis_gridded_data(oggm_ds=datacube,
+                                                        grid=gdir.grid)
+
     def convert_gridded_dataframe_to_array(
         self: DatacubeCryotempoEolis,
         gridded_df: pd.DataFrame,

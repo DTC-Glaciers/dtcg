@@ -58,21 +58,23 @@ class TestMetadataMapper:
             {"var1": (["y", "x"], data)},
             coords={"x": np.arange(3), "y": np.arange(3)},
             attrs={
-                "pyproj_srs": "+proj=longlat +datum=WGS84 +no_defs +type=crs"}
+                "pyproj_srs": "+proj=longlat +datum=WGS84 +no_defs +type=crs",
+                "RGI-ID": "RGI60-11-00001",
+            }
         )
         return ds
 
     def test_load_metadata(self, temp_metadata_file):
         mapper = MetadataMapper(temp_metadata_file)
-        assert "var1" in mapper.metadata_mappings
-        assert isinstance(mapper.metadata_mappings["var1"], dict)
+        assert "var1" in mapper.metadata_mappings_data
+        assert isinstance(mapper.metadata_mappings_data["var1"], dict)
 
     def test_apply_metadata_to_variables(
             self, temp_metadata_file, test_dataset):
         mapper = MetadataMapper(temp_metadata_file)
         result = mapper.update_metadata(test_dataset.copy(), "L1")
 
-        expected = mapper.metadata_mappings["var1"]
+        expected = mapper.metadata_mappings_data["var1"]
         for key, val in expected.items():
             assert result["var1"].attrs[key] == val
 
@@ -94,7 +96,8 @@ class TestMetadataMapper:
             "var1": (["x", "y"], [[1.0, 2.0], [3.0, 4.0]]),
             "var2": (["x", "y"], [[4.0, 5.0], [6.0, 2.0]]),
             "var3": (["x", "y"], [[4.0, 5.0], [6.0, 3.0]])},
-            attrs={"pyproj_srs": CRS(3413).to_proj4()})
+            attrs={"pyproj_srs": CRS(3413).to_proj4(),
+                   "RGI-ID": "RGI60-11-00001",})
 
         mapper = MetadataMapper(temp_metadata_file)
 
