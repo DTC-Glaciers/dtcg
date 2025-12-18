@@ -401,7 +401,7 @@ class Calibrator:
         mcs_sampling_settings: dict = None,
         calibration_parameters_control: dict = None,
         calibration_parameters_mcs: dict = None,
-        quantiles: dict = None,
+        quantiles: list = None,
         climate_input_filesuffix: str = None,
         show_log: bool = False,
         **kwargs,
@@ -445,10 +445,10 @@ class Calibrator:
             The order of calibration parameters for the Monte Carlo simulation
             runs. Default is {"calibrate_param1": "prcp_fac",
             "calibrate_param2": "melt_f", "calibrate_param3": "temp_bias",}
-        quantiles: dict
+        quantiles: list
             The quantiles used for the aggregation of the Monte Carlo simulation
             results, including labels for the final datacube. Default is
-            {0.05: "5th Percentile", 0.50: "Median", 0.95: "95th Percentile",}
+            [0.05, 0.15, 0.25, 0.50, 0.75, 0.85, 0.95]
         climate_input_filesuffix: str
             The filesuffix of the climate input file.
         show_log: bool
@@ -487,9 +487,7 @@ class Calibrator:
             mb_model_class = partial(mb_model_class, **kwargs)
 
         if quantiles is None:
-            quantiles = {0.05: "5th Percentile",
-                         0.50: "Median",
-                         0.95: "95th Percentile",}
+            quantiles = [0.05, 0.15, 0.25, 0.50, 0.75, 0.85, 0.95]
 
         if calibration_parameters_control is None:
             calibration_parameters_control = {
@@ -717,11 +715,12 @@ class Calibrator:
                 warnings.filterwarnings("ignore",
                                         message="All-NaN slice encountered",
                                         category=RuntimeWarning)
-                ds_all = ds_all.quantile(q=list(quantiles.keys()),
+                ds_all = ds_all.quantile(q=quantiles,
                                          dim='sample_name')
             ds_all = ds_all.rename({"quantile": "member"})
+            # convert float quantile values to str, for mixing with 'Control'
             # make sure to match ordering
-            labels = [quantiles[float(v)] for v in ds_all.member.values]
+            labels = [str(v) for v in ds_all.member.values]
             ds_all = ds_all.assign_coords(member=("member", labels))
 
             # add control run as an extra member
@@ -918,12 +917,12 @@ class CalibratorCryotempo(Calibrator):
         np.ndarray
             Time index adjusted to UTC.
         """
-        if isinstance(ds.t.values[0].item(), int):
-            return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
-        else:
-            # we assume np.datetime
+        if isinstance(ds.t.values[0], np.datetime64):
             out = pd.to_datetime(ds.t.values, utc=True).to_pydatetime()
             return np.array([dt.astimezone(tz.tzutc()) for dt in out])
+        else:
+            # we assume the type is int
+            return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
     def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
         """Get
