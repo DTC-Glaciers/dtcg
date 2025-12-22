@@ -25,8 +25,13 @@ t_wgms:
 
 t_sfc_type:
   standard_name: time
-  long_name: Timestamp of surface type observations
-  units: np.datetime64
+  long_name: time since the unix epoch of surface type observations
+  units: seconds since 1970-01-01 00:00:00
+
+snowcover_frac:
+  standard_name: snowcover_frac
+  long_name: Snowcover fraction of elevation band
+  units: N/A
 
 # Model coordinates
 # for 'long_name' we use the 'description' output of OGGM dataset

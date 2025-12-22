@@ -173,6 +173,15 @@ sfc_type_uncertainty:
   comment: TODO
   references: TODO
 
+sfc_type_snowline:
+  standard_name: TODO
+  long_name: TODO
+  units: TODO
+  institution: TODO
+  source: TODO
+  comment: TODO
+  references: TODO
+
 # OGGM Model output
 # 'units' and 'long_name' use the model output attributes (in update_metadata)
 
