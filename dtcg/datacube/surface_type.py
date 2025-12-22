@@ -255,11 +255,18 @@ class DatacubeSurfaceType:
             ('snowcover_frac', 't_sfc_type'),
             np.array([snowline_obs_lower, snowline_obs, snowline_obs_upper]),)
 
+        # derive values for inf (fully or no snowcover)
+        elev_band_edges = get_elev_band_edges(ds, bin_intervall=bin_intervall)
+
         ds['sfc_type_snowline'].attrs = {
             'long_name': 'Snowline altitude derived from glacier facies '
                          'classification',
             'data_source': 'ENVEO',
             'units': 'm',
+            'inf_values': str({
+                np.inf: float(np.max(elev_band_edges)),
+                -np.inf: float(np.min(elev_band_edges)),
+            })
         }
 
         return ds
