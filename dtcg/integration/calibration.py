@@ -697,7 +697,7 @@ class Calibrator:
                 # define daily float year timeseries
                 y1 = int(mb_model_control.ye)
                 mb_years = utils.float_years_timeseries(
-                    y0=2000, y1=y1, include_last_year=True, monthly=False
+                    y0=2000, y1=y1, include_last_year=True, daily=True
                 )
 
                 # loop through all ensemble members and get specific mb
