@@ -240,7 +240,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     *,
     metric: MetricName = "median_bias",
     obs_bounds_level: float = 0.95,
-    ci_level: float = 0.68,
+    ci_level: float = 0.9,
     n_boot: int = 5000,
     block_length: Optional[int] = None,
     seed: Optional[int] = 0,
@@ -347,7 +347,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
         "mean_bias", "mad", "rmsd" and "corrcoef"
     obs_bounds_level : float, default 0.95
         Coverage level associated with obs_unc (e.g., 0.95 for a 95% interval).
-    ci_level : float, default 0.68
+    ci_level : float, default 0.9
         Confidence level of the bootstrap confidence interval.
     n_boot : int, default 5000
         Number of bootstrap replicates. Larger values reduce Monte Carlo noise.

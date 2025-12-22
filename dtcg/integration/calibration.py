@@ -21,6 +21,7 @@ Calibrate OGGM models.
 from datetime import datetime
 import warnings
 from functools import partial
+import inspect
 
 import numpy as np
 import pandas as pd
@@ -359,7 +360,7 @@ class Calibrator:
 
         return ds
 
-    def calculate_and_add_specific_mb(self, ds, unit):
+    def add_specific_mb(self, ds, mb_model, fls, time_resolution, unit):
         """
         Calculate specific mass-balance in mm w.e. from a volume change time
         series.
@@ -372,9 +373,17 @@ class Calibrator:
         -------
 
         """
-        ds['specific_mb'] = (
-                ds.volume.diff(dim='time', label='lower').reindex(time=ds.time) /
-                ds.area * cfg.PARAMS['ice_density'])
+        specific_mb = mb_model.get_specific_mb(
+            fls=fls, year=ds.time[:-1].values, time_resolution=time_resolution)
+        ds = ds.assign(
+            specific_mb=xr.DataArray(
+                specific_mb, dims='time', coords={'time': ds.time[:-1]})
+            .reindex(time=ds.time)  # adds last coord, fills with NaN
+            .broadcast_like(ds.volume)
+        )
+        # ds['specific_mb'] = (
+        #        ds.volume.diff(dim='time', label='lower').reindex(time=ds.time) /
+        #        ds.area * cfg.PARAMS['ice_density'])
 
         return self.add_specific_mb_attrs(ds, unit)
 
@@ -476,10 +485,18 @@ class Calibrator:
             calibration_filesuffix = f"{model_name}_{ref_mb_period}"
 
         if climate_input_filesuffix is None:
-            if mb_model_class.__name__ in ['DailyTIModel']:
+            # for MySfcTypeTIModel we often use partial
+            climate_input_filesuffix = ''
+            if isinstance(mb_model_class, partial):
+                if mb_model_class.keywords['mb_model_class'].__name__ in ['DailyTIModel']:
+                    climate_input_filesuffix = '_daily'
+            elif mb_model_class.__name__ in ['SfcTypeTIModel']:
+                if inspect.signature(
+                        mb_model_class.__init__
+                ).parameters['mb_model_class'].default.__name__ in ['DailyTIModel']:
+                    climate_input_filesuffix = '_daily'
+            elif mb_model_class.__name__ in ['DailyTIModel']:
                 climate_input_filesuffix = '_daily'
-            else:
-                climate_input_filesuffix = ''
 
         # we apply the kwargs to the mb_model class here, to be sure all
         # subsequent tasks use them correctly
@@ -647,7 +664,10 @@ class Calibrator:
                 ds_all = []
                 # open each ensemble member and add a new coordinate for later
                 # merging
-                for sample_filesuffix in working_samples + [control_filesuffix]:
+                for sample_filesuffix, mb_model in zip(
+                    working_samples + [control_filesuffix],
+                    mb_model_samples + [mb_model_control]
+                ):
                     ds_tmp = utils.compile_run_output(
                         gdir,
                         input_filesuffix=f"{sample_filesuffix}_{datacube_request}")
@@ -655,10 +675,14 @@ class Calibrator:
                     if datacube_request == 'annual_hydro':
                         ds_tmp = self.calculate_and_add_total_runoff(ds_tmp)
                         mb_unit = 'mm w.e. yr-1'
+                        time_resolution = 'annual'
                     else:
                         mb_unit = 'mm w.e. month-1'
-                    ds_tmp = self.calculate_and_add_specific_mb(ds_tmp,
-                                                                unit=mb_unit)
+                        time_resolution = 'monthly'
+                    fls = gdir.read_pickle('inversion_flowlines')
+                    ds_tmp = self.add_specific_mb(
+                        ds_tmp, mb_model=mb_model, fls=fls,
+                        time_resolution=time_resolution, unit=mb_unit)
                     ds_tmp = ds_tmp[datacube_vars]
                     if sample_filesuffix == control_filesuffix:
                         ds_control = ds_tmp.expand_dims(member=["Control"])
@@ -838,8 +862,13 @@ class Calibrator:
                 source_description = 'Hugonnet et al. (2021)'
             else:
                 source_description = source
+
+            if isinstance(mb_model_class, partial):
+                mb_model_name = mb_model_class.func.__name__
+            else:
+                mb_model_name = mb_model_class.__name__
             calibration_strategy = (
-                f"OGGM mass-balance model '{mb_model_class.__name__}' "
+                f"OGGM mass-balance model '{mb_model_name}' "
                 f"calibrated to match data from {source_description} in the "
                 f"period {ref_mb_period}."
             )
