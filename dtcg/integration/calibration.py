@@ -395,6 +395,15 @@ class Calibrator:
 
         return ds
 
+    def add_snowline_attrs(self, ds, inf_values=None):
+        ds.snowline.attrs = {
+            'unit': 'm',
+            'description': ('Snowline altitude'),
+            'inf_values': str(inf_values)
+        }
+
+        return ds
+
     def calibrate_mb_and_create_datacubes(
         self,
         gdir: GlacierDirectory,
@@ -497,6 +506,14 @@ class Calibrator:
                     climate_input_filesuffix = '_daily'
             elif mb_model_class.__name__ in ['DailyTIModel']:
                 climate_input_filesuffix = '_daily'
+
+        # check if we are working with SfcTypeTIModel for snowline
+        save_snowline = False
+        if isinstance(mb_model_class, partial):
+            if mb_model_class.func.__name__ in ['SfcTypeTIModel']:
+                save_snowline = True
+        elif mb_model_class.__name__ in ['SfcTypeTIModel']:
+            save_snowline = True
 
         # we apply the kwargs to the mb_model class here, to be sure all
         # subsequent tasks use them correctly
@@ -702,6 +719,8 @@ class Calibrator:
 
                 # loop through all ensemble members and get specific mb
                 smb_all = []
+                if save_snowline:
+                    snowline_all = []
                 fls = gdir.read_pickle('inversion_flowlines')
                 for sample_filesuffix, mb_model in zip(
                     working_samples + [control_filesuffix],
@@ -709,9 +728,33 @@ class Calibrator:
                 ):
                     smb_tmp = mb_model.get_specific_mb(
                         fls=fls, year=mb_years, time_resolution="daily")
+                    if save_snowline:
+                        # use isclose to avoid rounding errors
+                        snowline_yr = np.isclose(
+                            mb_model.snowline_year[:, None], mb_years,
+                            rtol=1e-10
+                        ).any(axis=1)
+                        assert snowline_yr.sum() == len(mb_years)
+                        snowline_tmp = mb_model.snowline[snowline_yr]
+                        # set inf values for quantile computation
+                        inf_values = mb_model.snowline_inf_values
+                        if np.inf in inf_values:
+                            snowline_tmp = np.where(
+                                np.isposinf(snowline_tmp),
+                                inf_values[np.inf], snowline_tmp
+                            )
+                        if -np.inf in inf_values:
+                            snowline_tmp = np.where(
+                                np.isneginf(snowline_tmp),
+                                inf_values[-np.inf], snowline_tmp
+                            )
                     if sample_filesuffix == control_filesuffix:
                         smb_control = smb_tmp
+                        if save_snowline:
+                            snowline_control = snowline_tmp
                     smb_all.append(smb_tmp)
+                    if save_snowline:
+                        snowline_all.append(snowline_tmp)
 
                 # combine all ensemble members in a dataset for later quantile
                 # computation
@@ -720,16 +763,28 @@ class Calibrator:
                                                 np.array(smb_all)),),
                     coords=dict(sample_name=working_samples + [control_filesuffix],
                                 time=mb_years),)
+                ds_all["time"].attrs = {"description": "Floating year"}
                 ds_all = self.add_specific_mb_attrs(ds_all,
                                                     unit='mm w.e. day-1')
+                if save_snowline:
+                    ds_all['snowline'] = (("sample_name", "time"),
+                                          np.array(snowline_all))
+                    ds_all = self.add_snowline_attrs(ds_all,
+                                                     inf_values=inf_values)
 
                 ds_control = xr.Dataset(
                     data_vars=dict(specific_mb=(["member", "time"],
                                                 [smb_control])),
                     coords=dict(member=["Control"], time=mb_years),
                 )
+                ds_control["time"].attrs = {"description": "Floating year"}
                 ds_control = self.add_specific_mb_attrs(ds_control,
                                                         unit='mm w.e. day-1')
+                if save_snowline:
+                    ds_control['snowline'] = (("member", "time"),
+                                              [snowline_control])
+                    ds_control = self.add_snowline_attrs(
+                        ds_control, inf_values=inf_values)
 
             else:
                 raise NotImplementedError(f"{datacube_request}")
@@ -755,6 +810,21 @@ class Calibrator:
                                "ensemble members) and a Control run calibrated "
                                "using median input values."
             }
+
+            # convert place holder inf values back for snowline
+            if 'snowline' in ds_all:
+                if np.inf in inf_values:
+                    ds_all['snowline'] = xr.where(
+                        ds_all['snowline'] != inf_values[np.inf],
+                        ds_all['snowline'], np.inf,
+                        keep_attrs=True,
+                    )
+                if -np.inf in inf_values:
+                    ds_all['snowline'] = xr.where(
+                        ds_all['snowline'] != inf_values[-np.inf],
+                        ds_all['snowline'], -np.inf,
+                        keep_attrs=True,
+                    )
 
             # add RGI-ID attribute
             ds_all.attrs["RGI-ID"] = self.RGI_ID_attrs

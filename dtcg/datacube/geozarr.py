@@ -286,6 +286,7 @@ class GeoZarrHandler(MetadataMapper):
             for var in datacube_tmp.data_vars:
                 attrs = datacube_tmp[var].attrs.copy()
                 attrs.pop("grid_mapping", None)
+                attrs.pop("inf_values", None)
                 self.METADATA_SCHEMA_DATA.validate(attrs)
 
             for coord in datacube_tmp.coords:

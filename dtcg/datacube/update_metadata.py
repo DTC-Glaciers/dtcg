@@ -256,7 +256,7 @@ class MetadataMapper:
             'melt_on_glacier_monthly', 'liq_prcp_off_glacier_monthly',
             'liq_prcp_on_glacier_monthly', 'snowfall_off_glacier_monthly',
             'snowfall_on_glacier_monthly', 'runoff_monthly', 'runoff',
-            'specific_mb',
+            'specific_mb', 'snowline'
         ]
         model_coordinates = [
             'member', 'time', 'rgi_id', 'hydro_year', 'hydro_month',
@@ -265,7 +265,11 @@ class MetadataMapper:
 
         # small helper function to rename some model output attributes
         def rename_key(attrs, new_key, old_key):
-            attrs[new_key] = attrs.pop(old_key, 'N/A')
+            if new_key not in attrs:
+                default = 'N/A'
+            else:
+                default = attrs[new_key]
+            attrs[new_key] = attrs.pop(old_key, default)
 
         # simple function to apply metadata to all layers in an xarray dataset
         for metadata_mappings in [self.metadata_mappings_data,
