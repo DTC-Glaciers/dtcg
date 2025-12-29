@@ -255,8 +255,9 @@ class MetadataMapper:
             'snowfall_on_glacier', 'melt_off_glacier_monthly',
             'melt_on_glacier_monthly', 'liq_prcp_off_glacier_monthly',
             'liq_prcp_on_glacier_monthly', 'snowfall_off_glacier_monthly',
-            'snowfall_on_glacier_monthly', 'runoff_monthly', 'runoff',
-            'specific_mb', 'snowline'
+            'snowfall_on_glacier_monthly', 'runoff_monthly',
+            'runoff_monthly_cumulative', 'runoff', 'specific_mb',
+            'specific_mb_calendar_cum', 'snowline'
         ]
         model_coordinates = [
             'member', 'time', 'rgi_id', 'hydro_year', 'hydro_month',

@@ -387,6 +387,31 @@ class Calibrator:
 
         return self.add_specific_mb_attrs(ds, unit)
 
+    def add_annual_cumulative(self, ds, var, year_coord="calendar_year",
+                              cum_var_suffix="calendar_cum"):
+        out_var = f"{var}_{cum_var_suffix}"
+
+        # add "calendar_year" if not available
+        if year_coord not in ds.coords:
+            # Derive integer year from float-year time coordinate
+            year = np.floor(ds['time']).astype(int)
+            # Attach year as coordinate for grouping
+            ds = ds.assign_coords({year_coord: ('time', year.data)})
+
+        def _cumsum(x):
+            return x.cumsum(dim='time')
+
+        annual_cum = ds[var].groupby(year_coord).map(_cumsum)
+
+        # Store back into the same dataset and adapt description
+        ds[out_var] = annual_cum
+        attrs = ds[out_var].attrs
+        attrs['description'] = (f"{attrs['description']} cumulated over "
+                                f"{year_coord}")
+        ds[out_var].attrs = attrs
+
+        return ds
+
     def add_specific_mb_attrs(self, ds, unit):
         ds.specific_mb.attrs = {
             'unit': unit,
@@ -642,7 +667,8 @@ class Calibrator:
                                  'liq_prcp_on_glacier_monthly',
                                  'snowfall_off_glacier_monthly',
                                  'snowfall_on_glacier_monthly',
-                                 'runoff_monthly', 'runoff', 'specific_mb']
+                                 'runoff_monthly', 'runoff', 'specific_mb',
+                                 'runoff_monthly_cumulative']
 
                 # run dynamic model with different calibration options
                 # kwargs which are the same for all runs, can be provided directly
@@ -659,7 +685,8 @@ class Calibrator:
                     climate_input_filesuffix=climate_input_filesuffix,
                 )
             elif datacube_request == 'monthly':
-                datacube_vars = ['volume', 'area', 'length', 'specific_mb']
+                datacube_vars = ['volume', 'area', 'length', 'specific_mb',
+                                 'specific_mb_calendar_cum']
 
                 # run dynamic model with different calibration options
                 # kwargs which are the same for all runs, can be provided directly
@@ -691,6 +718,13 @@ class Calibrator:
 
                     if datacube_request == 'annual_hydro':
                         ds_tmp = self.calculate_and_add_total_runoff(ds_tmp)
+                        cum_var = 'runoff_monthly_cumulative'
+                        var = 'runoff_monthly'
+                        ds_tmp[cum_var] = ds_tmp[var].cumsum(dim='month_2d')
+                        ds_tmp[cum_var].attrs['description'] = (
+                            f"Cumulative {ds_tmp[var].attrs['description']}"
+                        )
+                        ds_tmp[cum_var].attrs['unit'] = 'kg'
                         mb_unit = 'mm w.e. yr-1'
                         time_resolution = 'annual'
                     else:
@@ -700,6 +734,11 @@ class Calibrator:
                     ds_tmp = self.add_specific_mb(
                         ds_tmp, mb_model=mb_model, fls=fls,
                         time_resolution=time_resolution, unit=mb_unit)
+                    if datacube_request == 'monthly':
+                        # add cumulative ouput
+                        ds_tmp = self.add_annual_cumulative(ds_tmp,
+                                                            var='specific_mb')
+                        ds_tmp["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
                     ds_tmp = ds_tmp[datacube_vars]
                     if sample_filesuffix == control_filesuffix:
                         ds_control = ds_tmp.expand_dims(member=["Control"])
@@ -785,6 +824,13 @@ class Calibrator:
                                               [snowline_control])
                     ds_control = self.add_snowline_attrs(
                         ds_control, inf_values=inf_values)
+
+                # add cumulative ouput
+                ds_all = self.add_annual_cumulative(ds_all, var='specific_mb')
+                ds_control = self.add_annual_cumulative(ds_control,
+                                                        var='specific_mb')
+                ds_all["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
+                ds_control["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
 
             else:
                 raise NotImplementedError(f"{datacube_request}")
