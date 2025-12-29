@@ -945,6 +945,8 @@ class Calibrator:
         l1_datacube: xr.Dataset
             If the reference mass balance should be derived from an observation
             data, which is available in a L1 datacube.
+        ignore_errors: bool
+            If True any exception raised during the calibration is ignored.
         kwargs: dict
             kwargs passed on to Clibrator.calibrate_mb_and_create_datacubes
 
@@ -964,32 +966,31 @@ class Calibrator:
             model_matrix = self.model_matrix
 
         for matrix_name, model_params in tqdm(model_matrix.items()):
-            mb_model_class = model_params["model"]
-            ref_mb_period = model_params["ref_mb_period"]
-            source = model_params["source"]
-            calibration_filesuffix = f"{matrix_name}_{ref_mb_period}"
-
-            ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period = self.get_ref_mb(
-                gdir=gdir, l1_datacube=l1_datacube, ref_mb_period=ref_mb_period,
-                source=source
-            )
-
-            if source == 'Hugonnet':
-                source_description = 'Hugonnet et al. (2021)'
-            else:
-                source_description = source
-
-            if isinstance(mb_model_class, partial):
-                mb_model_name = mb_model_class.func.__name__
-            else:
-                mb_model_name = mb_model_class.__name__
-            calibration_strategy = (
-                f"OGGM mass-balance model '{mb_model_name}' "
-                f"calibrated to match data from {source_description} in the "
-                f"period {ref_mb_period}."
-            )
-
             try:
+                mb_model_class = model_params["model"]
+                ref_mb_period = model_params["ref_mb_period"]
+                source = model_params["source"]
+                calibration_filesuffix = f"{matrix_name}_{ref_mb_period}"
+
+                ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period = self.get_ref_mb(
+                    gdir=gdir, l1_datacube=l1_datacube,
+                    ref_mb_period=ref_mb_period, source=source)
+
+                if source == 'Hugonnet':
+                    source_description = 'Hugonnet et al. (2021)'
+                else:
+                    source_description = source
+
+                if isinstance(mb_model_class, partial):
+                    mb_model_name = mb_model_class.func.__name__
+                else:
+                    mb_model_name = mb_model_class.__name__
+                calibration_strategy = (
+                    f"OGGM mass-balance model '{mb_model_name}' "
+                    f"calibrated to match data from {source_description} in the "
+                    f"period {ref_mb_period}."
+                )
+
                 l2_datacubes[matrix_name] = self.calibrate_mb_and_create_datacubes(
                     gdir=gdir,
                     mb_model_class=mb_model_class,
