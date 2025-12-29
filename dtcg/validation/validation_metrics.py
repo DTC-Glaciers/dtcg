@@ -17,7 +17,7 @@ limitations under the License.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional, Tuple, Union, Literal
+from typing import Iterable, Optional, Union
 
 import numpy as np
 
@@ -56,27 +56,12 @@ def get_supported_metrics():
     }
 
 
-MetricName = Literal["median_bias", "mean_bias", "mad", "rmsd", "corrcoef"]
-
-
 def get_supported_metrics_descriptions():
     supported_metrics = get_supported_metrics()
     metrics_descriptions = {}
     for key in supported_metrics:
         metrics_descriptions[key] = supported_metrics[key]['description']
     return metrics_descriptions
-
-
-@dataclass(frozen=True)
-class BootstrapMetricResult:
-    metric: str
-    point_estimate: float
-    ci: Tuple[float, float]
-    ci_level: float
-    n: int
-    n_boot: int
-    block_length: int
-    seed: Optional[int]
 
 
 def _as_1d_float_array(x: Union[Iterable[float], np.ndarray], name: str
@@ -216,7 +201,7 @@ def _inv_cdf_piecewise_linear(
     return out
 
 
-def _compute_metric(ref: np.ndarray, data: np.ndarray, metric: MetricName
+def _compute_metric(ref: np.ndarray, data: np.ndarray, metric: str
                     ) -> float:
     if metric == "median_bias":
         return float(np.median(data - ref))
@@ -238,7 +223,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     mdl_q_levels: Union[Iterable[float], np.ndarray],
     mdl_quantiles: Union[Iterable[Iterable[float]], np.ndarray],
     *,
-    metric: MetricName = "median_bias",
+    metrics: list = None,
     obs_bounds_level: float = 0.95,
     ci_level: float = 0.9,
     n_boot: int = 5000,
@@ -247,7 +232,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     model_tail: str = "clamp",
     allow_quantile_inversions_tol: float = 0.0,
     q50_tol: float = 1e-12,
-) -> BootstrapMetricResult:
+) -> dict:
     """
     Compute a comparison metric between observed and modelled time series and
     estimate its uncertainty using a moving-block bootstrap that accounts for
@@ -342,8 +327,8 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     mdl_quantiles : array-like, shape (n, m)
         Model quantile values corresponding to `mdl_q_levels` for each
         timestamp. Each row must be non-decreasing across quantiles.
-    metric : str, default "median_bias"
-        Metric used to summarize residuals. Options are: "median_bias",
+    metrics : list, default ["median_bias", "mean_bias", "mad", "rmsd", "corrcoef"]
+        Metrics used to summarize residuals. Options are: "median_bias",
         "mean_bias", "mad", "rmsd" and "corrcoef"
     obs_bounds_level : float, default 0.95
         Coverage level associated with obs_unc (e.g., 0.95 for a 95% interval).
@@ -369,12 +354,11 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
 
     Returns
     -------
-    BootstrapMetricResult
-        Dataclass containing:
-          - metric: name of the metric
-          - point_estimate: metric computed on obs_median and model p50
-          - ci: (lower, upper) bootstrap confidence interval
-          - ci_level, n, n_boot, block_length, seed
+    dict
+        - metrics: list with name of the metric
+        - point_estimate: list of metric computed on obs_median and model p50
+        - ci: list of (lower, upper) bootstrap confidence interval
+        - ci_level, n, n_boot, block_length, seed
 
     Notes
     -----
@@ -393,6 +377,9 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
         If input shapes are inconsistent, quantile levels are invalid, 0.5 is
         missing from mdl_q_levels, or parameters are outside valid ranges.
     """
+
+    if metrics is None:
+        metrics = ["median_bias", "mean_bias", "mad", "rmsd", "corrcoef"]
 
     obs_med = _as_1d_float_array(obs_median, "obs_median")
     obs_u = _as_1d_float_array(obs_unc, "obs_unc")
@@ -429,7 +416,10 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
                          "2000+).")
 
     mdl_point = mdl_q[:, idx50]
-    point_est = _compute_metric(ref=obs_med, data=mdl_point, metric=metric)
+    point_est = []
+    for metric in metrics:
+        point_est.append(_compute_metric(ref=obs_med, data=mdl_point,
+                                         metric=metric))
 
     z = _norm_ppf((1.0 + obs_bounds_level) / 2.0)
     obs_sigma = obs_u / z
@@ -449,7 +439,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
                               for s in chosen_starts])
         return idx[:n]
 
-    boot_stats = np.empty(n_boot, dtype=float)
+    boot_stats = np.empty((len(metrics), n_boot), dtype=float)
 
     for b in range(n_boot):
         idx = _mbb_indices()
@@ -459,17 +449,21 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
         mdl_draw = _inv_cdf_piecewise_linear(u, q_levels, mdl_q[idx, :],
                                              tail=model_tail)
 
-        boot_stats[b] = _compute_metric(ref=obs_draw, data=mdl_draw,
-                                        metric=metric)
+        for i, metric in enumerate(metrics):
+            boot_stats[i, b] = _compute_metric(ref=obs_draw, data=mdl_draw,
+                                               metric=metric)
 
     alpha = 1.0 - ci_level
-    lo = float(np.quantile(boot_stats, alpha / 2.0))
-    hi = float(np.quantile(boot_stats, 1.0 - alpha / 2.0))
+    ci = []
+    for i, metric in enumerate(metrics):
+        lo = float(np.quantile(boot_stats[i, :], alpha / 2.0))
+        hi = float(np.quantile(boot_stats[i, :], 1.0 - alpha / 2.0))
+        ci.append((lo, hi))
 
-    return BootstrapMetricResult(
-        metric=metric,
-        point_estimate=float(point_est),
-        ci=(lo, hi),
+    return dict(
+        metrics=metrics,
+        point_estimate=point_est,
+        ci=ci,
         ci_level=ci_level,
         n=n,
         n_boot=n_boot,

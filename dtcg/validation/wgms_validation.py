@@ -75,36 +75,35 @@ def validate_with_wgms(l1_datacube, l2_datacube, return_bootstrap_args=False,
 
         # conduct the actual calculation of validation metrics
         supported_metrics = get_supported_metrics()
-        for metric in supported_metrics:
+
+        results = bootstrap_metric_obs_normal_mdl_quantiles(
+                     obs_median=wgms_mb,
+                     obs_unc=wgms_mb_unc,
+                     mdl_q_levels=model_mb_q_levels_sorted,
+                     mdl_quantiles=model_mb.values.T,
+                     metrics=[supported_metrics[metric]['fct_name']
+                              for metric in supported_metrics],
+                     **kwargs
+                 )
+
+        for i, metric in enumerate(supported_metrics):
             metric_key = metric
             if supported_metrics[metric]['add_unit']:
                 metric_key += f" ({model_mb.units})"
 
             metric_fmt = supported_metrics[metric]['fmt']
-
-            result = bootstrap_metric_obs_normal_mdl_quantiles(
-                        obs_median=wgms_mb,
-                        obs_unc=wgms_mb_unc,
-                        mdl_q_levels=model_mb_q_levels_sorted,
-                        mdl_quantiles=model_mb.values.T,
-                        metric=supported_metrics[metric]['fct_name'],
-                        **kwargs
-                    )
             validation_metrics.update({
                 metric_key: [
-                    f"{result.point_estimate:{metric_fmt}} "
-                    f"({result.ci[0]:{metric_fmt}}, "
-                    f"{result.ci[-1]:{metric_fmt}})"]
+                    f"{results['point_estimate'][i]:{metric_fmt}} "
+                    f"({results['ci'][i][0]:{metric_fmt}}, "
+                    f"{results['ci'][i][-1]:{metric_fmt}})"]
             })
 
     if validation_metrics != {}:
         if return_bootstrap_args:
             bootstrap_args = {
-                'ci_level': result.ci_level,
-                'n': result.n,
-                'n_boot': result.n_boot,
-                'block_length': result.block_length,
-                'seed': result.seed,
+                key: results[key]
+                for key in ['ci_level', 'n', 'n_boot', 'block_length', 'seed']
             }
             return validation_metrics, bootstrap_args
         else:
