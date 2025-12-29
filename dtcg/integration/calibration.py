@@ -406,8 +406,7 @@ class Calibrator:
         # Store back into the same dataset and adapt description
         ds[out_var] = annual_cum
         attrs = ds[out_var].attrs
-        attrs['description'] = (f"{attrs['description']} cumulated over "
-                                f"{year_coord}")
+        attrs['description'] = (f"cumulated over {year_coord}")
         ds[out_var].attrs = attrs
 
         return ds
