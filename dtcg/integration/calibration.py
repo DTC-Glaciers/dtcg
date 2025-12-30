@@ -22,17 +22,21 @@ from datetime import datetime
 import warnings
 from functools import partial
 import inspect
+import logging
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 from dateutil.tz import UTC
 from dateutil import tz
-from oggm import GlacierDirectory, cfg, utils, workflow, tasks
+from oggm import GlacierDirectory, cfg, utils, workflow, tasks, entity_task
 from oggm.core import massbalance
 from tqdm import tqdm
 
 import SALib.sample.sobol as sampler
+
+# Module logger
+log = logging.getLogger(__name__)
 
 
 class Calibrator:
@@ -106,103 +110,6 @@ class Calibrator:
         diffs = np.abs(dates_ns - target_ns)
         idx = int(np.argmin(diffs))
         return dates[idx]
-
-    def mcs_mb_calibration_workflow(
-        self, gdir, settings_filesuffix, settings_parent_filesuffix,
-        observations_filesuffix,
-        mb_model_class, filename, input_filesuffix,
-        ref_mb, ref_mb_period, ref_mb_err, ref_mb_unit,
-        prcp_fac, melt_f, temp_bias,
-        calibration_parameters=None,
-    ):
-        """
-        This defines the calibration workflow executed for each ensemble member
-        of the Monte Carlo simulation.
-
-        Parameters
-        ----------
-        gdir
-        settings_filesuffix
-        settings_parent_filesuffix: str
-            the settings where from where we use the bounds for the mb
-            parameters prcp_fac, melt_f and temp_bias
-        observations_filesuffix
-        mb_model_class
-        filename: str
-            climatic filename
-        input_filesuffix: str
-            climatic filenamesuffix
-        ref_mb
-        ref_mb_period
-        ref_mb_err
-        ref_mb_unit
-        prcp_fac
-        melt_f
-        temp_bias
-        calibration_parameters: dict
-            here you can define the order of calibration parameters, the default
-            is {"calibrate_param1": "prcp_fac", "calibrate_param2": "melt_f",
-            "calibrate_param3": "temp_bias",}.
-
-        Returns
-        -------
-
-        """
-
-        if calibration_parameters is None:
-            calibration_parameters = {
-                "calibrate_param1": "prcp_fac",
-                "calibrate_param2": "melt_f",
-                "calibrate_param3": "temp_bias",
-            }
-
-        # add observations data to observations file
-        gdir.observations_filesuffix = observations_filesuffix
-        gdir.observations['ref_mb'] = {'err': ref_mb_err,
-                                       'period': ref_mb_period,
-                                       'value': ref_mb,
-                                       'unit': ref_mb_unit}
-
-        # get bounds from parent
-        bounds_to_define = ['prcp_fac_min', 'prcp_fac_max',
-                            'melt_f_min', 'melt_f_max',
-                            'temp_bias_min', 'temp_bias_max',
-                            ]
-        gdir.settings_filesuffix = settings_parent_filesuffix
-        default_bounds = {}
-        for bound in bounds_to_define:
-            default_bounds[bound] = gdir.settings[bound]
-
-        # create the new settings file with the correct parent_filesuffix
-        utils.ModelSettings(gdir, filesuffix=settings_filesuffix,
-                            parent_filesuffix=settings_parent_filesuffix)
-        gdir.settings_filesuffix = settings_filesuffix
-        gdir.settings['use_winter_prcp_fac'] = False
-        # set parent bounds
-        for bound in bounds_to_define:
-            gdir.settings[bound] = default_bounds[bound]
-
-        # the settings here mimic mb_calibration_from_hugonnet_mb
-        wrkflw_return = workflow.execute_entity_task(
-            massbalance.mb_calibration_from_scalar_mb,
-            gdir,
-            settings_filesuffix=settings_filesuffix,
-            observations_filesuffix=observations_filesuffix,
-            overwrite_gdir=True,
-            **calibration_parameters,
-            prcp_fac=prcp_fac,
-            melt_f=melt_f,
-            temp_bias=temp_bias,
-            mb_model_class=mb_model_class,
-            filename=filename,
-            input_filesuffix=input_filesuffix,
-            return_mb_model=True,
-            )
-        # the finally calibrated mass balance model is returned because of
-        # return_mb_model=True
-        mb_model = wrkflw_return[0][1]
-
-        return mb_model
 
     def get_mcs_parameter_sample(
             self, gdir, control_filesuffix, nr_samples=2**4,
@@ -593,10 +500,7 @@ class Calibrator:
             gdir=gdir, control_filesuffix=control_filesuffix,
             **mcs_sampling_settings)
 
-        # now conduct MCS by execute calibration for each sample, which is
-        # currently just a for loop with a try statement (if a combination of
-        # parameters fails). Here we maybe can add multiprocessing in the future
-        # by using OGGMs @entity_task together with workflow.execute_entity_task
+        # now conduct MCS by execute calibration for each sample
         gdir.observations_filesuffix = control_filesuffix
         ref_mb_control = gdir.observations['ref_mb']
 
@@ -605,33 +509,50 @@ class Calibrator:
                   f"  Starting Monte Carlo Simulation for "
                   f"{parameter_sample.shape[0]} ensemble members.")
 
-        # we save successful parameter combinations for later
-        working_samples = []
-        mb_model_samples = []
+        # prepare the settings for individual mcs runs for multiprocessing,
+        # define here kwargs which are individual for each run
+        all_mcs_runs = []
+        all_param_filesuffix = []
         for i, param_val in enumerate(parameter_sample):
-            try:
-                param_filesuffix = f"_{calibration_filesuffix}_{i}"
-                mb_model_tmp = self.mcs_mb_calibration_workflow(
-                    gdir,
+            param_filesuffix = f"_{calibration_filesuffix}_{i}"
+            all_param_filesuffix.append(param_filesuffix)
+            all_mcs_runs.append(
+                (gdir, dict(
                     settings_filesuffix=param_filesuffix,
-                    settings_parent_filesuffix=control_filesuffix,
                     observations_filesuffix=param_filesuffix,
-                    mb_model_class=mb_model_class,
-                    filename='climate_historical',
-                    input_filesuffix=climate_input_filesuffix,
-                    ref_mb_period=ref_mb_control['period'],
-                    ref_mb_err=ref_mb_control['err'],
-                    ref_mb_unit=ref_mb_control['unit'],
                     ref_mb=param_val[parameter_names.index('ref_mb')],
                     prcp_fac=param_val[parameter_names.index('prcp_fac')],
                     melt_f=param_val[parameter_names.index('melt_f')],
                     temp_bias=param_val[parameter_names.index('temp_bias')],
-                    calibration_parameters=calibration_parameters_mcs,
-                )
-                working_samples.append(param_filesuffix)
-                mb_model_samples.append(mb_model_tmp)
-            except RuntimeError:
-                pass
+                ))
+            )
+
+        # execute mcs runs with execute_entity_task for multiprocessing,
+        # kwargs defined below are the same for all runs
+        old_continue_one_error = cfg.PARAMS['continue_on_error']
+        cfg.PARAMS['continue_on_error'] = True
+        mcs_out = workflow.execute_entity_task(
+            mcs_mb_calibration_workflow,
+            all_mcs_runs,
+            settings_parent_filesuffix=control_filesuffix,
+            mb_model_class=mb_model_class,
+            filename='climate_historical',
+            input_filesuffix=climate_input_filesuffix,
+            ref_mb_period=ref_mb_control['period'],
+            ref_mb_err=ref_mb_control['err'],
+            ref_mb_unit=ref_mb_control['unit'],
+            calibration_parameters=calibration_parameters_mcs,
+        )
+        cfg.PARAMS['continue_on_error'] = old_continue_one_error
+
+        # here we keep only working mcs runs and their mb_models
+        working_samples = []
+        mb_model_samples = []
+        for i, out in enumerate(mcs_out):
+            if out is None:
+                continue
+            working_samples.append(all_param_filesuffix[i])
+            mb_model_samples.append(out)
 
         if show_log:
             print(f"  Finished Monte Carlo Simulation: {len(working_samples)} "
@@ -653,7 +574,8 @@ class Calibrator:
                     all_sample_runs.append(
                         (gdir, dict(
                             settings_filesuffix=sample_filesuffix,
-                            output_filesuffix=f"{sample_filesuffix}_{datacube_request}", ))
+                            output_filesuffix=f"{sample_filesuffix}_{datacube_request}",
+                        ))
                     )
             if datacube_request == 'annual_hydro':
                 datacube_vars = ['volume', 'area', 'length', 'off_area',
@@ -1007,6 +929,106 @@ class Calibrator:
                 print(f"Calibration for {matrix_name} not successful: {e}")
 
         return l2_datacubes
+
+
+@entity_task(log)
+def mcs_mb_calibration_workflow(
+    gdir, settings_filesuffix, settings_parent_filesuffix,
+    observations_filesuffix,
+    mb_model_class, filename, input_filesuffix,
+    ref_mb, ref_mb_period, ref_mb_err, ref_mb_unit,
+    prcp_fac, melt_f, temp_bias,
+    calibration_parameters=None,
+):
+    """
+    This defines the calibration workflow executed for each ensemble member
+    of the Monte Carlo simulation.
+
+    Parameters
+    ----------
+    gdir
+    settings_filesuffix
+    settings_parent_filesuffix: str
+        the settings where from where we use the bounds for the mb
+        parameters prcp_fac, melt_f and temp_bias
+    observations_filesuffix
+    mb_model_class
+    filename: str
+        climatic filename
+    input_filesuffix: str
+        climatic filenamesuffix
+    ref_mb
+    ref_mb_period
+    ref_mb_err
+    ref_mb_unit
+    prcp_fac
+    melt_f
+    temp_bias
+    calibration_parameters: dict
+        here you can define the order of calibration parameters, the default
+        is {"calibrate_param1": "prcp_fac", "calibrate_param2": "melt_f",
+        "calibrate_param3": "temp_bias",}.
+
+    Returns
+    -------
+
+    """
+
+    if calibration_parameters is None:
+        calibration_parameters = {
+            "calibrate_param1": "prcp_fac",
+            "calibrate_param2": "melt_f",
+            "calibrate_param3": "temp_bias",
+        }
+
+    # add observations data to observations file
+    gdir.observations_filesuffix = observations_filesuffix
+    gdir.observations['ref_mb'] = {'err': ref_mb_err,
+                                   'period': ref_mb_period,
+                                   'value': ref_mb,
+                                   'unit': ref_mb_unit}
+
+    # get bounds from parent
+    bounds_to_define = ['prcp_fac_min', 'prcp_fac_max',
+                        'melt_f_min', 'melt_f_max',
+                        'temp_bias_min', 'temp_bias_max',
+                        ]
+    gdir.settings_filesuffix = settings_parent_filesuffix
+    default_bounds = {}
+    for bound in bounds_to_define:
+        default_bounds[bound] = gdir.settings[bound]
+
+    # create the new settings file with the correct parent_filesuffix
+    utils.ModelSettings(gdir, filesuffix=settings_filesuffix,
+                        parent_filesuffix=settings_parent_filesuffix,
+                        reset_parent_filesuffix=True)
+    gdir.settings_filesuffix = settings_filesuffix
+    gdir.settings['use_winter_prcp_fac'] = False
+    # set parent bounds
+    for bound in bounds_to_define:
+        gdir.settings[bound] = default_bounds[bound]
+
+    # the settings here mimic mb_calibration_from_hugonnet_mb
+    wrkflw_return = workflow.execute_entity_task(
+        massbalance.mb_calibration_from_scalar_mb,
+        gdir,
+        settings_filesuffix=settings_filesuffix,
+        observations_filesuffix=observations_filesuffix,
+        overwrite_gdir=True,
+        **calibration_parameters,
+        prcp_fac=prcp_fac,
+        melt_f=melt_f,
+        temp_bias=temp_bias,
+        mb_model_class=mb_model_class,
+        filename=filename,
+        input_filesuffix=input_filesuffix,
+        return_mb_model=True,
+        )
+    # the finally calibrated mass balance model is returned because of
+    # return_mb_model=True
+    mb_model = wrkflw_return[0][1]
+
+    return mb_model
 
 
 class CalibratorCryotempo(Calibrator):

@@ -66,6 +66,8 @@ class BindingsOggmModel:
         working_dir: str = None,
         oggm_params: dict | None = None,
         l1_datacube: xr.Dataset = None,
+        use_multiprocessing: bool = True,
+        continue_on_error: bool = True,
         **kwargs
     ):
         self.DEFAULT_BASE_URL = base_url
@@ -84,7 +86,9 @@ class BindingsOggmModel:
             else:
                 self.oggm_params = oggm_params
 
-            self.init_oggm(working_dir=working_dir)
+            self.init_oggm(working_dir=working_dir,
+                           use_multiprocessing=use_multiprocessing,
+                           continue_on_error=continue_on_error)
             self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id],
                                                      **kwargs)[0]
 
@@ -128,7 +132,9 @@ class BindingsOggmModel:
             if key in valid_keys:
                 cfg.PARAMS[key] = value
 
-    def init_oggm(self, working_dir: str, **kwargs) -> None:
+    def init_oggm(self, working_dir: str, use_multiprocessing: bool = True,
+                  continue_on_error: bool = True,
+                  **kwargs) -> None:
         """Initialise OGGM run parameters.
 
         TODO: Add kwargs for cfg.PATH.
@@ -153,6 +159,9 @@ class BindingsOggmModel:
 
         # some params for datacube creation
         cfg.PARAMS["store_model_geometry"] = True
+
+        cfg.PARAMS["use_multiprocessing"] = use_multiprocessing
+        cfg.PARAMS['continue_on_error'] = continue_on_error
 
         self.set_oggm_params(**kwargs)
         self.set_oggm_kwargs()
