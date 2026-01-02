@@ -545,6 +545,10 @@ class Calibrator:
         )
         cfg.PARAMS['continue_on_error'] = old_continue_one_error
 
+        # this is for testing a bug on the cluster
+        old_multiprocessing = cfg.PARAMS['use_multiprocessing']
+        cfg.PARAMS['use_multiprocessing'] = False
+
         # here we keep only working mcs runs and their mb_models
         working_samples = []
         mb_model_samples = []
@@ -806,6 +810,8 @@ class Calibrator:
 
         if show_log:
             print(f"  Finished generating datacubes\n")
+
+        cfg.PARAMS['use_multiprocessing'] = old_multiprocessing
 
         return datacube_dict
 
