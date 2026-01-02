@@ -68,6 +68,7 @@ class BindingsOggmModel:
         l1_datacube: xr.Dataset = None,
         use_multiprocessing: bool = True,
         continue_on_error: bool = True,
+        add_default_values_to_settings: bool = False,
         **kwargs
     ):
         self.DEFAULT_BASE_URL = base_url
@@ -91,6 +92,7 @@ class BindingsOggmModel:
                            continue_on_error=continue_on_error)
             self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id],
                                                      **kwargs)[0]
+            self.gdir.add_default_values_to_settings = add_default_values_to_settings
 
             if l1_datacube is None:
                 self.l1_datacube = self.get_oggm_datacube(gdir=self.gdir)
