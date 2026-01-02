@@ -353,6 +353,7 @@ class Calibrator:
         quantiles: list = None,
         climate_input_filesuffix: str = None,
         show_log: bool = False,
+        multiprocessing_during_datacube_creation: bool = False,
         **kwargs,
     ) -> dict:
         """Calibrate model with provided reference mass balance and generate
@@ -545,9 +546,10 @@ class Calibrator:
         )
         cfg.PARAMS['continue_on_error'] = old_continue_one_error
 
-        # this is for testing a bug on the cluster
-        old_multiprocessing = cfg.PARAMS['use_multiprocessing']
-        cfg.PARAMS['use_multiprocessing'] = False
+        if not multiprocessing_during_datacube_creation:
+            # this is for testing a bug on the cluster
+            old_multiprocessing = cfg.PARAMS['use_multiprocessing']
+            cfg.PARAMS['use_multiprocessing'] = False
 
         # here we keep only working mcs runs and their mb_models
         working_samples = []
@@ -811,7 +813,8 @@ class Calibrator:
         if show_log:
             print(f"  Finished generating datacubes\n")
 
-        cfg.PARAMS['use_multiprocessing'] = old_multiprocessing
+        if not multiprocessing_during_datacube_creation:
+            cfg.PARAMS['use_multiprocessing'] = old_multiprocessing
 
         return datacube_dict
 
