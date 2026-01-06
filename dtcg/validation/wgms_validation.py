@@ -21,6 +21,8 @@ import seaborn as sns
 
 from dtcg.validation.validation_metrics import (
     get_supported_metrics, bootstrap_metric_obs_normal_mdl_quantiles)
+from dtcg.validation.validation_plotting import (
+    autoscale_y_from_fill_between, add_line_with_unc)
 
 
 def get_annual_data_wgms(l1_datacube=None, l2_datacube=None):
@@ -28,6 +30,8 @@ def get_annual_data_wgms(l1_datacube=None, l2_datacube=None):
     returns = []
 
     if l1_datacube is not None:
+        if 'wgms_mb' not in l1_datacube:
+            raise ValueError("No annual WGMS data available.")
         wgms_mb = l1_datacube.wgms_mb
         wgms_mb_unc = l1_datacube.wgms_mb_unc
         returns.append(wgms_mb)
@@ -38,7 +42,7 @@ def get_annual_data_wgms(l1_datacube=None, l2_datacube=None):
         if 'annual_hydro' not in l2_datacube:
             raise ValueError(
                 "For validation with annual wgms data, we need a 'annual_hydro' "
-                "datacube. Available are {list(l2_datacube.keys())}.")
+                f"datacube. Available are {list(l2_datacube.keys())}.")
         model_mb = l2_datacube['annual_hydro'].specific_mb.isel(rgi_id=0)
         returns.append(model_mb)
 
@@ -56,9 +60,9 @@ def validate_with_wgms(l1_datacube, l2_datacube, return_bootstrap_args=False,
             l1_datacube=l1_datacube, l2_datacube=l2_datacube)
 
         # get overlapping years
-        # first common years
+        # common years
         years = np.intersect1d(wgms_mb.t_wgms, model_mb.time)
-        # second exclude nan values of model
+        # exclude nan values of model
         model_mb = model_mb.sel(time=years)
         years = years[~np.isnan(model_mb.sel(member='0.5').values)]
         # finally select data
@@ -122,22 +126,6 @@ def plot_wgms_annual(l1_datacube, datatree, l2_name_list):
     legend_handles = []
     legend_labels = []
 
-    def add_line_with_unc(ax, x, y, y_unc, c, label, label_unc="± uncertainty",
-                          alpha=0.25):
-        line, = ax.plot(x, y, color=c, marker='.')
-
-        if isinstance(y_unc, list):
-            y_lower = y_unc[0]
-            y_upper = y_unc[1]
-        else:
-            y_lower = y - y_unc
-            y_upper = y + y_unc
-
-        band = ax.fill_between(x, y_lower, y_upper,
-                               color=c, alpha=alpha, )
-        legend_handles.append((line, band))
-        legend_labels.append(f"{label} {label_unc}")
-
     c_wgms = color_palette[0]
 
     fig, ax = plt.subplots()
@@ -146,8 +134,10 @@ def plot_wgms_annual(l1_datacube, datatree, l2_name_list):
     wgms_mb, wgms_mb_unc = get_annual_data_wgms(l1_datacube=l1_datacube)
     add_line_with_unc(ax=ax, x=wgms_mb.t_wgms, y=wgms_mb.values,
                       y_unc=wgms_mb_unc.values, c=c_wgms, label='WGMS',
+                      legend_handles=legend_handles, legend_labels=legend_labels,
                       alpha=0.25)
 
+    # L2 datacubes
     for l2_name, c in zip(l2_name_list, color_palette[1:]):
         l2_datacube = datatree[l2_name]
 
@@ -161,9 +151,14 @@ def plot_wgms_annual(l1_datacube, datatree, l2_name_list):
                           ],
                           c=c, label=f"{l2_name} median with",
                           label_unc=f"5th and 95th percentile",
+                          legend_handles=legend_handles,
+                          legend_labels=legend_labels,
                           alpha=0.25)
 
     ax.set_xlim([1999.5, None])
+    # Recompute y-limits based on visible data only
+    autoscale_y_from_fill_between(ax)
+
     ax.set_xlabel('Year')
     ax.set_ylabel('Specific MB (mm w.e. yr-1)');
     ax.legend(legend_handles, legend_labels,

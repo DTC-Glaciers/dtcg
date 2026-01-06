@@ -14,10 +14,15 @@ limitations under the License.
 
 """
 
+import logging
 import pandas as pd
 
 from dtcg.validation.wgms_validation import validate_with_wgms, plot_wgms_annual
+from dtcg.validation.cryosat_validation import validate_with_cryosat, plot_cryosat
 from dtcg.validation.validation_metrics import get_supported_metrics_descriptions
+
+# Module logger
+log = logging.getLogger(__name__)
 
 
 class DatacubeValidator:
@@ -26,11 +31,15 @@ class DatacubeValidator:
 
         # define here all available validation observations
         self.supported_obs_for_validation = {
-            'WGMS': validate_with_wgms,
+            'WGMS': {'fct': validate_with_wgms,
+                     'label': 'L1 WGMS annual massbalance'},
+            'CryoSat2': {'fct': validate_with_cryosat,
+                         'label': 'L1 CryoSat2 elevation change'},
         }
 
         self.supported_obs_for_plotting = {
-            'WGMS_annual': plot_wgms_annual,
+            'WGMS': plot_wgms_annual,
+            'CryoSat2': plot_cryosat,
         }
 
     def get_datacube_from_datatree(self, datacube_name):
@@ -42,7 +51,8 @@ class DatacubeValidator:
         return self.datatree[datacube_name]
 
     def get_validation_for_layers(self, l2_name_list=None, l1_name="L1",
-                                  return_bootstrap_args=False, **kwargs):
+                                  return_bootstrap_args=False,
+                                  ignore_missing_data=True, **kwargs):
         l1_datacube = self.get_datacube_from_datatree(l1_name)
 
         if l2_name_list is None:
@@ -50,25 +60,33 @@ class DatacubeValidator:
                             if 'L2' in L2_name]
 
         validation_metrics = {}
-        bootstrap_args = None
+        bootstrap_args = {}
 
         for l2_name in l2_name_list:
             l2_datacube = self.get_datacube_from_datatree(l2_name)
 
-            for obs, validation_fct in self.supported_obs_for_validation.items():
-                validation_tmp = validation_fct(
-                    l1_datacube=l1_datacube,
-                    l2_datacube=l2_datacube,
-                    return_bootstrap_args=return_bootstrap_args,
-                    **kwargs
-                )
+            for obs, obs_args in self.supported_obs_for_validation.items():
+                try:
+                    validation_tmp = obs_args['fct'](
+                        l1_datacube=l1_datacube,
+                        l2_datacube=l2_datacube,
+                        return_bootstrap_args=return_bootstrap_args,
+                        **kwargs
+                    )
+                except ValueError:
+                    if ignore_missing_data:
+                        log.warning(f'Not all data available for {obs}')
+                        continue
+                    else:
+                        raise
 
                 if validation_tmp is not None:
                     if return_bootstrap_args:
-                        validation_tmp, bootstrap_args = validation_tmp
+                        validation_tmp, bootstrap_args_tmp = validation_tmp
+                        bootstrap_args[obs] = bootstrap_args_tmp
                     df_tmp = pd.DataFrame.from_dict(validation_tmp)
                     df_tmp.index = [l2_name]
-                    df_tmp.index.name = obs
+                    df_tmp.index.name = obs_args['label']
 
                     if obs not in validation_metrics:
                         validation_metrics[obs] = df_tmp

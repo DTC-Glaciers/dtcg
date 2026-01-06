@@ -127,7 +127,7 @@ def _norm_ppf(p: float) -> float:
 
 
 def _validate_quantiles(q_levels: np.ndarray, y2_q: np.ndarray,
-                        tol: float = 0.0) -> None:
+                        tol: float = 1e-10) -> None:
     if np.any(q_levels <= 0.0) or np.any(q_levels >= 1.0):
         raise ValueError("y2_q_levels must be strictly within (0,1).")
     if np.any(np.diff(q_levels) <= 0.0):
@@ -135,7 +135,7 @@ def _validate_quantiles(q_levels: np.ndarray, y2_q: np.ndarray,
 
     # Quantiles must be non-decreasing per timestamp
     diffs = np.diff(y2_q, axis=1)
-    if np.any(diffs < -tol):
+    if np.any(diffs <= -tol):
         raise ValueError(
             "y2_quantiles must be non-decreasing across quantiles for each "
             "timestamp (row-wise). Fix upstream or increase tol slightly for "
@@ -230,7 +230,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     block_length: Optional[int] = None,
     seed: Optional[int] = 0,
     model_tail: str = "clamp",
-    allow_quantile_inversions_tol: float = 0.0,
+    allow_quantile_inversions_tol: float = 1e-10,
     q50_tol: float = 1e-12,
 ) -> dict:
     """
@@ -346,7 +346,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
           - "clamp": values are capped at the lowest/highest quantile
             (conservative).
           - "extrapolate": linear extrapolation beyond the outer quantiles.
-    allow_quantile_inversions_tol : float, default 0.0
+    allow_quantile_inversions_tol : float, default 1e-10
         Tolerance for small numerical inversions in mdl_quantiles rows. Values
         below this tolerance are ignored; larger inversions raise an error.
     q50_tol : float, default 1e-12
