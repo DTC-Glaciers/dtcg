@@ -19,6 +19,8 @@ import pandas as pd
 
 from dtcg.validation.wgms_validation import validate_with_wgms, plot_wgms_annual
 from dtcg.validation.cryosat_validation import validate_with_cryosat, plot_cryosat
+from dtcg.validation.sentinel_validation import (validate_with_sentinel,
+                                                 plot_sentinel)
 from dtcg.validation.validation_metrics import get_supported_metrics_descriptions
 
 # Module logger
@@ -35,11 +37,14 @@ class DatacubeValidator:
                      'label': 'L1 WGMS annual massbalance'},
             'CryoSat2': {'fct': validate_with_cryosat,
                          'label': 'L1 CryoSat2 elevation change'},
+            'Sentinel2': {'fct': validate_with_sentinel,
+                          'label': 'L1 Sentinel2 snowline'},
         }
 
         self.supported_obs_for_plotting = {
             'WGMS': plot_wgms_annual,
             'CryoSat2': plot_cryosat,
+            'Sentinel2': plot_sentinel,
         }
 
     def get_datacube_from_datatree(self, datacube_name):

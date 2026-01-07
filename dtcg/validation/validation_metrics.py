@@ -223,6 +223,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     mdl_q_levels: Union[Iterable[float], np.ndarray],
     mdl_quantiles: Union[Iterable[Iterable[float]], np.ndarray],
     *,
+    interpret_obs_as_quantiles: bool = False,
     metrics: list = None,
     obs_bounds_level: float = 0.95,
     ci_level: float = 0.9,
@@ -238,8 +239,9 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     estimate its uncertainty using a moving-block bootstrap that accounts for
     both temporal dependence and uncertainty in observations and model output.
 
-    This function is intended for applications where observations have symmetric
-    uncertainty and model output is represented by asymmetric predictive
+    This function is intended for applications where observations either have
+    symmetric uncertainty or are represented by predictive distributions
+    (quantiles), and model output is represented by asymmetric predictive
     distributions (quantiles).
 
     Overview of the method
@@ -288,13 +290,15 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     ------------------
     Observations (obs):
       - Inputs: obs_median, obs_unc
-      - obs_unc is interpreted as a symmetric half-width around obs_median
-        corresponding to a central interval with coverage `obs_bounds_level`
-        (e.g., 95%).
-      - A Normal distribution is assumed:
+      - By default, obs_unc is interpreted as a symmetric half-width around
+        obs_median corresponding to a central interval with coverage
+        `obs_bounds_level` (e.g., 95%), and a Normal distribution is assumed:
             obs_t ~ Normal(obs_median_t, sigma_t),
         where sigma_t = obs_unc_t / z and
             z = Phi^{-1}((1 + obs_bounds_level) / 2).
+      - If interpret_obs_as_quantiles=True, obs_median is interpreted as a
+        two-dimensional array of observation quantiles and obs_unc as the
+        corresponding quantile levels, analogous to the model treatment.
 
     Model (mdl):
       - Inputs: mdl_q_levels and mdl_quantiles.
@@ -308,25 +312,40 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
 
     Point estimate vs. uncertainty
     -------------------------------
-    - The returned point estimate is computed using obs_median and the model p50
-      (taken directly from mdl_quantiles at quantile level 0.5).
+    - The returned point estimate is computed using the observation p50
+      (taken from obs_median if interpret_obs_as_quantiles=False, or from the
+      observation quantiles if interpret_obs_as_quantiles=True) and the model
+      p50 (taken directly from mdl_quantiles at quantile level 0.5).
     - The confidence interval reflects uncertainty due to observation error,
       model uncertainty, temporal dependence, and finite sample size.
 
     Parameters
     ----------
-    obs_median : array-like, shape (n,)
-        Observed median time series.
-    obs_unc : array-like, shape (n,)
-        Symmetric uncertainty half-width for observations. Bounds are
-        interpreted as  [obs_median − obs_unc, obs_median + obs_unc] at coverage
+    obs_median : array-like
+        If interpret_obs_as_quantiles=False: one-dimensional array (shape (n,))
+        containing the observed median time series.
+        If interpret_obs_as_quantiles=True: two-dimensional array
+        (shape (n_time, n_quantiles)) containing observation quantiles for each
+        timestamp, corresponding to the quantile levels provided in obs_unc.
+    obs_unc : array-like
+        If interpret_obs_as_quantiles=False: symmetric uncertainty half-width
+        for observations. Bounds are interpreted as
+        [obs_median - obs_unc, obs_median + obs_unc] at coverage
         `obs_bounds_level`.
+        If interpret_obs_as_quantiles=True: one-dimensional array of observation
+        quantile levels corresponding to obs_median.
     mdl_q_levels : array-like, shape (m,)
         Strictly increasing quantile levels in (0, 1). Must explicitly include
         0.5.
     mdl_quantiles : array-like, shape (n, m)
         Model quantile values corresponding to `mdl_q_levels` for each
         timestamp. Each row must be non-decreasing across quantiles.
+    interpret_obs_as_quantiles : bool, default False
+        If False, observations are treated as having symmetric Normal
+        uncertainty defined by obs_median and obs_unc.
+        If True, obs_median is interpreted as observation quantiles and obs_unc
+        as the corresponding quantile levels, and observations are sampled using
+        inverse-CDF sampling in the same way as the model.
     metrics : list, default ["median_bias", "mean_bias", "mad", "rmsd", "corrcoef"]
         Metrics used to summarize residuals. Options are: "median_bias",
         "mean_bias", "mad", "rmsd" and "corrcoef"
@@ -370,6 +389,9 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     - If observational uncertainty contains large systematic (year-correlated)
       components, the resulting confidence intervals may be optimistic unless
       such effects are modeled explicitly.
+    - When interpret_obs_as_quantiles=True, obs_median must have shape
+      (n_time, n_quantiles) and obs_unc must have length n_quantiles, and
+      obs_unc must include the 0.5 quantile to define a point estimate.
 
     Raises
     ------
@@ -381,16 +403,39 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     if metrics is None:
         metrics = ["median_bias", "mean_bias", "mad", "rmsd", "corrcoef"]
 
-    obs_med = _as_1d_float_array(obs_median, "obs_median")
-    obs_u = _as_1d_float_array(obs_unc, "obs_unc")
+    if interpret_obs_as_quantiles:
+        # Interpret obs_median as obs_quantiles (2D) and obs_unc as obs_q_levels (1D)
+        obs_q_levels = _as_1d_float_array(obs_unc,
+                                          "obs_q_levels (from obs_unc)")
+        obs_q = _as_2d_float_array(obs_median,
+                                   "obs_quantiles (from obs_median)")
+        _validate_quantiles(obs_q_levels, obs_q,
+                            tol=allow_quantile_inversions_tol)
+        if obs_q.shape[1] != obs_q_levels.size:
+            raise ValueError("When interpret_obs_as_quantiles=True, obs_median "
+                             "must have shape (n_time, len(obs_unc)).")
 
-    if obs_med.size != obs_u.size:
-        raise ValueError("obs_median and obs_unc must have the same length"
-                         "(aligned timestamps).")
-    if np.any(obs_u < 0.0):
-        raise ValueError("obs_unc must be >= 0 at all timestamps.")
+        # Require 0.5 for point estimate
+        obs_idx50_candidates = np.where(
+            np.isclose(obs_q_levels, 0.5, atol=q50_tol, rtol=0.0))[0]
+        if obs_idx50_candidates.size == 0:
+            raise ValueError("obs_q_levels (obs_unc) must include 0.5 when"
+                             "interpret_obs_as_quantiles=True.")
+        obs_idx50 = int(obs_idx50_candidates[0])
 
-    n = obs_med.size
+        n = obs_q.shape[0]
+        obs_med = obs_q[:, obs_idx50]  # p50 used as observation point series
+    else:
+        obs_med = _as_1d_float_array(obs_median, "obs_median")
+        obs_u = _as_1d_float_array(obs_unc, "obs_unc")
+
+        if obs_med.size != obs_u.size:
+            raise ValueError("obs_median and obs_unc must have the same length"
+                             "(aligned timestamps).")
+        if np.any(obs_u < 0.0):
+            raise ValueError("obs_unc must be >= 0 at all timestamps.")
+
+        n = obs_med.size
 
     q_levels = _as_1d_float_array(mdl_q_levels, "mdl_q_levels")
     mdl_q = _as_2d_float_array(mdl_quantiles, "mdl_quantiles")
@@ -407,7 +452,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
                          "be extracted.")
     idx50 = int(idx50_candidates[0])
 
-    if not (0.0 < obs_bounds_level < 1.0):
+    if (not interpret_obs_as_quantiles) and (not (0.0 < obs_bounds_level < 1.0)):
         raise ValueError("obs_bounds_level must be between 0 and 1.")
     if not (0.0 < ci_level < 1.0):
         raise ValueError("ci_level must be between 0 and 1.")
@@ -421,8 +466,9 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
         point_est.append(_compute_metric(ref=obs_med, data=mdl_point,
                                          metric=metric))
 
-    z = _norm_ppf((1.0 + obs_bounds_level) / 2.0)
-    obs_sigma = obs_u / z
+    if not interpret_obs_as_quantiles:
+        z = _norm_ppf((1.0 + obs_bounds_level) / 2.0)
+        obs_sigma = obs_u / z
 
     if block_length is None:
         block_length = int(max(2, round(np.sqrt(n))))
@@ -444,7 +490,12 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     for b in range(n_boot):
         idx = _mbb_indices()
 
-        obs_draw = obs_med[idx] + rng.normal(0.0, obs_sigma[idx])
+        if interpret_obs_as_quantiles:
+            u_obs = rng.uniform(0.0, 1.0, size=idx.size)
+            obs_draw = _inv_cdf_piecewise_linear(u_obs, obs_q_levels,
+                                                 obs_q[idx, :], tail=model_tail)
+        else:
+            obs_draw = obs_med[idx] + rng.normal(0.0, obs_sigma[idx])
         u = rng.uniform(0.0, 1.0, size=idx.size)
         mdl_draw = _inv_cdf_piecewise_linear(u, q_levels, mdl_q[idx, :],
                                              tail=model_tail)
