@@ -155,8 +155,11 @@ class GeoZarrHandler(MetadataMapper):
             chunk_sizes[t_var] = t_size
 
         for dim in var.dims:
-            if dim not in [t_var, 'x', 'y']:
+            if dim in ['member', 'snowcover_frac']:
+                # use one to save each dimension separately
                 chunk_sizes[dim] = 1
+            elif dim not in [t_var, 'x', 'y']:
+                chunk_sizes[dim] = var.sizes[dim]
 
         return chunk_sizes
 
