@@ -30,6 +30,7 @@ directly:
             ...
 """
 
+from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -53,6 +54,20 @@ def conftest_sample_data_path(pytestconfig):
     test_data_path = Path(pytestconfig.rootpath / "dtcg/tests/sample_data/")
     assert test_data_path.is_dir()
     yield test_data_path
+
+
+@pytest.fixture(name="current_year", scope="function", autouse=False)
+def conftest_get_current_year():
+    """Yield current year.
+
+    Yields
+    ------
+    int
+        Current year.
+    """
+    year = int(date.today().year)
+    assert isinstance(year, int)
+    yield year
 
 
 @pytest.fixture(name="outline_shapefile", scope="function", autouse=False)
