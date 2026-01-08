@@ -354,7 +354,7 @@ class Calibrator:
         quantiles: list = None,
         climate_input_filesuffix: str = None,
         show_log: bool = False,
-        multiprocessing_during_datacube_creation: bool = False,
+        multiprocessing_during_datacube_creation: bool = True,
         **kwargs,
     ) -> dict:
         """Calibrate model with provided reference mass balance and generate
@@ -903,7 +903,7 @@ class Calibrator:
             gdir: GlacierDirectory,
             model_matrix: dict = None,
             l1_datacube: xr.Dataset = None,
-            ignore_errors:bool = False,
+            ignore_errors: bool = False,
             **kwargs
     ) -> dict:
         """Calibrate the mass balance model and create L2 datacubes  using a
