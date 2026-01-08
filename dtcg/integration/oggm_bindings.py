@@ -1,4 +1,4 @@
-"""Copyright 2025 DTCG Contributors
+"""Copyright 2025-2026 DTCG Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -999,7 +999,7 @@ class BindingsCryotempo(BindingsOggmWrangler):
 
     def __init__(
         self,
-        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
+        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2026.1",
         working_dir: str = "",
         oggm_params: dict = {
             "border": 160,
