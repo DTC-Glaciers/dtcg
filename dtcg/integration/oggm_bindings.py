@@ -389,6 +389,20 @@ class BindingsOggmModel:
     def get_oggm_datacube(self, gdir):
         with xr.open_dataset(gdir.get_filepath("gridded_data")) as ds:
             ds = ds.load()
+            keywords = (
+                "rgi",
+                "glacier",
+                "name",
+                "terminus",
+                "cenl",  # latitude, longitude
+                "glims",
+            )
+            glacier_attributes = {
+                key: val
+                for key, val in gdir.__dict__.items()
+                if any(k in key for k in keywords)
+            }
+            ds.attrs.update({"glacier_attributes": glacier_attributes})
 
         return ds
 
