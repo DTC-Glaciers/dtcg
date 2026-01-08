@@ -9,10 +9,10 @@ Getting started
 Requirements
 ============
 
-DTCG is compatible with Python 3.11 and 3.12 on Linux, MacOS, and WSL.
+DTCG is compatible with Python 3.11 and above on Linux, MacOS, and WSL.
 
 .. warning::
-    The DTCG is still experimental.
+    The DTCG API is still experimental.
     Features may change and break at any time.
 
 .. _install_instructions:
@@ -20,9 +20,17 @@ DTCG is compatible with Python 3.11 and 3.12 on Linux, MacOS, and WSL.
 Installation
 ============
 
-For Python 3.11 and above, the recommended environment managers are conda/mamba.
+The recommended environment managers are ``conda``/``mamba``, or ``uv``.
 
-Pre-requisites
---------------
+DTCG requires a working OGGM installation in your active Python environment.
+If you do not have this already set up, pass the ``oggm`` flag when installing.
 
-If you are installing dependencies with conda/mamba, use ``-c conda-forge`` if it does not already have the highest channel priority.
+Activate your virtual environment, and install as an editable:
+
+.. code-block:: bash
+
+    git clone git@github.com:DTC-Glaciers/dtcg.git
+    cd dtcg
+    pip install -e .[oggm]  # if you do not have OGGM installed
+    uv pip install -e .[oggm]  # if using uv
+
