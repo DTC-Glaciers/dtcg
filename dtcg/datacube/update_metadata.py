@@ -126,52 +126,64 @@ class MetadataMapper:
                 "Components (DTC) Early Development Actions."
             ),
             "date_created": datetime.now().isoformat(),
-            "glacier_info": dataset.attrs.get("glacier_info", {})
+            "glacier_attributes": dataset.attrs.get("glacier_attributes", {}),
         }
         if ds_name == "L1":
-            shared_metadata.update({
-                "title": "Datacube of glacier-domain variables.",
-                "summary": (
-                    "Resampled glacier-domain variables from multiple sources. "
-                    "Generated for the DTC Glaciers project."
-                ),
-            })
+            shared_metadata.update(
+                {
+                    "title": "Datacube of glacier-domain variables.",
+                    "summary": (
+                        "Resampled glacier-domain variables from multiple sources. "
+                        "Generated for the DTC Glaciers project."
+                    ),
+                }
+            )
         elif ds_name == "L2":
-            shared_metadata.update({
-                "title": "Datacube of observation-informed modelled variables.",
-                "summary": (
-                    "Observation-informed modelled variables. "
-                    "Generated for the DTC Glaciers project."
-                ),
-            })
+            shared_metadata.update(
+                {
+                    "title": "Datacube of observation-informed modelled variables.",
+                    "summary": (
+                        "Observation-informed modelled variables. "
+                        "Generated for the DTC Glaciers project."
+                    ),
+                }
+            )
 
-        dataset.attrs.clear()   # clear old metadata
+        dataset.attrs.clear()  # clear old metadata
         dataset.attrs.update(shared_metadata)
 
         if "x" in dataset.dims:
             # update coordinate metadata
-            dataset["x"].attrs.update({
-                "standard_name": "projection_x_coordinate",
-                "long_name": "x coordinate of projection",
-                "units": "m",
-            })
+            dataset["x"].attrs.update(
+                {
+                    "standard_name": "projection_x_coordinate",
+                    "long_name": "x coordinate of projection",
+                    "units": "m",
+                }
+            )
 
         if "y" in dataset.dims:
-            dataset["y"].attrs.update({
-                "standard_name": "projection_y_coordinate",
-                "long_name": "y coordinate of projection",
-                "units": "m",
-            })
+            dataset["y"].attrs.update(
+                {
+                    "standard_name": "projection_y_coordinate",
+                    "long_name": "y coordinate of projection",
+                    "units": "m",
+                }
+            )
 
         if "t" in dataset.dims:
             # assuming unix epoch
-            dataset["t"].attrs.update({
-                "standard_name": "time",
-                "long_name": "time since the unix epoch",
-                "units": "seconds since 1970-01-01 00:00:00",
-            })
+            dataset["t"].attrs.update(
+                {
+                    "standard_name": "time",
+                    "long_name": "time since the unix epoch",
+                    "units": "seconds since 1970-01-01 00:00:00",
+                }
+            )
 
-    def update_metadata(self: MetadataMapper, dataset: xr.Dataset, ds_name: str) -> xr.Dataset:
+    def update_metadata(
+        self: MetadataMapper, dataset: xr.Dataset, ds_name: str
+    ) -> xr.Dataset:
         """Apply variable and shared metadata to an xarray Dataset.
 
         Parameters
