@@ -1,0 +1,41 @@
+oggm @ git+https://github.com/gampnico/oggm@feat-dtcg
+numpy
+pandas
+xarray
+shapely
+rioxarray
+geopandas
+bokeh
+geoviews
+holoviews
+matplotlib
+seaborn
+specklia
+ipywidgets
+numcodecs
+zarr
+schema
+pyyaml
+requests
+aiohttp
+sphinx
+sphinx-breeze-theme==0.6.0
+Pillow
+scipy
+netcdf4
+scikit-image
+scikit-learn
+configobj
+dask >= 2025.5
+bottleneck
+pyproj
+cartopy
+rasterio
+seaborn
+tables
+salem
+motionless
+ipython
+joblib
+progressbar2
+pytest-mpl @ git+https://github.com/OGGM/pytest-mpl
