@@ -62,7 +62,7 @@ class BindingsOggmModel:
     def __init__(
         self,
         rgi_id: str = None,
-        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
+        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2026.1/",
         working_dir: str = None,
         oggm_params: dict | None = None,
         l1_datacube: xr.Dataset = None,

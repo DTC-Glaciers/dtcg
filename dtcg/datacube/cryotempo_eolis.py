@@ -505,6 +505,11 @@ class DatacubeCryotempoEolis:
                     "units": column_info["unit"],
                 } | eolis_metadata[col],
             )
+            eolis_resampled_grids_xarr.coords['t'].attrs = {
+                'standard_name': 'time',
+                'long_name': 'time since the unix epoch',
+                'units': 'seconds since 1970-01-01 00:00:00',
+            }
             # mask to glacier
             if "glacier_mask" in oggm_ds.variables:
                 eolis_resampled_grids_xarr = eolis_resampled_grids_xarr.where(

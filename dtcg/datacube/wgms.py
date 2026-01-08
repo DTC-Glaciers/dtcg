@@ -81,7 +81,7 @@ class DatacubeWGMS:
                 name="wgms_mb",
                 attrs={
                     "units": "mm w.e.",
-                    "source": "Specific mass balance observation as reported to"
+                    "source": "Specific mass balance observation as reported to "
                               "the World Glacier Monitoring Service"
                 }
             )
@@ -107,5 +107,5 @@ class DatacubeWGMS:
 
             return datacube
 
-        except:
+        except Exception as e:
             print(f"No WGMS data available for {gdir.rgi_id}.")

@@ -23,6 +23,7 @@ import warnings
 from functools import partial
 import inspect
 import logging
+import os
 
 import numpy as np
 import pandas as pd
@@ -427,17 +428,29 @@ class Calibrator:
 
         if climate_input_filesuffix is None:
             # for MySfcTypeTIModel we often use partial
-            climate_input_filesuffix = ''
+            climate_input_filesuffix = '_era_monthly'
+            climate_input_filesuffix_daily = '_era_daily'
             if isinstance(mb_model_class, partial):
                 if mb_model_class.keywords['mb_model_class'].__name__ in ['DailyTIModel']:
-                    climate_input_filesuffix = '_daily'
+                    climate_input_filesuffix = climate_input_filesuffix_daily
             elif mb_model_class.__name__ in ['SfcTypeTIModel']:
                 if inspect.signature(
                         mb_model_class.__init__
                 ).parameters['mb_model_class'].default.__name__ in ['DailyTIModel']:
-                    climate_input_filesuffix = '_daily'
+                    climate_input_filesuffix = climate_input_filesuffix_daily
             elif mb_model_class.__name__ in ['DailyTIModel']:
-                climate_input_filesuffix = '_daily'
+                climate_input_filesuffix = climate_input_filesuffix_daily
+
+        # we need to extend the climate file to full calendar years to work with
+        # OGGM, at the end we restore the original file again
+        fp_climate = gdir.get_filepath('climate_historical',
+                                       filesuffix=climate_input_filesuffix + '{}')
+        with xr.open_dataset(fp_climate.format('')) as ds_clim:
+            ds_clim = ds_clim.load()
+        # save the original file with suffix '_original' for later
+        ds_clim.to_netcdf(fp_climate.format('_original'))
+        ds_clim, last_available_date = extend_to_full_calendar_year(ds_clim)
+        ds_clim.to_netcdf(fp_climate.format(''))
 
         # check if we are working with SfcTypeTIModel for snowline
         save_snowline = False
@@ -667,6 +680,22 @@ class Calibrator:
                                                             var='specific_mb')
                         ds_tmp["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
                     ds_tmp = ds_tmp[datacube_vars]
+
+                    # keep only data from the orignal climate file (we need full
+                    # calendar years to work within OGGM)
+                    if datacube_request == 'monthly':
+                        ds_tmp = ds_tmp.sel(
+                            time=slice(None,
+                                       utils.date_to_floatyear(
+                                           y=last_available_date.year,
+                                           m=last_available_date.month)))
+                    elif datacube_request == 'annual_hydro':
+                        ds_tmp = mask_mixed_year_month(
+                            ds=ds_tmp, last_available=last_available_date)
+                    else:
+                        raise NotImplementedError(f"{datacube_request}")
+
+                    # add resulting dataset for merging
                     if sample_filesuffix == control_filesuffix:
                         ds_control = ds_tmp.expand_dims(member=["Control"])
                     ds_tmp.coords['sample_name'] = sample_filesuffix
@@ -759,6 +788,14 @@ class Calibrator:
                 ds_all["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
                 ds_control["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
 
+                # keep only data from the orignal climate file (we need full
+                # calendar years to work within OGGM)
+                last_available_floatyear = utils.date_to_floatyear(
+                    y=last_available_date.year, m=last_available_date.month,
+                    d=last_available_date.day)
+                ds_all = ds_all.sel(time=slice(None, last_available_floatyear))
+                ds_control = ds_control.sel(time=slice(None, last_available_floatyear))
+
             else:
                 raise NotImplementedError(f"{datacube_request}")
 
@@ -809,6 +846,12 @@ class Calibrator:
 
             if show_log:
                 print(f"    Finished generation of {datacube_request} datacube")
+
+        # we save the original climate data back to the gdir
+        with xr.open_dataset(fp_climate.format('_original')) as ds_clim:
+            ds_clim = ds_clim.load()
+        ds_clim.to_netcdf(fp_climate.format(''))
+        os.remove(fp_climate.format('_original'))
 
         if show_log:
             print(f"  Finished generating datacubes\n")
@@ -1009,7 +1052,6 @@ def mcs_mb_calibration_workflow(
 
     # create the new settings file with the correct parent_filesuffix
     utils.ModelSettings(gdir, filesuffix=settings_filesuffix,
-                        parent_filesuffix=settings_parent_filesuffix,
                         reset_parent_filesuffix=True)
     gdir.settings_filesuffix = settings_filesuffix
     gdir.settings['use_winter_prcp_fac'] = False
@@ -1038,6 +1080,77 @@ def mcs_mb_calibration_workflow(
     mb_model = wrkflw_return[0][1]
 
     return mb_model
+
+
+def extend_to_full_calendar_year(
+    ds: xr.Dataset,
+    time_dim: str = "time",
+    resolution: str | None = None,   # "daily" | "monthly" | None (infer)
+) -> tuple:
+    """
+    Extend an xarray Dataset along `time_dim` to the end of the last calendar
+    year present.
+    - daily: extend to YYYY-12-31 (daily frequency)
+    - monthly: extend to YYYY-12-01 assuming monthly-start timestamps (MS)
+
+    Any newly added timestamps are filled with the last available values (LOCF).
+    """
+    if time_dim not in ds.coords:
+        raise ValueError(f"Dataset has no coordinate '{time_dim}'.")
+
+    t = ds[time_dim].to_index()
+    if len(t) == 0:
+        return ds
+
+    if resolution is None:
+        # Infer from median step in days. >= ~28 -> monthly, else daily.
+        dt_days = pd.Series(t).diff().dropna().dt.total_seconds() / 86400.0
+        med = float(dt_days.median()) if len(dt_days) else np.nan
+        resolution = "monthly" if (np.isnan(med) or med >= 28) else "daily"
+
+    last = t[-1]
+    year_end = pd.Timestamp(year=last.year, month=12, day=31)
+
+    if resolution.lower() == "daily":
+        new_time = pd.date_range(t[0], year_end, freq="D")
+    elif resolution.lower() == "monthly":
+        # Monthly dataset assumed to be on month starts (YYYY-MM-01). End is Dec 1.
+        end_ms = pd.Timestamp(year=last.year, month=12, day=1)
+        new_time = pd.date_range(t[0], end_ms, freq="MS")
+    else:
+        raise ValueError("resolution must be one of: None, 'daily', 'monthly'.")
+
+    # Reindex introduces NaNs at new timestamps; ffill carries last observed value forward.
+    out = ds.reindex({time_dim: new_time}).ffill(time_dim)
+
+    return out, last
+
+
+def mask_mixed_year_month(ds: xr.Dataset, last_available: pd.Timestamp) -> xr.Dataset:
+    last_year = last_available.year
+    last_month = last_available.month
+
+    year_mask = ds["time"] <= last_year  # dims: (time,)
+
+    ym_mask = (
+        (ds["time"] < last_year) |
+        ((ds["time"] == last_year) & (ds["month_2d"] <= last_month))
+    )
+    # ym_mask dims: (time, month_2d)
+
+    out_vars = {}
+    for name, da in ds.data_vars.items():
+        dims = set(da.dims)
+
+        if "month_2d" in dims and "time" in dims:
+            out_vars[name] = da.where(ym_mask)
+        elif "time" in dims and "month_2d" not in dims:
+            out_vars[name] = da.where(year_mask)
+        else:
+            # unchanged for variables not depending on year/month
+            out_vars[name] = da
+
+    return xr.Dataset(out_vars, coords=ds.coords, attrs=ds.attrs)
 
 
 class CalibratorCryotempo(Calibrator):

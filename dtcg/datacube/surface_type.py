@@ -161,10 +161,10 @@ class DatacubeSurfaceType:
         }
         ds['sfc_type_data'] = (('t_sfc_type', 'y', 'x'), sfc_type_data)
         ds['sfc_type_data'].attrs = {
-            'long_name': 'Glacier facies classification',
+            'long_name': 'Glacier surface classification',
             'data_source': 'ENVEO',
             'units': 'none',
-            'code_description': 'Extract dict with ast.literal_eval(ds.code).',
+            'code_description': 'Extract dict with eval(ds.code).',
             'code': str({
                 0: 'unclassified',
                 1: 'snow',
@@ -178,10 +178,10 @@ class DatacubeSurfaceType:
 
         ds['sfc_type_uncertainty'] = (('t_sfc_type', 'y', 'x'), sfc_type_uncertainty)
         ds['sfc_type_uncertainty'].attrs = {
-            'long_name': 'Glacier facies classification uncertainty',
+            'long_name': 'Glacier surface classification uncertainty',
             'data_source': 'ENVEO',
             'units': 'none',
-            'code_description': 'Extract dict with ast.literal_eval(ds.code).',
+            'code_description': 'Extract dict with eval(ds.code).',
             'code': str({
                 1: 'low uncertainty for illuminated pixel',
                 2: 'medium uncertainty for illuminated pixel',
@@ -259,7 +259,7 @@ class DatacubeSurfaceType:
         elev_band_edges = get_elev_band_edges(ds, bin_intervall=bin_intervall)
 
         ds['sfc_type_snowline'].attrs = {
-            'long_name': 'Snowline altitude derived from glacier facies '
+            'long_name': 'Snowline altitude derived from glacier surface '
                          'classification',
             'data_source': 'ENVEO',
             'units': 'm',
@@ -369,13 +369,15 @@ def get_categories_per_elevation_band(ds,
             "category_counts": (
                 ("t_sfc_type", "elevation_bin", "category"),
                 category_counts,
-                {"long_name": "Count of glacier facies classification per elevation band"},
+                {"long_name": "Count of glacier surface classification per "
+                              "elevation band"},
             ),
             "uncertainty_counts": (
                 ("t_sfc_type", "elevation_bin", "uncertainty_flag"),
                 uncertainty_counts,
                 {
-                    "long_name": "Count of glacier facies classification  uncertainty per elevation band"},
+                    "long_name": "Count of glacier surface classification "
+                                 "uncertainty per elevation band"},
             ),
         },
         coords={
