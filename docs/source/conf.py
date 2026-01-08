@@ -30,7 +30,7 @@ def setup(app):
 project = "DTCG"
 copyright = f"{date.today().year}, DTCG Contributors"
 author = "DTCG Contributors"
-release = "0.6.3"
+release = "0.6.4"
 version = os.environ.get("READTHEDOCS_VERSION", "latest")
 
 # -- General configuration ---------------------------------------------------
