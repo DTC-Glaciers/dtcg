@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.6.1"
+version = "0.6.2"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -27,6 +27,7 @@ classifiers = [
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Environment :: Console",
     "Topic :: Database",
     "Topic :: Scientific/Engineering :: Information Analysis",
@@ -84,7 +85,7 @@ oggm = [
 ]
 docs = [
     "sphinx",
-    "sphinx-breeze-theme == 0.5.5",
+    "sphinx-breeze-theme == 0.6.0",
 ]
 dev = [
     "dtcg[tests,docs,oggm]",
