@@ -40,6 +40,7 @@ def check_desp_api_key():
 
 
 _has_desp_access = check_desp_api_key()
+current_year = int(date.today().year)
 
 
 class Test_DatacubeDespERA5:
@@ -72,11 +73,11 @@ class Test_DatacubeDespERA5:
         reason="No access to DESP. Check your .netrc file has a valid API key.",
     )
     @pytest.mark.parametrize("arg_frequency", ["monthly", "daily"])
-    def test_process_desp_era5_data(self, arg_frequency, hef_gdir):
+    def test_process_desp_era5_data(self, arg_frequency, hef_gdir, current_year):
 
         gdir = hef_gdir
 
-        arg_y0, arg_y1 = (2023, 2024)
+        arg_y0, arg_y1 = (current_year - 2, current_year - 1)
         desp.process_desp_era5_data(
             gdir=gdir, frequency=arg_frequency, y0=arg_y0, y1=arg_y1
         )
@@ -88,8 +89,8 @@ class Test_DatacubeDespERA5:
         else:
             assert ds.yr_0 == arg_y0
         if not arg_y1:
-            # This may fail each new year's day
-            assert ds.yr_1 == int(date.today().year)
+            # This may fail on new year's day or if January data unavailable.
+            assert ds.yr_1 == current_year
         else:
             assert ds.yr_1 == arg_y1
 
@@ -98,9 +99,15 @@ class Test_DatacubeDespERA5:
         reason="No access to DESP. Check your .netrc file has a valid API key.",
     )
     @pytest.mark.parametrize(
-        "arg_years", [(None, 1941), (2023, None), (2023, 2024), (None, None)]
+        "arg_years",
+        [
+            (None, 1941),
+            (current_year - 2, None),
+            (current_year - 2, current_year - 1),
+            (None, None),
+        ],
     )
-    def test_process_desp_era5_data_years(self, arg_years, hef_gdir):
+    def test_process_desp_era5_data_years(self, arg_years, hef_gdir, current_year):
         gdir = hef_gdir
 
         arg_y0, arg_y1 = arg_years
@@ -115,7 +122,10 @@ class Test_DatacubeDespERA5:
         else:
             assert ds.yr_0 == arg_y0
         if not arg_y1:
-            # This may fail each new year's day
-            assert ds.yr_1 == int(date.today().year)
+            if int(date.today().month) != 1:
+                assert ds.yr_1 == current_year
+            else:
+                # Data not uploaded until mid-January
+                assert ds.yr_1 == current_year - 1
         else:
             assert ds.yr_1 == arg_y1
