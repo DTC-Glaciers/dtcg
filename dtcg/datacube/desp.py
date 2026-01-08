@@ -18,14 +18,12 @@ Functionality for retrieving and resampling ERA5 data via DESP.
 
 Requires an Earth Data Hub personal access token in a .netrc file:
 
-```
-machine data.earthdatahub.destine.eu
-  password <your personal access token>
-```
+.. code-block:: bash
 
-For more information on authentication please read the `EDH
-documentation`_.
-.. _EDH documentation: https://earthdatahub.destine.eu/getting-started
+    machine data.earthdatahub.destine.eu
+        password <your personal access token>
+
+For more information on authentication please read the `EDH documentation. <https://earthdatahub.destine.eu/getting-started>`__
 """
 
 from __future__ import annotations
@@ -188,7 +186,7 @@ def process_desp_era5_data(
 
     temperature = temperature.compute().data
     precipitation = precipitation.compute().data
-    
+
     height = height.compute().data
 
     # OK, ready to write

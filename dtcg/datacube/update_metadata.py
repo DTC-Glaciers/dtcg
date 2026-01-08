@@ -161,6 +161,7 @@ class MetadataMapper:
             ),
             "date_created": datetime.now().isoformat(),
             "RGI-ID": dataset.attrs['RGI-ID'],
+            "glacier_attributes": dataset.attrs.get("glacier_attributes", {}),
         }
         if "L1" in ds_name:
             if not ("spatial_ref" in dataset.data_vars or
@@ -193,7 +194,7 @@ class MetadataMapper:
                     "calibration strategy.")
             shared_metadata["calibration_strategy"] = dataset.attrs["calibration_strategy"]
 
-        dataset.attrs.clear()   # clear old metadata
+        dataset.attrs.clear()  # clear old metadata
         dataset.attrs.update(shared_metadata)
 
     def update_metadata(self: MetadataMapper, dataset: xr.Dataset, ds_name: str
