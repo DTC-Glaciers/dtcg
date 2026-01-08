@@ -4,6 +4,17 @@ API
 
 Click on a table entry to navigate through the API.
 
+API (External)
+==============
+.. currentmodule:: dtcg
+.. autosummary::
+   :toctree: api
+   :template: custom-module.rst
+   :nosignatures:
+   :recursive:
+
+   api
+
 Integration
 ===========
 .. currentmodule:: dtcg

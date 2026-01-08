@@ -18,14 +18,12 @@ Functionality for retrieving and resampling ERA5 data via DESP.
 
 Requires an Earth Data Hub personal access token in a .netrc file:
 
-```
-machine data.earthdatahub.destine.eu
-  password <your personal access token>
-```
+.. code-block:: bash
 
-For more information on authentication please read the `EDH
-documentation`_.
-.. _EDH documentation: https://earthdatahub.destine.eu/getting-started
+    machine data.earthdatahub.destine.eu
+        password <your personal access token>
+
+For more information on authentication please read the `EDH documentation. <https://earthdatahub.destine.eu/getting-started>`__
 """
 
 from __future__ import annotations
@@ -155,7 +153,7 @@ def process_desp_era5_data(
 
             # don't recalculate years in case of mismatch
             ds = ds.sel(valid_time=slice(f"{y0}-01-01", f"{y1}-12-01"))
-            height = ds.z.astype("float32") / cfg.G
+            height = ds.z.isel(valid_time=0).astype("float32") / cfg.G
 
     elif frequency == "daily":
         # use the hourly dataset, resample to daily
@@ -181,7 +179,7 @@ def process_desp_era5_data(
             ref_lon = ref_lon - 360 if ref_lon > 180 else ref_lon
             ref_lat = ds_hr.latitude.astype("float32").compute()
 
-            height = ds_hr.z.astype("float32") / cfg.G
+            height = ds_hr.z.isel(valid_time=0).astype("float32") / cfg.G
 
     else:
         raise InvalidParamsError("frequency must be 'monthly' or 'daily'")
