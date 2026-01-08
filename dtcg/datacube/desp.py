@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+
 =====
 
 Functionality for retrieving and resampling ERA5 data via DESP.
@@ -23,7 +24,8 @@ Requires an Earth Data Hub personal access token in a .netrc file:
     machine data.earthdatahub.destine.eu
         password <your personal access token>
 
-For more information on authentication please read the `EDH documentation. <https://earthdatahub.destine.eu/getting-started>`__
+For more information on authentication please read the
+`EDH documentation. <https://earthdatahub.destine.eu/getting-started>`__
 """
 
 from __future__ import annotations
@@ -51,7 +53,7 @@ def get_desp_datastream(dataset: str = "ERA5_DESP") -> xr.Dataset:
     Parameters
     ----------
     dataset : str, default "ERA5_DESP"
-        Name of dataset, either "ERA5_DESP" or "ERA5_DESP_hourly"
+        Name of dataset, either "ERA5_DESP" or "ERA5_DESP_hourly".
 
     Returns
     -------
@@ -99,14 +101,15 @@ def process_desp_era5_data(
     Parameters
     ----------
     gdir : GlacierDirectory
-        the glacier directory to process
+        The glacier directory to process.
     settings_filesuffix: str, optional
         You can use a different set of settings by providing a filesuffix. This
         is useful for sensitivity experiments. Code-wise the settings_filesuffix
         is set in the @entity-task decorater.
     frequency : str, default "monthly"
-        'monthly' (default) to use monthly DESP dataset, or "daily" to
-        use the hourly DESP dataset resampled to daily aggregates.
+        Set to "monthly" (default) to use the monthly DESP dataset, or
+        "daily" to use the hourly DESP dataset resampled to daily
+        aggregates.
     y0 : int, default None
         The starting year of the desired timeseries. The default is to
         take the entire time period available in the file, but with
