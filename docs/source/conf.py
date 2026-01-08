@@ -30,7 +30,7 @@ def setup(app):
 project = "DTCG"
 copyright = f"{date.today().year}, DTCG Contributors"
 author = "DTCG Contributors"
-release = "0.6.3"
+release = "0.6.4"
 version = os.environ.get("READTHEDOCS_VERSION", "latest")
 
 # -- General configuration ---------------------------------------------------
@@ -80,7 +80,9 @@ pygments_style = "sphinx"
 html_theme = "breeze"
 html_static_path = ["_static"]
 
-# support_icon = """<img src="https://github.com/DTC-Glaciers/dtc-glaciers.github.io/blob/main/img/favicon.png"></img>"""
+# support_icon = """<img src='https://github.com/DTC-Glaciers/dtc-glaciers.github.io/blob/main/img/favicon.png'></img>"""
+# support_icon = """<img src='_static/favicon.png' style="width:2em;height:2em;float:left;display:inline-flex;flex-wrap:nowrap;></img>"""
+# support_icon = """<img src='_static/favicon.png' style="width='1em' height='1em'></img>"""
 html_theme_options = {
     "sidebar_secondary": False,
     # "external_links": [
