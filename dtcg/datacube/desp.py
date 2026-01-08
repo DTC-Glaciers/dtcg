@@ -188,7 +188,7 @@ def process_desp_era5_data(
 
     temperature = temperature.compute().data
     precipitation = precipitation.compute().data
-    
+
     height = height.compute().data
 
     # OK, ready to write
