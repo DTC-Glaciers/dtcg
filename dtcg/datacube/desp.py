@@ -105,7 +105,7 @@ def process_desp_era5_data(
     settings_filesuffix: str, optional
         You can use a different set of settings by providing a filesuffix. This
         is useful for sensitivity experiments. Code-wise the settings_filesuffix
-        is set in the @entity-task decorater.
+        is set in the @entity-task decorator.
     frequency : str, default "monthly"
         Set to "monthly" (default) to use the monthly DESP dataset, or
         "daily" to use the hourly DESP dataset resampled to daily
