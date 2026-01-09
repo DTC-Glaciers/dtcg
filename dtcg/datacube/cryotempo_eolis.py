@@ -52,6 +52,12 @@ class DatacubeCryotempoEolis:
     ----------
     SPECKLIA_DATASET_NAME_EOLIS_ELEVATION_CHANGE : str
         Name of the dataset in Specklia to add to the OGGM datacube.
+    MINIMUM_REQUIRED_EOLIS_COVERAGE_FRACTION : float
+        Minimum required fraction of EOLIS data coverage over glacier
+        area for data to be considered valid.
+    MINIMUM_REQUIRED_GLACIER_AREA_KM2 : float
+        Minimum required glacier area in square kilometers for data
+        to be considered valid.
     EOLIS_STATIC_KEYS : list[str]
         EOLIS metadata keys that are static across product files.
     EOLIS_PRODUCT_KEYS : list[str]
@@ -62,6 +68,8 @@ class DatacubeCryotempoEolis:
         self.SPECKLIA_DATASET_NAME_EOLIS_ELEVATION_CHANGE = (
             "CryoTEMPO-EOLIS Elevation Change Maps"
         )
+        self.MINIMUM_REQUIRED_EOLIS_COVERAGE_FRACTION = 0.5
+        self.MINIMUM_REQUIRED_GLACIER_AREA_KM2 = 50.0
         self.EOLIS_STATIC_KEYS = [
             "Conventions",
             "DOI",
@@ -580,11 +588,20 @@ class DatacubeCryotempoEolis:
         ]
 
         # generate timeseries with uncertainties
-        elevation_change_timeseries, error_timeseries = \
+        elevation_change_timeseries, error_timeseries, observational_coverage = \
             self.generate_1d_timeseries(
                 eolis_gridded_data_masked,
                 elevation_change_var_name,
                 elevation_change_sigma_var_name
+            )
+
+        glacier_area_km = vector_glacier_mask.area / 1e6
+        if (np.nanmean(observational_coverage) < self.MINIMUM_REQUIRED_EOLIS_COVERAGE_FRACTION) \
+                | (glacier_area_km < self.MINIMUM_REQUIRED_GLACIER_AREA_KM2):
+            raise RuntimeError(
+                "Glacier-wide elevation change estimate does not meet "
+                "internal data-quality criteria and is therefore not available "
+                "for this glacier."
             )
 
         # add timeseries to datacube
@@ -676,10 +693,12 @@ class DatacubeCryotempoEolis:
         gridded_product_data_grouped = [t[1] for t in grouped_data]
 
         n_pixels_on_glaciated_area = len(gridded_product_data_grouped[0].dropna())
-        n_eff = gridded_product_data_grouped[0].geometry.area.sum() / (length_scale**2)
+        glacier_area = gridded_product_data_grouped[0].geometry.area.sum()
+        n_eff = glacier_area / (length_scale**2)
 
         elevation_change_timeseries = []
         error_timeseries = []
+        observational_coverage = []
         for i in range(len(timestamps)):
             gridded_data_this_timestamp = gridded_product_data_grouped[i].loc[
                 gridded_product_data_grouped[i][
@@ -690,13 +709,18 @@ class DatacubeCryotempoEolis:
                 elevation_change_sigma_var_name].astype(float).to_numpy()
 
             std_mean = (1 / n_eff) * np.sqrt(np.nansum(uncertainty**2))
-            frac_obs_coverage = n_pixels_on_glaciated_area / np.sum(
-                gridded_data_this_timestamp.interpolation_binary_mask == 0.0)
+            n_obs = max(np.sum(
+                gridded_data_this_timestamp.interpolation_binary_mask == 0.0),
+                1e-3
+            )
+            frac_obs_coverage = n_obs / n_pixels_on_glaciated_area
             std_mean = std_mean * (1 / frac_obs_coverage)**0.5
 
             elevation_change_timeseries.append(mean)
             error_timeseries.append(std_mean)
-        return elevation_change_timeseries, error_timeseries
+            observational_coverage.append(frac_obs_coverage)
+
+        return elevation_change_timeseries, error_timeseries, observational_coverage
 
     def create_vector_glacier_mask(
             self: DatacubeCryotempoEolis,
