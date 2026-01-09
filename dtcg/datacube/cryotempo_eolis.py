@@ -446,11 +446,14 @@ class DatacubeCryotempoEolis:
         specklia_query_polygon = self.create_query_polygon(oggm_ds)
 
         # query EOLIS dataset from specklia over full time period
+        specklia_api_key = os.getenv("SPECKLIA_API_KEY")
+        if specklia_api_key is None:
+            specklia_api_key = input('To access the EOLIS dataset, please generate a Specklia API key using https://specklia.earthwave.co.uk/ApiKeys and paste it here:')
         eolis_gridded_data, eolis_gridded_sources, eolis_gridded_dataset = (
             self.retrieve_data_from_specklia(
                 specklia_query_polygon,
                 self.SPECKLIA_DATASET_NAME_EOLIS_ELEVATION_CHANGE,
-                os.getenv("SPECKLIA_API_KEY"),
+                specklia_api_key,
             )
         )
 
