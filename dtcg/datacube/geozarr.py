@@ -33,7 +33,8 @@ from dtcg.datacube.update_metadata import MetadataMapper
 class GeoZarrHandler(MetadataMapper):
     def __init__(
         self: GeoZarrHandler,
-        ds: xr.Dataset,
+        ds: xr.Dataset = None,
+        data_tree: xr.DataTree = None,
         ds_name: str = "L1",
         target_chunk_mb: float = 5.0,
         compressor: Optional[Blosc] = None,
@@ -47,7 +48,10 @@ class GeoZarrHandler(MetadataMapper):
         ----------
         ds : xarray.Dataset
             Input dataset with dimensions ('x', 'y') or ('t', 'x', 'y').
-            Must include coordinate variables.
+            Must include coordinate variables. Either ds or data_tree must be
+            provided.
+        data_tree : xarray.DataTree
+            Input data_tree. Either ds or data_tree must be provided.
         ds_name : str, default 'L1'
             Name of datacube.
         target_chunk_mb : float, default 5.0
@@ -65,20 +69,42 @@ class GeoZarrHandler(MetadataMapper):
         super().__init__(
             metadata_mapping_data_file_path=metadata_mapping_data_file_path,
             metadata_mapping_coords_file_path=metadata_mapping_coords_file_path)
-        self.ds_name = ds_name
+
         self.target_chunk_mb = target_chunk_mb
         self.compressor = compressor or Blosc(
             cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE
         )
         self.zarr_format = zarr_format
-
-        ds = self._validate_dataset(ds)
-        ds = self._update_metadata(ds, ds_name)
         self.encoding = {}
-        self._define_encodings(ds, ds_name)
 
-        # convert dataset to datatree
-        self.data_tree = xr.DataTree.from_dict({ds_name: ds})
+        if ds is not None:
+            self.ds_name = ds_name
+            ds = self._validate_dataset(ds)
+            ds = self._update_metadata(ds, ds_name)
+            self._define_encodings(ds, ds_name)
+
+            # convert dataset to datatree
+            self.data_tree = xr.DataTree.from_dict({ds_name: ds})
+        elif data_tree is not None:
+            # define encodings for potential exporting later on
+            self.data_tree = data_tree
+            for tree_level in self.data_tree:
+                if tree_level in ['L1']:
+                    self._define_encodings(ds=self.data_tree[tree_level].ds,
+                                           ds_name=tree_level)
+                elif 'L2' in tree_level or 'L3' in tree_level:
+                    for datacube_type in self.data_tree[tree_level]:
+                        if datacube_type not in ['monthly', 'annual_hydro',
+                                                 'daily_smb']:
+                            raise ValueError("We currently only support model "
+                                             "output datacubes of the types "
+                                             "'monthly', 'annual_hydro' and "
+                                             "'daily_smb'.")
+                        self._define_encodings(
+                            ds=self.data_tree[tree_level][datacube_type],
+                            ds_name=tree_level, ds_type=datacube_type)
+        else:
+            raise ValueError('Must provide ds or data_tree!')
 
     def _validate_dataset(self: GeoZarrHandler, ds: xr.Dataset) -> xr.Dataset:
         """Validate the input dataset to ensure it includes required
@@ -256,11 +282,14 @@ class GeoZarrHandler(MetadataMapper):
             ('monthly', 'annual_hydro', 'daily_smb') and values the
             corresponding xr.Dataset.
         datacube_name : str
-            Layer name to be used for this node of the tree.
+            Layer name to be used for this node of the tree. It should either
+            contain L2 or L3. If nothing from the both is included the name will
+            get L2_ as suffix.
         overwrite : bool
             If True, allow a layer of the same name to be overwritten.
         """
-        if 'L2' not in datacube_name:
+        if 'L2' not in datacube_name and 'L3' not in datacube_name:
+            # by default, we assume it is L2
             datacube_name = f"L2_{datacube_name}"
 
         if datacube_name in self.data_tree.children and not overwrite:

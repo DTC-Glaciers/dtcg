@@ -47,11 +47,13 @@ class Calibrator:
     ----------
     """
 
-    def __init__(self, model_matrix: dict = None, l1_datacube=None):
+    def __init__(self, model_matrix: dict = None, l1_datacube=None, gdir=None):
         if not model_matrix:
             self.model_matrix = {}
         else:
             self.model_matrix = model_matrix
+
+        self.gdir = gdir
 
         self.l1_datacube = l1_datacube
         if l1_datacube is not None:
@@ -888,6 +890,8 @@ class Calibrator:
         """
 
         if source == 'Hugonnet':
+            if gdir is None:
+                gdir = self.gdir
             pd_geodetic = utils.get_geodetic_mb_dataframe()
             df_ref_mb = pd_geodetic.loc[gdir.rgi_id]
             df_ref_mb = df_ref_mb.loc[df_ref_mb.period == ref_mb_period]
@@ -1130,7 +1134,10 @@ def mask_mixed_year_month(ds: xr.Dataset, last_available: pd.Timestamp) -> xr.Da
     last_year = last_available.year
     last_month = last_available.month
 
-    year_mask = ds["time"] <= last_year  # dims: (time,)
+    if last_month < 12:
+        year_mask = ds["time"] < last_year  # dims: (time,)
+    else:
+        year_mask = ds["time"] <= last_year  # dims: (time,)
 
     ym_mask = (
         (ds["time"] < last_year) |
@@ -1155,8 +1162,9 @@ def mask_mixed_year_month(ds: xr.Dataset, last_available: pd.Timestamp) -> xr.Da
 
 class CalibratorCryotempo(Calibrator):
 
-    def __init__(self, model_matrix: dict = None, l1_datacube=None):
-        super().__init__(model_matrix=model_matrix, l1_datacube=l1_datacube)
+    def __init__(self, model_matrix: dict = None, l1_datacube=None, gdir=None):
+        super().__init__(model_matrix=model_matrix, l1_datacube=l1_datacube,
+                         gdir=gdir)
 
     def set_model_matrix(
         self,
@@ -1315,7 +1323,7 @@ class CalibratorCryotempo(Calibrator):
 
     def get_ref_mb(
             self,
-            gdir: GlacierDirectory,
+            gdir: GlacierDirectory = None,
             ref_mb_period: str = None,
             l1_datacube: xr.Dataset = None,
             source: str = 'Hugonnet'
@@ -1343,6 +1351,9 @@ class CalibratorCryotempo(Calibrator):
             dates = ref_mb_period.split('_')
             date_start = dates[0]
             date_end = dates[1]
+
+            if l1_datacube is None:
+                l1_datacube = self.l1_datacube
 
             ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period = self.get_geodetic_mb_from_dataset(
                 dataset=l1_datacube,
