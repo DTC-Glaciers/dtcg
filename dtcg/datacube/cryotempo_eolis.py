@@ -36,7 +36,8 @@ from pyproj import CRS, Proj
 from rasterio import features
 from salem.gis import Grid
 from scipy.ndimage import gaussian_filter
-from scipy.spatial.distance import cdist
+from shapely import box
+from shapely.geometry import Polygon
 from shapely.geometry import shape
 from specklia import Specklia
 
@@ -461,14 +462,16 @@ class DatacubeCryotempoEolis:
         elevation_change_sigma_var_name = "elevation_change_sigma"
 
         # convert spare dataframe to data cube
+        eolis_gridded_resolution = np.nanmin(np.abs(np.diff(eolis_gridded_data.x.unique())))
+        proj4_code = eolis_gridded_sources[0]["source_information"]["xy_cols_proj4"]
         eolis_arrays, eolis_grid, time_coordinates = (
             self.convert_gridded_dataframe_to_array(
                 eolis_gridded_data,
                 [elevation_change_var_name, elevation_change_sigma_var_name],
                 "x",
                 "y",
-                np.nanmin(np.abs(np.diff(eolis_gridded_data.x.unique()))),
-                eolis_gridded_sources[0]["source_information"]["xy_cols_proj4"],
+                eolis_gridded_resolution,
+                proj4_code,
                 y_affine_negative=True,
                 t_coordinate_column="timestamp",
             )
@@ -510,6 +513,14 @@ class DatacubeCryotempoEolis:
             "Resampling of EOLIS and creation of dataset took "
             f"{perf_counter()-resampling_start_time:.2f} seconds"
         )
+
+        half_res = eolis_gridded_resolution / 2.0
+        eolis_gridded_data.set_geometry(box(eolis_gridded_data.x - half_res,
+                                            eolis_gridded_data.y - half_res,
+                                            eolis_gridded_data.x + half_res,
+                                            eolis_gridded_data.y + half_res),
+                                        crs=CRS.from_proj4(proj4_code),
+                                        inplace=True)
 
         self.augment_dataset_with_1d_timeseries(
             eolis_gridded_data,
@@ -564,7 +575,7 @@ class DatacubeCryotempoEolis:
         )
         eolis_gridded_data_masked = eolis_gridded_data[
             eolis_gridded_data.intersects(
-                vector_glacier_mask.geometry.union_all()
+                vector_glacier_mask
             )
         ]
 
@@ -664,6 +675,9 @@ class DatacubeCryotempoEolis:
         timestamps = [t[0] for t in grouped_data]
         gridded_product_data_grouped = [t[1] for t in grouped_data]
 
+        n_pixels_on_glaciated_area = len(gridded_product_data_grouped[0].dropna())
+        n_eff = gridded_product_data_grouped[0].geometry.area.sum() / (length_scale**2)
+
         elevation_change_timeseries = []
         error_timeseries = []
         for i in range(len(timestamps)):
@@ -674,23 +688,11 @@ class DatacubeCryotempoEolis:
             mean = gridded_data_this_timestamp[elevation_change_var_name].mean()
             uncertainty = gridded_data_this_timestamp[
                 elevation_change_sigma_var_name].astype(float).to_numpy()
-            coords = gridded_data_this_timestamp[
-                ['x', 'y']].astype(float).to_numpy()
 
-            # Build correlation matrix (exponential decay kernel)
-            pairwise_dist = cdist(coords, coords)
-            correlation = np.exp(-pairwise_dist / length_scale)
-
-            # Covariance matrix
-            cov_matrix = np.outer(uncertainty, uncertainty) * correlation
-
-            # Uniform weights
-            n_vals = len(gridded_data_this_timestamp)
-            weights = np.ones(n_vals) / n_vals
-
-            # Compute variance of the weighted mean
-            var_mean = weights @ cov_matrix @ weights
-            std_mean = np.sqrt(var_mean)
+            std_mean = (1 / n_eff) * np.sqrt(np.nansum(uncertainty**2))
+            frac_obs_coverage = n_pixels_on_glaciated_area / np.sum(
+                gridded_data_this_timestamp.interpolation_binary_mask == 0.0)
+            std_mean = std_mean * (1 / frac_obs_coverage)**0.5
 
             elevation_change_timeseries.append(mean)
             error_timeseries.append(std_mean)
@@ -700,7 +702,7 @@ class DatacubeCryotempoEolis:
             self: DatacubeCryotempoEolis,
             oggm_ds: xr.Dataset,
             target_crs: CRS
-    ) -> gpd.GeoDataFrame:
+    ) -> Polygon:
         """Vectorise the glacier mask of an OGGM dataset into polygon(s).
 
         The raster glacier mask is converted to shapely polygons using
@@ -716,9 +718,8 @@ class DatacubeCryotempoEolis:
 
         Returns
         -------
-        gpd.GeoDataFrame
-            GeoDataFrame containing the glacier mask polygon(s) in the
-            specified CRS.
+        Polygon
+            Glacier mask polygon in the specified CRS.
         """
         # Extract the mask
         mask = oggm_ds.glacier_mask.values.astype("uint8")
@@ -734,4 +735,4 @@ class DatacubeCryotempoEolis:
         )
         gdf = gdf.dissolve()
         gdf_reproj = gdf.to_crs(target_crs)
-        return gdf_reproj
+        return gdf_reproj.geometry.union_all()
