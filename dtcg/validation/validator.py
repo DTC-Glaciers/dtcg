@@ -67,7 +67,9 @@ class DatacubeValidator:
         return self.datatree[datacube_name]
 
     def get_validation_for_layers(self, l2_name_list=None, l1_name="L1",
+                                  obs_list=None,
                                   user_observation=None,
+                                  validation_period=None,
                                   return_bootstrap_args=False,
                                   ignore_missing_data=True, **kwargs):
         l1_datacube = self.get_datacube_from_datatree(l1_name)
@@ -82,11 +84,13 @@ class DatacubeValidator:
         def add_result_to_dicts(validation_tmp, obs, label, name):
             if validation_tmp is not None:
                 if return_bootstrap_args:
-                    validation_tmp, bootstrap_args_tmp = validation_tmp
+                    validation_tmp, used_period, bootstrap_args_tmp = validation_tmp
                     bootstrap_args[obs] = bootstrap_args_tmp
+                else:
+                    validation_tmp, used_period = validation_tmp
                 df_tmp = pd.DataFrame.from_dict(validation_tmp)
                 df_tmp.index = [name]
-                df_tmp.index.name = label
+                df_tmp.index.name = f"{label}\n{used_period}"
 
                 if obs not in validation_metrics:
                     validation_metrics[obs] = df_tmp
@@ -98,12 +102,16 @@ class DatacubeValidator:
             l2_datacube = self.get_datacube_from_datatree(l2_name)
 
             if user_observation is None:
-                for obs, obs_args in self.supported_obs_for_validation.items():
+                if obs_list is None:
+                    obs_list = self.supported_obs_for_validation.keys()
+                for obs in obs_list:
+                    obs_args = self.supported_obs_for_validation[obs]
                     try:
                         validation_tmp = obs_args['fct'](
                             l1_datacube=l1_datacube,
                             l2_datacube=l2_datacube,
                             return_bootstrap_args=return_bootstrap_args,
+                            validation_period=validation_period,
                             **kwargs
                         )
                     except ValueError:
@@ -131,6 +139,7 @@ class DatacubeValidator:
                     observation=user_observation,
                     l2_datacube=l2_datacube,
                     return_bootstrap_args=return_bootstrap_args,
+                    validation_period=validation_period,
                     **kwargs
                 )
                 if 'name' in user_observation:
@@ -152,7 +161,8 @@ class DatacubeValidator:
     def get_validation_plot_for_layers(self, obs_name=None,
                                        user_observation=None,
                                        l2_name_list=None,
-                                       l1_name="L1"):
+                                       l1_name="L1",
+                                       **kwargs):
 
         if l2_name_list is None:
             l2_name_list = [L2_name for L2_name in self.datatree.keys()
@@ -171,6 +181,7 @@ class DatacubeValidator:
                 l1_datacube=l1_datacube,
                 datatree=self.datatree,
                 l2_name_list=l2_name_list,
+                **kwargs
             )
 
         else:
@@ -185,4 +196,5 @@ class DatacubeValidator:
                 observation=user_observation,
                 datatree=self.datatree,
                 l2_name_list=l2_name_list,
+                **kwargs
             )

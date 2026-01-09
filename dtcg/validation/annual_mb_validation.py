@@ -26,9 +26,13 @@ from dtcg.validation.validation_plotting import (
     autoscale_y_from_fill_between, add_line_with_unc)
 
 
-def validate_with_annual_mb(observation, l2_datacube, return_bootstrap_args=False,
-                            **kwargs):
+def validate_with_annual_mb(observation, l2_datacube, validation_period=None,
+                            return_bootstrap_args=False, **kwargs):
     validation_metrics = {}
+    used_period = None
+
+    if validation_period is not None:
+        raise NotImplementedError()
 
     annual_mb = observation['values']
     annual_mb_unc = observation['uncertainty']
@@ -58,6 +62,9 @@ def validate_with_annual_mb(observation, l2_datacube, return_bootstrap_args=Fals
     model_mb_q_levels_sorted_str = [str(q) for q in model_mb_q_levels_sorted]
     model_mb = model_mb.sel(time=years,
                             member=model_mb_q_levels_sorted_str)
+
+    # save actual used period for label
+    used_period = f"{years[0]}-{years[-1]}"
 
     # conduct the actual calculation of validation metrics
     supported_metrics = get_supported_metrics()
@@ -91,9 +98,9 @@ def validate_with_annual_mb(observation, l2_datacube, return_bootstrap_args=Fals
                 key: results[key]
                 for key in ['ci_level', 'n', 'n_boot', 'block_length', 'seed']
             }
-            return validation_metrics, bootstrap_args
+            return validation_metrics, used_period, bootstrap_args
         else:
-            return validation_metrics
+            return validation_metrics, used_period
     else:
         return None
 

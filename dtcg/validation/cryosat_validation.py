@@ -28,14 +28,15 @@ from dtcg.validation.validation_plotting import (
     autoscale_y_from_fill_between, add_line_with_unc)
 
 
-def get_cryosat_data(l1_datacube=None, l2_datacube=None, baseline_date=2011.0):
+def get_cryosat_data(l1_datacube=None, l2_datacube=None,
+                     baseline_date='2011-01-01'):
     """
 
     Parameters
     ----------
     l1_datacube
     l2_datacube
-    baseline_date: float
+    baseline_date: str
         baseline date where the cumulative elevation change is starting
 
     Returns
@@ -48,6 +49,10 @@ def get_cryosat_data(l1_datacube=None, l2_datacube=None, baseline_date=2011.0):
         if 'eolis_elevation_change_timeseries' not in l1_datacube:
             raise ValueError("No Cryosat2 data available.")
         cryosat_elev = l1_datacube.eolis_elevation_change_timeseries
+        baseline_elev = cryosat_elev.sel(
+            t=np.array(baseline_date, dtype="datetime64[D]"),
+            method='nearest').values
+        cryosat_elev = cryosat_elev - baseline_elev
         cryosat_elev_unc = l1_datacube.eolis_elevation_change_sigma_timeseries
         returns.append(cryosat_elev)
         returns.append(cryosat_elev_unc)
@@ -59,7 +64,10 @@ def get_cryosat_data(l1_datacube=None, l2_datacube=None, baseline_date=2011.0):
                 "For validation with CryoSat2 data, we need a 'monthly' "
                 f"datacube. Available are {list(l2_datacube.keys())}.")
         model_volume = l2_datacube['monthly'].volume
-        model_elev = ((model_volume - model_volume.sel(time=baseline_date)) /
+        y, m, d = baseline_date.split('-')
+        baseline_float = utils.date_to_floatyear(y, m, d)
+        model_elev = ((model_volume -
+                       model_volume.sel(time=baseline_float, method='nearest')) /
                       l2_datacube['monthly'].area)
         model_elev = sort_quantiles_keep_control_last(
             model_elev.isel(rgi_id=0).load())
@@ -107,9 +115,11 @@ def sort_quantiles_keep_control_last(da: xr.DataArray, control_label="Control"
     return da_out
 
 
-def validate_with_cryosat(l1_datacube, l2_datacube, return_bootstrap_args=False,
-                          baseline_date=2011.0, **kwargs):
+def validate_with_cryosat(l1_datacube, l2_datacube, validation_period=None,
+                          return_bootstrap_args=False,
+                          baseline_date='2011-01-01', **kwargs):
     validation_metrics = {}
+    used_period = None
 
     # CryoSat2 observations
     if 'eolis_elevation_change_timeseries' in l1_datacube:
@@ -132,6 +142,18 @@ def validate_with_cryosat(l1_datacube, l2_datacube, return_bootstrap_args=False,
         # exclude nan values of model
         model_elev = model_elev.sel(time=years)
         years = years[~np.isnan(model_elev.sel(member='0.5').values)]
+        # check if user provided a validation period
+        if validation_period is not None:
+            start_date, end_date = validation_period.split('_')
+
+            def convert_date_string_to_floatyear(date):
+                y, m, d = date.split('-')
+                return utils.date_to_floatyear(y=int(y), m=int(m), d=int(d))
+
+            start_flyr = convert_date_string_to_floatyear(start_date)
+            end_flyr = convert_date_string_to_floatyear(end_date)
+
+            years = years[(start_flyr <= years) & (years <= end_flyr)]
         # finally select data
         # obs
         cyrosat_elev_years = cryosat_dates[np.isin(cryosat_floatyrs, years)]
@@ -144,6 +166,12 @@ def validate_with_cryosat(l1_datacube, l2_datacube, return_bootstrap_args=False,
         model_elev_q_levels_sorted_str = [str(q) for q in model_elev_q_levels_sorted]
         model_elev = model_elev.sel(time=years,
                                     member=model_elev_q_levels_sorted_str)
+
+        # save actual used period for label
+        used_yrs, used_months, used_days = utils.floatyear_to_date(
+            [years[0], years[-1]], return_day=True)
+        used_period = (f"{used_yrs[0]}-{used_months[0]:02d}-{used_days[0]:02d}_"
+                       f"{used_yrs[1]}-{used_months[1]:02d}-{used_days[1]:02d}")
 
         # conduct the actual calculation of validation metrics
         supported_metrics = get_supported_metrics()
@@ -177,14 +205,15 @@ def validate_with_cryosat(l1_datacube, l2_datacube, return_bootstrap_args=False,
                 key: results[key]
                 for key in ['ci_level', 'n', 'n_boot', 'block_length', 'seed']
             }
-            return validation_metrics, bootstrap_args
+            return validation_metrics, used_period, bootstrap_args
         else:
-            return validation_metrics
+            return validation_metrics, used_period
     else:
         return None
 
 
-def plot_cryosat(l1_datacube, datatree, l2_name_list):
+def plot_cryosat(l1_datacube, datatree, l2_name_list,
+                 baseline_date='2011-01-01'):
     if 'eolis_elevation_change_timeseries' not in l1_datacube:
         raise ValueError("For CryoSat2 plot we need the "
                          "'eolis_elevation_change_timeseries' variable in the "
@@ -200,7 +229,8 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list):
     fig, ax = plt.subplots()
 
     # CryoSat2
-    cryosat_elev, cryosat_elev_unc = get_cryosat_data(l1_datacube=l1_datacube)
+    cryosat_elev, cryosat_elev_unc = get_cryosat_data(
+        l1_datacube=l1_datacube, baseline_date=baseline_date)
     cryosat_dates = cryosat_elev.t.values
     cryosat_floatyrs = utils.date_to_floatyear(
         y=cryosat_dates.astype('datetime64[Y]').astype(int) + 1970,
@@ -217,7 +247,8 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list):
     for l2_name, c in zip(l2_name_list, color_palette[1:]):
         l2_datacube = datatree[l2_name]
 
-        model_elev = get_cryosat_data(l2_datacube=l2_datacube)[0]
+        model_elev = get_cryosat_data(
+            l2_datacube=l2_datacube, baseline_date=baseline_date)[0]
 
         add_line_with_unc(ax=ax, x=model_elev.time,
                           y=model_elev.sel(member='0.5'),
@@ -231,7 +262,9 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list):
                           legend_labels=legend_labels,
                           alpha=0.25)
 
-    ax.set_xlim([2011, None])
+    y, m, d = baseline_date.split('-')
+    baseline_float = utils.date_to_floatyear(y, m, d)
+    ax.set_xlim([baseline_float, None])
     # Recompute y-limits based on visible data only
     autoscale_y_from_fill_between(ax)
 
@@ -243,6 +276,6 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list):
               bbox_to_anchor=(0.5, -0.12),
               )
     ax.grid(True, alpha=0.3)
-    ax.set_title("Cumulative elevation change")
+    ax.set_title(f"Cumulative elevation change starting {baseline_date}")
 
     return fig

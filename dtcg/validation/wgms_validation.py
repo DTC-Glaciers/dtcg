@@ -49,9 +49,13 @@ def get_annual_data_wgms(l1_datacube=None, l2_datacube=None):
     return returns
 
 
-def validate_with_wgms(l1_datacube, l2_datacube, return_bootstrap_args=False,
-                       **kwargs):
+def validate_with_wgms(l1_datacube, l2_datacube, validation_period=None,
+                       return_bootstrap_args=False, **kwargs):
     validation_metrics = {}
+    used_period = None
+
+    if validation_period is not None:
+        raise NotImplementedError()
 
     # Annual WGMS observations
     if 'wgms_mb' in l1_datacube:
@@ -76,6 +80,9 @@ def validate_with_wgms(l1_datacube, l2_datacube, return_bootstrap_args=False,
         model_mb_q_levels_sorted_str = [str(q) for q in model_mb_q_levels_sorted]
         model_mb = model_mb.sel(time=years,
                                 member=model_mb_q_levels_sorted_str)
+
+        # save actual used period for label
+        used_period = f"{years[0]}-{years[-1]}"
 
         # conduct the actual calculation of validation metrics
         supported_metrics = get_supported_metrics()
@@ -109,9 +116,9 @@ def validate_with_wgms(l1_datacube, l2_datacube, return_bootstrap_args=False,
                 key: results[key]
                 for key in ['ci_level', 'n', 'n_boot', 'block_length', 'seed']
             }
-            return validation_metrics, bootstrap_args
+            return validation_metrics, used_period, bootstrap_args
         else:
-            return validation_metrics
+            return validation_metrics, used_period
     else:
         return None
 

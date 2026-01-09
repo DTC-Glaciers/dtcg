@@ -23,8 +23,7 @@ import seaborn as sns
 
 from dtcg.validation.validation_metrics import (
     get_supported_metrics, bootstrap_metric_obs_normal_mdl_quantiles)
-from dtcg.validation.validation_plotting import (
-    autoscale_y_from_fill_between, add_line_with_unc)
+from dtcg.validation.validation_plotting import add_line_with_unc
 
 
 def get_sentinel_data(l1_datacube=None, l2_datacube=None):
@@ -66,9 +65,13 @@ def set_infs(var):
     return var
 
 
-def validate_with_sentinel(l1_datacube, l2_datacube,
+def validate_with_sentinel(l1_datacube, l2_datacube, validation_period=None,
                            return_bootstrap_args=False, **kwargs):
     validation_metrics = {}
+    used_period = None
+
+    if validation_period is not None:
+        raise NotImplementedError()
 
     # Sentinel2 observations
     if 'sfc_type_snowline' in l1_datacube:
@@ -111,6 +114,13 @@ def validate_with_sentinel(l1_datacube, l2_datacube,
             time=get_model_floatyears(common_dates),
             member=model_snowline_q_levels_sorted_str)
 
+        # save actual used period for label
+        used_yrs, used_months, used_days = utils.floatyear_to_date(
+            [get_model_floatyears(common_dates)[0],
+             get_model_floatyears(common_dates)[-1]], return_day=True)
+        used_period = (f"{used_yrs[0]}-{used_months[0]:02d}-{used_days[0]:02d}_"
+                       f"{used_yrs[1]}-{used_months[1]:02d}-{used_days[1]:02d}")
+
         # conduct the actual calculation of validation metrics
         supported_metrics = get_supported_metrics()
 
@@ -144,9 +154,9 @@ def validate_with_sentinel(l1_datacube, l2_datacube,
                 key: results[key]
                 for key in ['ci_level', 'n', 'n_boot', 'block_length', 'seed']
             }
-            return validation_metrics, bootstrap_args
+            return validation_metrics, used_period, bootstrap_args
         else:
-            return validation_metrics
+            return validation_metrics, used_period
     else:
         return None
 
@@ -159,7 +169,12 @@ def plot_sentinel(l1_datacube, datatree, l2_name_list, x_lim=None,
 
     # define a x_range for demonstration
     if x_lim is None:
-        x_lim = [2015, 2020]
+        x_lim = [np.array("2015-01-01", dtype="datetime64[D]"), None]
+    else:
+        y, m, d = utils.floatyear_to_date(x_lim, return_day=True)
+        x_lim = np.array([f"{y[0]}-{m[0]:02d}-{d[0]:02d}",
+                          f"{y[1]}-{m[1]:02d}-{d[1]:02d}"],
+                         dtype="datetime64[D]")
 
     # open all data
     sentinel_snowline = get_sentinel_data(l1_datacube=l1_datacube)[0]
@@ -168,7 +183,7 @@ def plot_sentinel(l1_datacube, datatree, l2_name_list, x_lim=None,
         l2_datacube = datatree[l2_name]
         try:
             model_snowlines[l2_name] = get_sentinel_data(
-                l2_datacube=l2_datacube)[0].sel(time=slice(x_lim[0], x_lim[1]))
+                l2_datacube=l2_datacube)[0]
         except ValueError:
             # if no snowline data is available
             continue
@@ -213,15 +228,9 @@ def plot_sentinel(l1_datacube, datatree, l2_name_list, x_lim=None,
         tuple(zip(set_infs(snowline_obs) - set_infs(snowline_obs_lower),
                   set_infs(snowline_obs_upper) - set_infs(snowline_obs)))).T
     # convert datetime64 to floatyear
-    snowline_dates = sentinel_snowline.t_sfc_type.values
-    snowline_floatyrs = utils.date_to_floatyear(
-        y=snowline_dates.astype('datetime64[Y]').astype(int) + 1970,
-        m=(snowline_dates.astype('datetime64[M]').astype(int) % 12) + 1,
-        d=(snowline_dates.astype('datetime64[D]') -
-           snowline_dates.astype('datetime64[M]')).astype(int) + 1
-    )
+    snowline_dates = sentinel_snowline.t_sfc_type.values.astype('datetime64[D]')
     # plot observations
-    line = ax.errorbar(snowline_floatyrs, set_infs(snowline_obs),
+    line = ax.errorbar(snowline_dates, set_infs(snowline_obs),
                        yerr=snowline_err, fmt='.', ecolor=c_sentinel,
                        c=c_sentinel, capsize=2, lw=0.5, zorder=10,
                        )
@@ -231,10 +240,16 @@ def plot_sentinel(l1_datacube, datatree, l2_name_list, x_lim=None,
         '(errorbar)')
 
     # L2 datacubes
-    for l2_name, c in zip(model_snowlines, color_palette):
+    for l2_name, c in zip(model_snowlines, color_palette[1:]):
         model_snowline = model_snowlines[l2_name]
 
-        add_line_with_unc(ax=ax, x=model_snowline.time.values,
+        yrs, mnths, dys = utils.floatyear_to_date(model_snowline.time,
+                                                  return_day=True)
+        model_dates = np.array([f"{y:04d}-{m:02d}-{d:02d}"
+                                for y, m, d in zip(yrs, mnths, dys)],
+                               dtype="datetime64[D]")
+
+        add_line_with_unc(ax=ax, x=model_dates,
                           y=set_infs(model_snowline.sel(member='0.5')),
                           y_unc=[
                               set_infs(model_snowline.sel(member='0.05')),
@@ -248,7 +263,8 @@ def plot_sentinel(l1_datacube, datatree, l2_name_list, x_lim=None,
 
     ax.set_xlim(x_lim)
     # Recompute y-limits based on visible data only
-    autoscale_y_from_fill_between(ax)
+    ax.set_ylim([inf_values[-np.inf] - dh_special,
+                 inf_values[np.inf] + dh_special])
 
     # add special areas fully snow covered and fully snow free
     y_lims = ax.get_ylim()
