@@ -25,6 +25,7 @@ import xarray as xr
 from pyproj import Proj
 from salem import Grid
 from shapely.geometry import box
+from shapely.geometry import Polygon
 
 import dtcg.datacube.cryotempo_eolis as cryotempo_eolis_utils
 
@@ -59,6 +60,61 @@ def oggm_dataset(sample_data_path):
     oggm_path = Path(sample_data_path / "oggm_data.nc")
     ds = xr.open_dataset(oggm_path)
     yield ds
+
+
+def mock_specklia_return_data(xy_proj: Proj):
+    xs, ys = np.meshgrid(
+        np.array(np.arange(566000, 570000, 500)),
+        np.array(np.arange(458000, 464000, 500)),
+    )
+    n_coords = len(xs.flatten())
+    np.random.seed(21)
+    specklia_return_data = (
+        gpd.GeoDataFrame(
+            {
+                "x": xs.flatten(),
+                "y": ys.flatten(),
+                "timestamp": np.ones(n_coords),
+                "elevation_change": np.random.rand(n_coords),
+                "elevation_change_sigma": np.random.rand(n_coords),
+                "interpolation_binary_mask": np.zeros(n_coords),
+            },
+            geometry=gpd.points_from_xy(xs.flatten(), ys.flatten()),
+            crs=xy_proj.crs,
+        ),
+        [
+            {
+                "source_information": {
+                    "xy_cols_proj4": xy_proj.to_proj4(),
+                    "elevation_change": {
+                        "long_name": "Elevation Change",
+                        "source": "dummy",
+                        "comment": "dummy",
+                    },
+                    "elevation_change_sigma": {
+                        "long_name": "Error",
+                        "source": "dummy",
+                        "comment": "dummy",
+                    },
+                }
+            }
+        ],
+        {
+            "columns": [
+                {
+                    "name": "elevation_change",
+                    "unit": "m",
+                    "description": "Elevation change",
+                },
+                {
+                    "name": "elevation_change_sigma",
+                    "unit": "m",
+                    "description": "Error",
+                },
+            ]
+        },
+    )
+    return specklia_return_data
 
 
 class TestDataCubeCryoTempoEolis:
@@ -182,48 +238,7 @@ class TestDataCubeCryoTempoEolis:
     def test_retrieve_prepare_eolis_gridded_data(
         self, mock_retrieve, oggm_dataset, DatacubeCryotempoEolis
     ):
-        xs, ys = np.meshgrid(
-            np.array(np.arange(566000, 570000, 500)),
-            np.array(np.arange(458000, 464000, 500)),
-        )
-        n_coords = len(xs.flatten())
-        np.random.seed(21)
-        mock_retrieve.return_value = (
-            gpd.GeoDataFrame(
-                {
-                    "x": xs.flatten(),
-                    "y": ys.flatten(),
-                    "timestamp": np.ones(n_coords),
-                    "elevation_change": np.random.rand(n_coords),
-                    "elevation_change_sigma": np.random.rand(n_coords),
-                },
-                geometry=gpd.points_from_xy(xs.flatten(), ys.flatten()),
-                crs=self.XY_PROJ.crs
-            ),
-            [{"source_information":
-              {"xy_cols_proj4": self.XY_PROJ,
-               "elevation_change": {"long_name": "Elevation Change",
-                                    "source": "dummy",
-                                    "comment": "dummy"},
-               "elevation_change_sigma": {"long_name": "Error",
-                                          "source": "dummy",
-                                          "comment": "dummy"}}}],
-            {
-                "columns": [
-                    {
-                        "name": "elevation_change",
-                        "unit": "m",
-                        "description": "Elevation change",
-                    },
-                    {
-                        "name": "elevation_change_sigma",
-                        "unit": "m",
-                        "description": "Error"
-                    },
-                ]
-            },
-        )
-
+        mock_retrieve.return_value = mock_specklia_return_data(self.XY_PROJ)
         oggm_dataset.rio.write_crs(oggm_dataset.pyproj_srs, inplace=True)
 
         grid = Grid(
@@ -237,9 +252,13 @@ class TestDataCubeCryoTempoEolis:
             pixel_ref="center",
         )
 
-        result = DatacubeCryotempoEolis.retrieve_prepare_eolis_gridded_data(
-            oggm_dataset, grid
-        )
+        # Disable area checks for testing
+        DatacubeCryotempoEolis.MINIMUM_REQUIRED_GLACIER_AREA_KM2 = 0.0
+
+        with patch("builtins.input", return_value="fake-api-key"):
+            result = DatacubeCryotempoEolis.retrieve_prepare_eolis_gridded_data(
+                oggm_dataset, grid
+            )
 
         assert isinstance(result, xr.Dataset)
 
@@ -277,6 +296,32 @@ class TestDataCubeCryoTempoEolis:
             "(eolis_gridded_elevation_change) within the glacier mask.",
             "comment": "Computed from eolis_gridded_elevation_change. dummy"}
 
+    @patch(
+        "dtcg.datacube.cryotempo_eolis.DatacubeCryotempoEolis.retrieve_data_from_specklia"
+    )
+    def test_retrieve_prepare_eolis_gridded_data_small_glacier_area(
+        self, mock_retrieve, oggm_dataset, DatacubeCryotempoEolis
+    ):
+        mock_retrieve.return_value = mock_specklia_return_data(self.XY_PROJ)
+        oggm_dataset.rio.write_crs(oggm_dataset.pyproj_srs, inplace=True)
+
+        grid = Grid(
+            proj=Proj(oggm_dataset.pyproj_srs),
+            nxny=(len(oggm_dataset.x), len(oggm_dataset.y)),
+            dxdy=(
+                oggm_dataset.x[1] - oggm_dataset.x[0],
+                oggm_dataset.y[1] - oggm_dataset.y[0],
+            ),
+            x0y0=(oggm_dataset.x[0], oggm_dataset.y[0]),
+            pixel_ref="center",
+        )
+
+        with pytest.raises(RuntimeError):
+            with patch("builtins.input", return_value="fake-api-key"):
+                DatacubeCryotempoEolis.retrieve_prepare_eolis_gridded_data(
+                    oggm_dataset, grid
+                )
+
     def test_gaussian_filter_fill(self, DatacubeCryotempoEolis):
         arr = np.array([
             [1.0, np.nan, 3.0],
@@ -306,11 +351,12 @@ class TestDataCubeCryoTempoEolis:
             "timestamp": [1, 1, 2, 2],
             "elevation_change": [10.0, 12.0, 20.0, 22.0],
             "elevation_change_sigma": [1.0, 1.0, 2.0, 2.0],
+            "interpolation_binary_mask": [0.0, 0.0, 0.0, 0.0]
         })
         # Turn into GeoDataFrame so we can pass to groupby
         gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.x, df.y))
 
-        means, errors = DatacubeCryotempoEolis.generate_1d_timeseries(
+        means, errors, cov = DatacubeCryotempoEolis.generate_1d_timeseries(
             gdf, "elevation_change", "elevation_change_sigma", length_scale=1e6
         )
 
@@ -321,6 +367,7 @@ class TestDataCubeCryoTempoEolis:
         assert np.allclose(means, [11.0, 21.0], atol=1e-6)
         # Errors should be positive
         assert all(e > 0 for e in errors)
+        assert np.array_equal(cov, [1.0, 1.0])
 
     def test_create_vector_glacier_mask(
             self, oggm_dataset, DatacubeCryotempoEolis):
@@ -328,12 +375,10 @@ class TestDataCubeCryoTempoEolis:
         oggm_dataset.rio.write_crs(oggm_dataset.pyproj_srs, inplace=True)
 
         # Call function
-        mask_gdf = DatacubeCryotempoEolis.create_vector_glacier_mask(
+        glacier_poly = DatacubeCryotempoEolis.create_vector_glacier_mask(
             oggm_dataset, target_crs="EPSG:4326"
         )
 
         # Result should be a GeoDataFrame with one geometry
-        assert isinstance(mask_gdf, gpd.GeoDataFrame)
-        assert not mask_gdf.empty
-        assert mask_gdf.crs.to_string() == "EPSG:4326"
-        assert mask_gdf.geometry.iloc[0].is_valid
+        assert isinstance(glacier_poly, Polygon)
+        assert glacier_poly.is_valid
