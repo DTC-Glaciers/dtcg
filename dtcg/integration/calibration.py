@@ -19,6 +19,7 @@ Calibrate OGGM models.
 """
 
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 import numpy as np
 import pandas as pd
@@ -449,7 +450,20 @@ class CalibratorCryotempo(Calibrator):
         # as Hugonnet
         dmdtda = (dh * bulk_density / dt) / 1000
 
-        return dmdtda
+        # Error propagation with correlation
+        k = abs(relativedelta(year_end, year_start).months)
+        correlation_coeff = np.maximum(0, 1 - k / 3)
+        dh_err = np.sqrt(
+            calib_frame["dh_sigma"].loc[year_start] ** 2
+            + calib_frame["dh_sigma"].loc[year_end] ** 2
+            - 2
+            * correlation_coeff
+            * calib_frame["dh_sigma"].loc[year_start]
+            * calib_frame["dh_sigma"].loc[year_end]
+        )
+        err_dmdtda = (dh_err * bulk_density / dt) / 1000
+
+        return dmdtda, err_dmdtda
 
     def set_geodetic_mb_from_dataset(
         self,
@@ -482,7 +496,7 @@ class CalibratorCryotempo(Calibrator):
             dates=dates, year_start=year_start, year_end=year_end
         )
 
-        dmdtda = self.get_dmdtda(
+        dmdtda, err_dmdtda = self.get_dmdtda(
             dataset=dataset, dates=dates, year_start=data_start, year_end=data_end
         )
 
@@ -499,7 +513,7 @@ class CalibratorCryotempo(Calibrator):
             "area": gdir.rgi_area_m2,
             "dmdtda": dmdtda,
             "source": "CryoTEMPO-EOLIS",
-            "err_dmdtda": 0.0,
+            "err_dmdtda": err_dmdtda,
             "reg": 6,
             "is_cor": False,
         }
