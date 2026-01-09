@@ -59,7 +59,7 @@ class DatacubeCryotempoEolis:
 
     def __init__(self: DatacubeCryotempoEolis):
         self.SPECKLIA_DATASET_NAME_EOLIS_ELEVATION_CHANGE = (
-            "CryoTEMPO-EOLIS Interpolated Elevation Change Maps"
+            "CryoTEMPO-EOLIS Elevation Change Maps"
         )
         self.EOLIS_STATIC_KEYS = [
             "Conventions",
