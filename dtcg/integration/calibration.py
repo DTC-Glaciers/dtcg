@@ -451,7 +451,8 @@ class CalibratorCryotempo(Calibrator):
         dmdtda = (dh * bulk_density / dt) / 1000
 
         # Error propagation with correlation
-        k = abs(relativedelta(year_end, year_start).months)
+        relative_dt = relativedelta(year_end, year_start)
+        k = abs(relative_dt.years * 12 + relative_dt.months)
         correlation_coeff = np.maximum(0, 1 - k / 3)
         dh_err = np.sqrt(
             calib_frame["dh_sigma"].loc[year_start] ** 2
