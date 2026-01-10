@@ -28,6 +28,7 @@ import os
 import numpy as np
 import pandas as pd
 import xarray as xr
+from dateutil.relativedelta import relativedelta
 from dateutil.tz import UTC
 from dateutil import tz
 from oggm import GlacierDirectory, cfg, utils, workflow, tasks, entity_task
@@ -1316,11 +1317,22 @@ class CalibratorCryotempo(Calibrator):
         # (dh = dV / A)
         bulk_density = 850
         dh = calib_frame["dh"].loc[data_end] - calib_frame["dh"].loc[data_start]
-        ref_mb = (dh * bulk_density)
+        ref_mb = dh * bulk_density
         ref_mb_unit = "kg m-2"
 
-        # for now we just use the sigma of the last year
-        ref_mb_err = calib_frame["dh_sigma"].loc[data_end] * bulk_density
+        # Error propagation with correlation
+        relative_dt = relativedelta(year_end, year_start)
+        k = abs(relative_dt.years * 12 + relative_dt.months)
+        correlation_coeff = np.maximum(0, 1 - k / 3)
+        dh_err = np.sqrt(
+            calib_frame["dh_sigma"].loc[year_start] ** 2
+            + calib_frame["dh_sigma"].loc[year_end] ** 2
+            - 2
+            * correlation_coeff
+            * calib_frame["dh_sigma"].loc[year_start]
+            * calib_frame["dh_sigma"].loc[year_end]
+        )
+        ref_mb_err = dh_err * bulk_density
 
         return ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period
 

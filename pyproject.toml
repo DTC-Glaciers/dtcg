@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.6.4"
+version = "0.6.5"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -40,7 +40,12 @@ dependencies = [
     "xarray",
     "shapely",
     "rioxarray",
+    "salem",
+    "scipy",
     "geopandas",
+    "pyproj",
+    "affine",
+    "rasterio",
     "bokeh",
     "geoviews",
     "holoviews",
@@ -64,7 +69,6 @@ tests = [
     "coveralls",
 ]
 oggm = [
-    "scipy",
     "Pillow",
     "netcdf4",
     "scikit-image",
@@ -72,12 +76,9 @@ oggm = [
     "configobj",
     "dask >= 2025.5",
     "bottleneck",
-    "pyproj",
     "cartopy",
-    "rasterio",
     "seaborn",
     "tables",  # pytables
-    "salem",
     "motionless",
     "ipython",
     "joblib",
