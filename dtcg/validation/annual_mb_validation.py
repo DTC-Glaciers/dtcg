@@ -29,7 +29,6 @@ from dtcg.validation.validation_plotting import (
 def validate_with_annual_mb(observation, l2_datacube, validation_period=None,
                             return_bootstrap_args=False, **kwargs):
     validation_metrics = {}
-    used_period = None
 
     if validation_period is not None:
         raise NotImplementedError()

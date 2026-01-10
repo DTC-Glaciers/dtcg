@@ -340,12 +340,12 @@ class Calibrator:
 
     def calibrate_mb_and_create_datacubes(
         self,
-        gdir: GlacierDirectory,
         mb_model_class,
         ref_mb: float,
         ref_mb_err: float,
         ref_mb_unit: str = 'kg m-2 yr-1',
         ref_mb_period: str = "",
+        gdir: GlacierDirectory = None,
         first_guess_settings: str = "",
         datacubes_requested: str | list = 'monthly',
         calibration_filesuffix: str = "",
@@ -423,6 +423,9 @@ class Calibrator:
                              "applied calibration strategy in the argument "
                              "'calibration_strategy'. (e.g. OGGM model X "
                              "calibrated with data from Y over the period Z.)")
+
+        if gdir is None:
+            gdir = self.gdir
 
         if not calibration_filesuffix:
             model_name = mb_model_class.__name__
