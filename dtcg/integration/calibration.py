@@ -19,11 +19,11 @@ Calibrate OGGM models.
 """
 
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 
 import numpy as np
 import pandas as pd
 import xarray as xr
+from dateutil.relativedelta import relativedelta
 from dateutil.tz import UTC
 from oggm import GlacierDirectory, cfg, utils
 from oggm.core import massbalance
