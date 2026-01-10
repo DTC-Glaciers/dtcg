@@ -1321,16 +1321,16 @@ class CalibratorCryotempo(Calibrator):
         ref_mb_unit = "kg m-2"
 
         # Error propagation with correlation
-        relative_dt = relativedelta(year_end, year_start)
+        relative_dt = relativedelta(data_end, data_start)
         k = abs(relative_dt.years * 12 + relative_dt.months)
         correlation_coeff = np.maximum(0, 1 - k / 3)
         dh_err = np.sqrt(
-            calib_frame["dh_sigma"].loc[year_start] ** 2
-            + calib_frame["dh_sigma"].loc[year_end] ** 2
+            calib_frame["dh_sigma"].loc[data_start] ** 2
+            + calib_frame["dh_sigma"].loc[data_end] ** 2
             - 2
             * correlation_coeff
-            * calib_frame["dh_sigma"].loc[year_start]
-            * calib_frame["dh_sigma"].loc[year_end]
+            * calib_frame["dh_sigma"].loc[data_start]
+            * calib_frame["dh_sigma"].loc[data_end]
         )
         ref_mb_err = dh_err * bulk_density
 
