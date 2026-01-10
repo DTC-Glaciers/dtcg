@@ -4,7 +4,12 @@ pandas
 xarray
 rioxarray
 shapely
+salem
+scipy
 geopandas
+pyproj
+affine
+rasterio
 bokeh
 geoviews
 holoviews
