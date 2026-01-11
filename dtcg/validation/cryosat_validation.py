@@ -16,6 +16,11 @@ limitations under the License.
 
 import numpy as np
 import xarray as xr
+from dateutil import tz
+from dateutil.tz import UTC
+from dateutil.relativedelta import relativedelta
+import datetime
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.legend_handler import HandlerTuple
 import seaborn as sns
@@ -26,6 +31,7 @@ from dtcg.validation.validation_metrics import (
     get_supported_metrics, bootstrap_metric_obs_normal_mdl_quantiles)
 from dtcg.validation.validation_plotting import (
     autoscale_y_from_fill_between, add_line_with_unc)
+from dtcg.integration.calibration import Calibrator
 
 
 def get_cryosat_data(l1_datacube=None, l2_datacube=None,
@@ -48,12 +54,41 @@ def get_cryosat_data(l1_datacube=None, l2_datacube=None,
     if l1_datacube is not None:
         if 'eolis_elevation_change_timeseries' not in l1_datacube:
             raise ValueError("No Cryosat2 data available.")
+
+        # calculate elevation change relative to baseline_date
         cryosat_elev = l1_datacube.eolis_elevation_change_timeseries
         baseline_elev = cryosat_elev.sel(
             t=np.array(baseline_date, dtype="datetime64[D]"),
             method='nearest').values
         cryosat_elev = cryosat_elev - baseline_elev
+
+        # calculate uncertainty relative to baseline_date considering temporal
+        # correlation
         cryosat_elev_unc = l1_datacube.eolis_elevation_change_sigma_timeseries
+        if isinstance(cryosat_elev_unc.t.values[0], np.datetime64):
+            out = pd.to_datetime(cryosat_elev_unc.t.values, utc=True).to_pydatetime()
+            dates = np.array([dt.astimezone(tz.tzutc()) for dt in out])
+        else:
+            # we assume the type is int
+            dates = np.array([datetime.fromtimestamp(t, tz=UTC)
+                              for t in cryosat_elev_unc.t.values])
+
+        cryosat_elev_unc_df = pd.DataFrame({"dh_sigma": cryosat_elev_unc}, index=dates)
+        data_baseline = Calibrator().get_nearest_datetime(dates, baseline_date)
+        cryosat_elev_unc_baseline = cryosat_elev_unc_df.loc[data_baseline]
+
+        relative_dt = [relativedelta(data_point, data_baseline)
+                       for data_point in dates]
+        k = np.array([abs(rel_dt.years * 12 + rel_dt.months)
+                      for rel_dt in relative_dt])
+        correlation_coeff = np.maximum(0, 1 - k / 3)
+
+        cryosat_elev_unc = np.sqrt(
+            cryosat_elev_unc_baseline.values ** 2
+            + cryosat_elev_unc ** 2
+            - 2 * correlation_coeff * cryosat_elev_unc_baseline.values
+            * cryosat_elev_unc)
+
         returns.append(cryosat_elev)
         returns.append(cryosat_elev_unc)
 
