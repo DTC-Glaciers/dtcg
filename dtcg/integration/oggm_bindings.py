@@ -1163,7 +1163,13 @@ class BindingsCryotempo(BindingsOggmWrangler):
         gdir = self.get_cached_gdir_data(cache_path=cache_path)
 
         smb = self.get_cached_smb_data(cache_path=cache_path)
-        runoff = self.get_cached_runoff_data(cache_path=cache_path)
+        runoff = {}
+        for key in [
+            "Daily_Hugonnet_2000_2020",
+            "Daily_Cryosat_2011_2020",
+            "SfcDaily_Cryosat_2011_2020",
+        ]:
+            runoff[key] = self.get_cached_runoff_data(cache_path=cache_path, suffix=key)
         # runoff["runoff_year_min"] = gdir["runoff_data"]["runoff_year_min"]
         # runoff["runoff_year_max"] = gdir["runoff_data"]["runoff_year_max"]
         eolis = self.get_cached_eolis_data(cache_path=cache_path)
@@ -1206,9 +1212,11 @@ class BindingsCryotempo(BindingsOggmWrangler):
 
         return smb
 
-    def get_cached_runoff_data(self, cache_path: Path) -> dict:
+    def get_cached_runoff_data(
+        self, cache_path: Path, suffix="Daily_Hugonnet_2000_2020"
+    ) -> dict:
         try:
-            runoff = xr.open_dataarray(cache_path / "runoff.nc")
+            runoff = xr.open_dataarray(cache_path / f"runoff_{suffix}.nc")
         except FileNotFoundError:
             return None
 

@@ -1055,7 +1055,6 @@ class BokehGraph(BokehFigureFormat):
             position="left",
             # add_colors=palette,
         )
-        
 
         overlay = self.set_overlay_options(
             overlay=hv.Overlay(figures),
@@ -1538,6 +1537,7 @@ class BokehCryotempo(BokehFigureFormat):
         smb: dict,
         years: list | None = None,
         glacier_name: str = "",
+        model_name: str = "DailyTIModel",
         geodetic_period: str = "2000-01-01_2020-01-01",
         ref_year: int = 2015,
         datacube: GeoZarrHandler | None = None,
@@ -1569,6 +1569,7 @@ class BokehCryotempo(BokehFigureFormat):
         cumulative : bool, default False
             If True, calculate and display the cumulative sum of
             specific mass balance.
+
         """
         self.check_holoviews()
         self.set_hover_date_tooltips(
@@ -1580,130 +1581,101 @@ class BokehCryotempo(BokehFigureFormat):
         figures = []
 
         if years is None:
-            years = np.arange(2000, 2020)
+            years = np.arange(2000, 2025)
         geodetic_period = geodetic_period.split("_")
         start_year = geodetic_period[0][:4]
         end_year = geodetic_period[1][:4]
 
         plot_dates_day = pd.date_range(
-            f"{years[0]}-01-01", f"{years[-1]}-12-31", freq="1D", tz=UTC
+            f"{years[0]}-01-01",
+            periods=len(smb["Daily_Hugonnet_2000_2020"]),
+            freq="1D",
+            tz=UTC,
         )
 
+        key = "Daily_Hugonnet_2000_2020"
         if datacube:
-            if not isinstance(datacube, xr.Dataset):
-                datacube = datacube.ds
-            if not gdir:
-                raise ValueError("Provide a glacier directory.")
-            cryotempo_dates = self.get_eolis_dates(datacube)
-            cryotempo_dh = self.get_eolis_mean_dh(datacube)
+            if model_name == "DailyTIModel" and "Daily_Cryosat_2011_2020" in smb.keys():
+                key = "Daily_Cryosat_2011_2020"
+            elif (
+                model_name == "SfcTypeTIModel"
+                and "SfcDaily_Cryosat_2011_2020" in smb.keys()
+            ):
+                key = "SfcDaily_Cryosat_2011_2020"
+            else:
+                key = "Daily_Hugonnet_2000_2020"
 
-            df = pd.DataFrame(cryotempo_dh, columns=["smb"], index=cryotempo_dates)
-            if resample:
-                df = df.resample("1MS").mean()
+        v = smb[key]
 
-            date_mask = self.get_date_mask(
-                df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
+        if not cumulative:
+
+            df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
+
+            geodetic_mask = self.get_date_mask(df, *geodetic_period)
+
+            all_data_mean = self.get_mean_by_doy(df[geodetic_mask])
+            # plot_data[k] = all_data_mean["smb"]
+            all_data_mean.index = pd.to_datetime(all_data_mean.index, format="%j")
+            all_data_mean["smb_mean"] = all_data_mean["smb"]
+            plot_data[f"{key}_mean"] = all_data_mean["smb_mean"]
+
+            label = f"{start_year}-{end_year} Mean"
+            hover_tool_mean = self.get_hover_tool(
+                tooltips=[("Mean SMB", "@smb_mean{%.2f mm w.e.}")],
+                mode="vline",
+                attachment="right",
             )
-            df = df[date_mask]
-            if not df.empty:
-                df["smb"] = (
-                    1000 * (df["smb"] - df["smb"].iloc[0]) * 850 / gdir.rgi_area_km2
+
+            figures = self.add_curve_to_figures(
+                data=plot_data,
+                key=f"{key}_mean",
+                figures=figures,
+                line_color="k",
+                label=label,
+                tools=[hover_tool_mean],
+                # tools=[self.hover_tool],
+            )
+        else:
+            label = self.get_label_from_oggm_model(key)
+
+            df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
+
+            for year in np.arange(int(start_year), int(end_year)):
+                geodetic_mask = self.get_date_mask(
+                    df, f"{year}-01-01", f"{year+1}-01-01"
                 )
 
-                df_daily_mean = self.get_mean_by_doy(df)
+                df_daily_mean = self.get_mean_by_doy(df[geodetic_mask])
                 df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
-                if not cumulative:
-                    plot_data["CryoTEMPO-EOLIS Observations"] = (
-                        df_daily_mean["smb"] / 30
-                    )
-                else:
-                    plot_data["CryoTEMPO-EOLIS Observations"] = df_daily_mean[
-                        "smb"
-                    ].cumsum()
+                plot_data[key] = df_daily_mean["smb"].cumsum()
 
-                label = f"CryoTEMPO-EOLIS Observations ({ref_year})"
-                curve = hv.Curve(
-                    plot_data["CryoTEMPO-EOLIS Observations"], label=label
-                ).opts(line_width=1.0, color="k", line_dash="dotted")
-                figures.append(curve)
-
-        for k, v in smb.items():
-            if ("Daily" in k) or ("SfcType" in k):
-                if not cumulative:
-
-                    df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
-
-                    geodetic_mask = self.get_date_mask(df, *geodetic_period)
-
-                    all_data_mean = self.get_mean_by_doy(df[geodetic_mask])
-                    # plot_data[k] = all_data_mean["smb"]
-                    all_data_mean.index = pd.to_datetime(
-                        all_data_mean.index, format="%j"
-                    )
-                    all_data_mean["smb_mean"] = all_data_mean["smb"]
-                    plot_data[f"{k}_mean"] = all_data_mean["smb_mean"]
-
-                    label = f"{start_year}-{end_year} Mean"
-                    hover_tool_mean = self.get_hover_tool(
-                        tooltips=[("Mean SMB", "@smb_mean{%.2f mm w.e.}")],
-                        mode="vline",
-                        attachment="right",
-                    )
-
-                    figures = self.add_curve_to_figures(
-                        data=plot_data,
-                        key=f"{k}_mean",
-                        figures=figures,
-                        line_color="k",
-                        label=label,
-                        tools=[hover_tool_mean],
-                        # tools=[self.hover_tool],
-                    )
-                else:
-                    label = self.get_label_from_oggm_model(k)
-
-                    df = pd.DataFrame(v, columns=["smb"], index=plot_dates_day)
-
-                    for year in np.arange(int(start_year), int(end_year)):
-                        geodetic_mask = self.get_date_mask(
-                            df, f"{year}-01-01", f"{year+1}-01-01"
-                        )
-
-                        df_daily_mean = self.get_mean_by_doy(df[geodetic_mask])
-                        df_daily_mean.index = pd.to_datetime(
-                            df_daily_mean.index, format="%j"
-                        )
-                        plot_data[k] = df_daily_mean["smb"].cumsum()
-
-                        label = f"{start_year}-{end_year}"
-                        figures = self.add_curve_to_figures(
-                            data=plot_data,
-                            key=k,
-                            figures=figures,
-                            muted=True,
-                            line_color="grey",
-                            label=label,
-                        )
-
-                date_mask = self.get_date_mask(
-                    df, f"{ref_year}-01-01", f"{ref_year+1}-01-01"
-                )
-
-                df_daily_mean = self.get_mean_by_doy(df[date_mask])
-                df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
-                if not cumulative:
-                    plot_data[k] = df_daily_mean["smb"]
-                else:
-                    plot_data[k] = df_daily_mean["smb"].cumsum()
-                label = f"{ref_year}"
+                label = f"{start_year}-{end_year}"
                 figures = self.add_curve_to_figures(
                     data=plot_data,
-                    key=k,
+                    key=key,
                     figures=figures,
-                    line_color="#d62728",
+                    muted=True,
+                    line_color="grey",
                     label=label,
-                    tools=[self.hover_tool],
                 )
+
+        date_mask = self.get_date_mask(df, f"{ref_year}-01-01", f"{ref_year+1}-01-01")
+
+        df_daily_mean = self.get_mean_by_doy(df[date_mask])
+        df_daily_mean.index = pd.to_datetime(df_daily_mean.index, format="%j")
+        if not cumulative:
+            plot_data[key] = df_daily_mean["smb"]
+        else:
+            plot_data[key] = df_daily_mean["smb"].cumsum()
+        label = f"{ref_year}"
+        figures = self.add_curve_to_figures(
+            data=plot_data,
+            key=key,
+            figures=figures,
+            line_color="#d62728",
+            label=label,
+            tools=[self.hover_tool],
+        )
 
         if glacier_name:
             glacier_name = f"{glacier_name}, "

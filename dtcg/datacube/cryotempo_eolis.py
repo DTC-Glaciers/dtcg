@@ -153,12 +153,9 @@ class DatacubeCryotempoEolis:
             - Optional array of sorted time coordinates (if time is used)
         """
         # Validate input
-        for col in [x_coordinate_column,
-                    y_coordinate_column] + value_column_names:
+        for col in [x_coordinate_column, y_coordinate_column] + value_column_names:
             if col not in gridded_df.columns:
-                raise ValueError(
-                    f"Missing required column '{col}' in gridded_df"
-                )
+                raise ValueError(f"Missing required column '{col}' in gridded_df")
 
         unique_x_points = np.sort(gridded_df[x_coordinate_column].unique())
         unique_y_points = np.sort(gridded_df[y_coordinate_column].unique())
@@ -183,8 +180,7 @@ class DatacubeCryotempoEolis:
         # time axis handling
         if t_coordinate_column is not None:
             desired_t_axis = np.sort(gridded_df[t_coordinate_column].unique())
-            t_idx = np.searchsorted(desired_t_axis,
-                                    gridded_df[t_coordinate_column])
+            t_idx = np.searchsorted(desired_t_axis, gridded_df[t_coordinate_column])
         else:
             desired_t_axis = None
 
@@ -206,16 +202,12 @@ class DatacubeCryotempoEolis:
         for column_name in value_column_names:
             if desired_t_axis is not None:
                 grid_arr = np.full(
-                    (len(desired_t_axis),
-                     len(desired_y_axis),
-                     len(desired_x_axis)),
+                    (len(desired_t_axis), len(desired_y_axis), len(desired_x_axis)),
                     np.nan,
                 )
                 grid_arr[t_idx, y_idx, x_idx] = gridded_df[column_name]
             else:
-                grid_arr = np.full(
-                    (len(desired_y_axis), len(desired_x_axis)), np.nan
-                )
+                grid_arr = np.full((len(desired_y_axis), len(desired_x_axis)), np.nan)
                 grid_arr[y_idx, x_idx] = gridded_df[column_name]
             if y_affine_negative:
                 grid_arr = np.flip(grid_arr, axis=-2)
@@ -350,8 +342,7 @@ class DatacubeCryotempoEolis:
         ]
         if matching_dataset.empty:
             raise ValueError(
-                f"No dataset named '{specklia_data_set_name}' "
-                "found in Specklia."
+                f"No dataset named '{specklia_data_set_name}' " "found in Specklia."
             )
         specklia_dataset_info = matching_dataset.iloc[0]
 
@@ -382,8 +373,11 @@ class DatacubeCryotempoEolis:
         return gdf, source_info, specklia_dataset_info
 
     def gaussian_filter_fill(
-            self: DatacubeCryotempoEolis, arr: np.ndarray,
-            sigma: float | tuple[float] = 3.0, **kwargs) -> np.ndarray:
+        self: DatacubeCryotempoEolis,
+        arr: np.ndarray,
+        sigma: float | tuple[float] = 3.0,
+        **kwargs,
+    ) -> np.ndarray:
         """Fill NaN regions in an array using Gaussian filter.
 
         The data and a validity mask are filtered separately and combined so
@@ -494,12 +488,14 @@ class DatacubeCryotempoEolis:
                 name=data_name,
                 attrs={
                     "units": column_info["unit"],
-                } | eolis_metadata[col],
+                }
+                | eolis_metadata[col],
             )
             # mask to glacier
             if "glacier_mask" in oggm_ds.variables:
                 eolis_resampled_grids_xarr = eolis_resampled_grids_xarr.where(
-                    oggm_ds.glacier_mask != 0)
+                    oggm_ds.glacier_mask != 0
+                )
 
             oggm_ds[data_name] = eolis_resampled_grids_xarr
 
@@ -512,17 +508,17 @@ class DatacubeCryotempoEolis:
             eolis_gridded_data,
             oggm_ds,
             elevation_change_var_name,
-            elevation_change_sigma_var_name
+            elevation_change_sigma_var_name,
         )
 
         return oggm_ds
 
     def augment_dataset_with_1d_timeseries(
-            self: DatacubeCryotempoEolis,
-            eolis_gridded_data: gpd.GeoDataFrame,
-            oggm_ds: xr.Dataset,
-            elevation_change_var_name: str,
-            elevation_change_sigma_var_name: str
+        self: DatacubeCryotempoEolis,
+        eolis_gridded_data: gpd.GeoDataFrame,
+        oggm_ds: xr.Dataset,
+        elevation_change_var_name: str,
+        elevation_change_sigma_var_name: str,
     ) -> None:
         """Generate and attach 1D time series of elevation change and
         uncertainty to an OGGM dataset.
@@ -560,18 +556,15 @@ class DatacubeCryotempoEolis:
             oggm_ds, eolis_gridded_data.crs
         )
         eolis_gridded_data_masked = eolis_gridded_data[
-            eolis_gridded_data.intersects(
-                vector_glacier_mask.geometry.union_all()
-            )
+            eolis_gridded_data.intersects(vector_glacier_mask.geometry.union_all())
         ]
 
         # generate timeseries with uncertainties
-        elevation_change_timeseries, error_timeseries = \
-            self.generate_1d_timeseries(
-                eolis_gridded_data_masked,
-                elevation_change_var_name,
-                elevation_change_sigma_var_name
-            )
+        elevation_change_timeseries, error_timeseries = self.generate_1d_timeseries(
+            eolis_gridded_data_masked,
+            elevation_change_var_name,
+            elevation_change_sigma_var_name,
+        )
 
         # add timeseries to datacube
         timeseries_data = {
@@ -582,8 +575,10 @@ class DatacubeCryotempoEolis:
                 f" (eolis_gridded_{elevation_change_var_name}) within the "
                 "glacier mask.",
                 "comment": f"Computed from eolis_gridded_{elevation_change_var_name}. "
-                + oggm_ds[f"eolis_gridded_{elevation_change_var_name}"].attrs["comment"],
-                "ancillary_var": elevation_change_sigma_var_name
+                + oggm_ds[f"eolis_gridded_{elevation_change_var_name}"].attrs[
+                    "comment"
+                ],
+                "ancillary_var": elevation_change_sigma_var_name,
             },
             elevation_change_sigma_var_name: {
                 "data": error_timeseries,
@@ -593,7 +588,7 @@ class DatacubeCryotempoEolis:
                 " using a spatial correlation model.",
                 "comment": "Uncertainty propagated using a static 20 km "
                 "spatial correlation length.",
-                "ancillary_var": elevation_change_var_name
+                "ancillary_var": elevation_change_var_name,
             },
         }
 
@@ -601,7 +596,8 @@ class DatacubeCryotempoEolis:
         for col, timeseries_dict in timeseries_data.items():
             var_name = new_var_name_format.format(col)
             ancillary_var_name = new_var_name_format.format(
-                timeseries_dict["ancillary_var"])
+                timeseries_dict["ancillary_var"]
+            )
             attrs = oggm_ds[f"eolis_gridded_{col}"].attrs.copy()
             attrs["ancillary_variables"] = ancillary_var_name
             attrs["comment"] = timeseries_dict["comment"]
@@ -612,7 +608,7 @@ class DatacubeCryotempoEolis:
                 coords={"t": oggm_ds.t},
                 dims=("t"),
                 name=var_name,
-                attrs=attrs
+                attrs=attrs,
             )
             oggm_ds[var_name] = eolis_resampled_grids_xarr
 
@@ -622,11 +618,11 @@ class DatacubeCryotempoEolis:
         )
 
     def generate_1d_timeseries(
-            self: DatacubeCryotempoEolis,
-            eolis_gridded_data: gpd.GeoDataFrame,
-            elevation_change_var_name: str,
-            elevation_change_sigma_var_name: str,
-            length_scale: int | float = 6e3
+        self: DatacubeCryotempoEolis,
+        eolis_gridded_data: gpd.GeoDataFrame,
+        elevation_change_var_name: str,
+        elevation_change_sigma_var_name: str,
+        length_scale: int | float = 6e3,
     ) -> tuple[list[float], list[float]]:
         """Compute a 1D elevation change time series with propagated
         uncertainties.
@@ -657,7 +653,7 @@ class DatacubeCryotempoEolis:
             - Mean elevation change per timestamp.
             - Propagated uncertainty per timestamp.
         """
-        grouped_data = eolis_gridded_data.groupby('timestamp', sort=True)
+        grouped_data = eolis_gridded_data.groupby("timestamp", sort=True)
         timestamps = [t[0] for t in grouped_data]
         gridded_product_data_grouped = [t[1] for t in grouped_data]
 
@@ -665,14 +661,15 @@ class DatacubeCryotempoEolis:
         error_timeseries = []
         for i in range(len(timestamps)):
             gridded_data_this_timestamp = gridded_product_data_grouped[i].loc[
-                gridded_product_data_grouped[i][
-                    elevation_change_var_name].notna()
+                gridded_product_data_grouped[i][elevation_change_var_name].notna()
             ]
             mean = gridded_data_this_timestamp[elevation_change_var_name].mean()
-            uncertainty = gridded_data_this_timestamp[
-                elevation_change_sigma_var_name].astype(float).to_numpy()
-            coords = gridded_data_this_timestamp[
-                ['x', 'y']].astype(float).to_numpy()
+            uncertainty = (
+                gridded_data_this_timestamp[elevation_change_sigma_var_name]
+                .astype(float)
+                .to_numpy()
+            )
+            coords = gridded_data_this_timestamp[["x", "y"]].astype(float).to_numpy()
 
             # Build correlation matrix (exponential decay kernel)
             pairwise_dist = cdist(coords, coords)
@@ -694,9 +691,7 @@ class DatacubeCryotempoEolis:
         return elevation_change_timeseries, error_timeseries
 
     def create_vector_glacier_mask(
-            self: DatacubeCryotempoEolis,
-            oggm_ds: xr.Dataset,
-            target_crs: CRS
+        self: DatacubeCryotempoEolis, oggm_ds: xr.Dataset, target_crs: CRS
     ) -> gpd.GeoDataFrame:
         """Vectorise the glacier mask of an OGGM dataset into polygon(s).
 
@@ -721,13 +716,13 @@ class DatacubeCryotempoEolis:
         mask = oggm_ds.glacier_mask.values.astype("uint8")
 
         # Vectorise
-        shapes = features.shapes(mask,
-                                 mask=mask.astype(bool),
-                                 transform=oggm_ds.glacier_mask.rio.transform())
+        shapes = features.shapes(
+            mask, mask=mask.astype(bool), transform=oggm_ds.glacier_mask.rio.transform()
+        )
 
         gdf = gpd.GeoDataFrame(
             geometry=[shape(geom) for geom, val in shapes if val == 1],
-            crs=oggm_ds.rio.crs
+            crs=oggm_ds.rio.crs,
         )
         gdf = gdf.dissolve()
         gdf_reproj = gdf.to_crs(target_crs)
