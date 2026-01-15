@@ -500,7 +500,8 @@ class DatacubeCryotempoEolis:
                 name=data_name,
                 attrs={
                     "units": column_info["unit"],
-                } | eolis_metadata[col],
+                }
+                | eolis_metadata[col],
             )
             # mask to glacier
             if "glacier_mask" in oggm_ds.variables:
