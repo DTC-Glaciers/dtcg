@@ -101,23 +101,23 @@ class StreamDatacube:
             stream_url = self.get_url(rgi_id=rgi_id)
         try:
             zip_path = self.get_zip_path(zip_path=zip_path, rgi_id=rgi_id)
-
-            store = zarr.storage.ZipStore(zip_path, mode="w")
-            with xr.open_datatree(
-                stream_url,
-                group=None,
-                chunks={},
-                engine="zarr",
-                consolidated=True,
-                decode_cf=True,
-            ) as stream:
-                stream.compute().to_zarr(
-                    store=store,
-                    mode="w",
+            if not zip_path.is_file():
+                store = zarr.storage.ZipStore(zip_path, mode="w")
+                with xr.open_datatree(
+                    stream_url,
+                    group=None,
+                    chunks={},
+                    engine="zarr",
                     consolidated=True,
-                    zarr_format=2,
-                    # encoding=stream.encoding,
-                )
+                    decode_cf=True,
+                ) as stream:
+                    stream.compute().to_zarr(
+                        store=store,
+                        mode="w",
+                        consolidated=True,
+                        zarr_format=2,
+                        # encoding=stream.encoding,
+                    )
 
         except GroupNotFoundError as e:
             # pipe different error to frontends
