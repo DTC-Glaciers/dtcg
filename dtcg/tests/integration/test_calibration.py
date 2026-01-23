@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timedelta
 
 import pandas as pd
+import numpy as np
 import pytest
 from dateutil.tz import UTC
 from oggm import utils
@@ -122,9 +123,17 @@ class TestCalibrator:
                 columns=["period", "area", "dmdtda", "err_dmdtda", "reg", "is_cor"]
             ).rename_axis(index="rgiid")
 
-        compare_mb = test_calibrator.get_geodetic_mb(gdir)
-        assert isinstance(compare_mb, pd.DataFrame)
-        pd.testing.assert_frame_equal(compare_mb, test_mb)
+        for ref_mb_period in test_mb.period:
+            compare_mb, compare_mb_unit, compare_mb_err, compare_mb_period = test_calibrator.get_ref_mb(
+                gdir, ref_mb_period=ref_mb_period)
+            assert isinstance(compare_mb, float)
+            assert isinstance(compare_mb_err, float)
+            assert compare_mb_unit == 'kg m-2 yr-1'
+            assert compare_mb_period == ref_mb_period
+
+            test_mb_single = test_mb[test_mb.period == ref_mb_period]
+            assert test_mb_single.dmdtda.values[0] * 1000 == compare_mb
+            assert test_mb_single.err_dmdtda.values[0] * 1000 == compare_mb_err
 
     def test_get_geodetic_mb_missing(self, Calibrator, hef_gdir):
         test_calibrator = Calibrator
@@ -134,7 +143,7 @@ class TestCalibrator:
         gdir.rgi_id = "RGIXX-00.00.0000"
         # msg = f"No reference mb available for {gdir.rgi_id}."
         with pytest.raises(KeyError, match=f"{gdir.rgi_id}") as excinfo:
-            test_calibrator.get_geodetic_mb(gdir)
+            test_calibrator.get_ref_mb(gdir, ref_mb_period=None)
             print(excinfo)
 
 
@@ -212,9 +221,17 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
             ).rename_axis(index="rgiid")
         test_mb["source"] = "Hugonnet"
 
-        compare_mb = test_calibrator.get_geodetic_mb(gdir)
-        assert isinstance(compare_mb, pd.DataFrame)
-        pd.testing.assert_frame_equal(compare_mb, test_mb)
+        for ref_mb_period in test_mb.period:
+            compare_mb, compare_mb_unit, compare_mb_err, compare_mb_period = test_calibrator.get_ref_mb(
+                gdir, ref_mb_period=ref_mb_period, source="Hugonnet")
+            assert isinstance(compare_mb, float)
+            assert isinstance(compare_mb_err, float)
+            assert compare_mb_unit == 'kg m-2 yr-1'
+            assert compare_mb_period == ref_mb_period
+
+            test_mb_single = test_mb[test_mb.period == ref_mb_period]
+            assert test_mb_single.dmdtda.values[0] * 1000 == compare_mb
+            assert test_mb_single.err_dmdtda.values[0] * 1000 == compare_mb_err
 
     @pytest.mark.xfail(
         reason="Issue with OGGM where 'auto_skip_task' not present in cfg.PARAMS"
@@ -229,28 +246,28 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
     @pytest.mark.parametrize(
         "arg_years,expected",
         [
-            ((2000, 2004), datetime(2003, 11, 11, tzinfo=UTC)),
-            ((2001, 2003), datetime(2003, 1, 15, tzinfo=UTC)),
+            (('2000-01-01', '2004-01-01'),
+             (datetime(2000, 1, 1, tzinfo=UTC), datetime(2003, 11, 11, tzinfo=UTC))),
+            (('2001-01-01', '2003-01-01'),
+             (datetime(2000, 12, 26, tzinfo=UTC), datetime(2003, 1, 15, tzinfo=UTC))),
         ],
     )
     def test_get_temporal_bounds(self, Calibrator, arg_years, expected):
         test_calibrator = Calibrator
         # test_dates = [datetime(i)] for i in
         base_time = datetime(2000, 1, 1, tzinfo=UTC)
-        test_dates = [base_time + timedelta(days=x * 30) for x in range(48)]
+        test_dates = np.array([base_time + timedelta(days=x * 30)
+                               for x in range(48)])
         assert len(test_dates) == 48
 
         test_year_start = arg_years[0]
         test_year_end = arg_years[1]
 
-        year_start, year_end, data_start, data_end = (
+        data_start, data_end = (
             test_calibrator.get_temporal_bounds(
-                dates=test_dates, year_start=test_year_start, year_end=test_year_end
+                dates=test_dates, date_start=test_year_start, date_end=test_year_end
             )
         )
 
-        assert year_start == datetime(test_year_start, 1, 1, tzinfo=UTC)
-        assert year_end == datetime(test_year_end, 1, 1, tzinfo=UTC)
-        test_data_start = base_time + timedelta(days=(arg_years[0] - 2000) * 12 * 30)
-        assert data_start == test_data_start
-        assert data_end == expected
+        assert data_start == expected[0]
+        assert data_end == expected[1]

@@ -111,6 +111,15 @@ class DatacubeCryotempoEolis:
             "version",
         ]
 
+    def add_data_to_datacube(self, datacube, gdir):
+        """Every datacube must support this method.
+
+        It should be able to add data to the provided datacube and returns the
+        final datacube.
+        """
+        return self.retrieve_prepare_eolis_gridded_data(oggm_ds=datacube,
+                                                        grid=gdir.grid)
+
     def convert_gridded_dataframe_to_array(
         self: DatacubeCryotempoEolis,
         gridded_df: pd.DataFrame,
@@ -503,6 +512,11 @@ class DatacubeCryotempoEolis:
                 }
                 | eolis_metadata[col],
             )
+            eolis_resampled_grids_xarr.coords['t'].attrs = {
+                'standard_name': 'time',
+                'long_name': 'time since the unix epoch',
+                'units': 'seconds since 1970-01-01 00:00:00',
+            }
             # mask to glacier
             if "glacier_mask" in oggm_ds.variables:
                 eolis_resampled_grids_xarr = eolis_resampled_grids_xarr.where(

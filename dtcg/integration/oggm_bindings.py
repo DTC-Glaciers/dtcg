@@ -37,7 +37,7 @@ import dtcg.integration.calibration
 from dtcg.datacube.geozarr import GeoZarrHandler
 
 # TODO: Link to DTCG instead.
-# DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs"
+# DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/"
 # SHAPEFILE_PATH = (
 #     "https://cluster.klima.uni-bremen.de/~dtcg/test_files/case_study_regions/austria"
 # )
@@ -61,17 +61,48 @@ class BindingsOggmModel:
 
     def __init__(
         self,
-        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
-        working_dir: str = "",
+        rgi_id: str = None,
+        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2026.1/",
+        working_dir: str = None,
         oggm_params: dict | None = None,
+        l1_datacube: xr.Dataset = None,
+        use_multiprocessing: bool = True,
+        continue_on_error: bool = True,
+        add_default_values_to_settings: bool = False,
+        **kwargs
     ):
-        super().__init__()
         self.DEFAULT_BASE_URL = base_url
-        self.WORKING_DIR = utils.gettempdir(working_dir)
-        if oggm_params is None:
-            self.oggm_params = {}
-        else:
-            self.oggm_params = oggm_params
+
+        if rgi_id is None:
+            if l1_datacube is not None:
+                rgi_id = l1_datacube.attrs['RGI-ID']
+
+        # this needs to be adapted/deleted (tests need to be adapted)
+        if rgi_id is not None:
+            if isinstance(rgi_id, list):
+                rgi_id = rgi_id[0]
+            self.rgi_id = rgi_id
+            if oggm_params is None:
+                self.oggm_params = {}
+            else:
+                self.oggm_params = oggm_params
+
+            self.init_oggm(working_dir=working_dir,
+                           use_multiprocessing=use_multiprocessing,
+                           continue_on_error=continue_on_error)
+            self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id],
+                                                     **kwargs)[0]
+            self.gdir.add_default_values_to_settings = add_default_values_to_settings
+
+            if l1_datacube is None:
+                self.l1_datacube = self.get_oggm_datacube(gdir=self.gdir)
+            else:
+                self.l1_datacube = l1_datacube
+            self.l1_datacube = self.add_rgi_id_to_dataset(dataset=self.l1_datacube)
+
+    def add_rgi_id_to_dataset(self, dataset):
+        dataset.attrs['RGI-ID'] = self.gdir.rgi_id
+        return dataset
 
     def set_oggm_params(self, **new_params: dict) -> None:
         """Define OGGM configuration parameters.
@@ -103,14 +134,16 @@ class BindingsOggmModel:
             if key in valid_keys:
                 cfg.PARAMS[key] = value
 
-    def init_oggm(self, dirname: str, **kwargs) -> None:
+    def init_oggm(self, working_dir: str, use_multiprocessing: bool = True,
+                  continue_on_error: bool = True,
+                  **kwargs) -> None:
         """Initialise OGGM run parameters.
 
         TODO: Add kwargs for cfg.PATH.
 
         Parameters
         ----------
-        dirname : str
+        working_dir : str
             Name of temporary directory
         **kwargs
             Extra arguments passed to OGGM's configuration.
@@ -118,11 +151,19 @@ class BindingsOggmModel:
 
         cfg.initialize(logging_level="CRITICAL")
         cfg.PARAMS["border"] = kwargs.get("border", 80)
-        self.WORKING_DIR = utils.gettempdir(dirname)  # already handles empty strings
+        if working_dir is None:
+            working_dir = utils.gettempdir(self.rgi_id)
+        self.WORKING_DIR = working_dir
         utils.mkdir(
             self.WORKING_DIR, reset=True
         )  # TODO: this should be an API parameter
         cfg.PATHS["working_dir"] = self.WORKING_DIR
+
+        # some params for datacube creation
+        cfg.PARAMS["store_model_geometry"] = True
+
+        cfg.PARAMS["use_multiprocessing"] = use_multiprocessing
+        cfg.PARAMS['continue_on_error'] = continue_on_error
 
         self.set_oggm_params(**kwargs)
         self.set_oggm_kwargs()
@@ -298,7 +339,13 @@ class BindingsOggmModel:
         return rgi_files
 
     def get_glacier_directories(
-        self, rgi_ids: list, **kwargs
+        self,
+        rgi_ids: list,
+        prepro_base_url: str = None,
+        from_prepro_level: int = 3,
+        prepro_border: int = 80,
+        add_daily_w5e5: bool = True,
+        **kwargs
     ) -> list[GlacierDirectory]:
         """Get OGGM glacier directories.
 
@@ -306,7 +353,7 @@ class BindingsOggmModel:
         ----------
         rgi_ids : list
             RGI IDs of glaciers.
-        base_url : str, default empty string
+        prepro_base_url : str, default empty string
             URL to OGGM data. If empty, uses the ``DEFAULT_BASE_URL``
             attribute.
         prepro_level : int, default 4
@@ -322,13 +369,46 @@ class BindingsOggmModel:
             Glacier directories for the given RGI IDs.
         """
 
-        prepro_base_url = kwargs.get("prepro_base_url", "")
-        if not prepro_base_url:
-            kwargs["prepro_base_url"] = self.DEFAULT_BASE_URL
+        if prepro_base_url is None:
+            prepro_base_url = self.DEFAULT_BASE_URL
 
-        gdirs = workflow.init_glacier_directories(rgi_ids, **kwargs)
+        gdirs = workflow.init_glacier_directories(
+            rgi_ids,
+            prepro_base_url=prepro_base_url,
+            from_prepro_level=from_prepro_level,
+            prepro_border=prepro_border,
+            **kwargs)
+
+        if add_daily_w5e5:
+            workflow.execute_entity_task(
+                gdirs=gdirs, task=w5e5.process_w5e5_data, daily=True
+            )
 
         return gdirs
+
+    def get_oggm_datacube(self, gdir):
+        with xr.open_dataset(gdir.get_filepath("gridded_data")) as ds:
+            ds = ds.load()
+            keywords = (
+                "rgi",
+                "glacier",
+                "name",
+                "terminus",
+                "cenl",  # latitude, longitude
+                "glims",
+            )
+            glacier_attributes = {
+                key: val
+                for key, val in gdir.__dict__.items()
+                if any(k in key for k in keywords)
+            }
+            ds.attrs.update({"glacier_attributes": glacier_attributes})
+
+        return ds
+
+    def add_data_to_l1_datacube(self, datacube_manager, **kwargs):
+        self.l1_datacube = datacube_manager().add_data_to_datacube(
+            datacube=self.l1_datacube, gdir=self.gdir, **kwargs)
 
     def get_outline_source_date(self, glacier_data: gpd.GeoDataFrame) -> int:
         """Get the date for an outline's source.
@@ -376,7 +456,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
 
     def __init__(
         self,
-        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
+        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
         working_dir: str = "",
         oggm_params: dict = None,
         shapefile_path: str = "https://cluster.klima.uni-bremen.de/~dtcg/test_files/case_study_regions/austria",
@@ -701,7 +781,7 @@ class BindingsHydro(BindingsOggmWrangler):
 
     def __init__(
         self,
-        base_url: str = "https://cluster.klima.uni-bremen.de/~oggm/demo_gdirs",
+        base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
         working_dir: str = "",
         oggm_params: dict = None,
         hydro_location: str = "_spinup_historical_hydro",
@@ -839,7 +919,7 @@ class BindingsHydro(BindingsOggmWrangler):
             name=name,
             from_prepro_level=5,
             prepro_border=160,
-            prepro_base_url="https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup",
+            prepro_base_url="https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
         )
         climatology = self.get_hydro_climatology(gdir=glacier)
 
@@ -933,12 +1013,6 @@ class BindingsCryotempo(BindingsOggmWrangler):
         self.datacube_manager = cryotempo_eolis.DatacubeCryotempoEolis()
         self.calibrator = dtcg.integration.calibration.CalibratorCryotempo()
         self.hydro_location = hydro_location
-
-    def init_oggm(self, dirname="", **kwargs):
-        return super().init_oggm(dirname, **kwargs)
-
-    def get_glacier_directories(self, rgi_ids: list, **kwargs):
-        return super().get_glacier_directories(rgi_ids, **kwargs)
 
     def get_glacier_data(self, gdirs: list, dem=False) -> None:
         """Add velocity data, monthly and daily W5E5 data."""
