@@ -266,14 +266,8 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list,
     # CryoSat2
     cryosat_elev, cryosat_elev_unc = get_cryosat_data(
         l1_datacube=l1_datacube, baseline_date=baseline_date)
-    cryosat_dates = cryosat_elev.t.values
-    cryosat_floatyrs = utils.date_to_floatyear(
-        y=cryosat_dates.astype('datetime64[Y]').astype(int) + 1970,
-        m=(cryosat_dates.astype('datetime64[M]').astype(int) % 12) + 1,
-        d=(cryosat_dates.astype('datetime64[D]') -
-           cryosat_dates.astype('datetime64[M]')).astype(int) + 1
-    )
-    add_line_with_unc(ax=ax, x=cryosat_floatyrs, y=cryosat_elev.values,
+    cryosat_dates = cryosat_elev.t.values.astype('datetime64[D]')
+    add_line_with_unc(ax=ax, x=cryosat_dates, y=cryosat_elev.values,
                       y_unc=cryosat_elev_unc.values, c=c_cryosat,
                       label='CryoSat2', legend_handles=legend_handles,
                       legend_labels=legend_labels, alpha=0.25)
@@ -285,7 +279,13 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list,
         model_elev = get_cryosat_data(
             l2_datacube=l2_datacube, baseline_date=baseline_date)[0]
 
-        add_line_with_unc(ax=ax, x=model_elev.time,
+        yrs, mnths, dys = utils.floatyear_to_date(model_elev.time,
+                                                  return_day=True)
+        model_dates = np.array([f"{y:04d}-{m:02d}-{d:02d}"
+                                for y, m, d in zip(yrs, mnths, dys)],
+                               dtype="datetime64[D]")
+
+        add_line_with_unc(ax=ax, x=model_dates,
                           y=model_elev.sel(member='0.5'),
                           y_unc=[
                               model_elev.sel(member='0.05'),
@@ -297,9 +297,8 @@ def plot_cryosat(l1_datacube, datatree, l2_name_list,
                           legend_labels=legend_labels,
                           alpha=0.25)
 
-    y, m, d = baseline_date.split('-')
-    baseline_float = utils.date_to_floatyear(y, m, d)
-    ax.set_xlim([baseline_float, None])
+    ax.set_xlim([np.array(baseline_date, dtype="datetime64[D]"),
+                 None])
     # Recompute y-limits based on visible data only
     autoscale_y_from_fill_between(ax)
 

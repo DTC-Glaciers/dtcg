@@ -51,6 +51,7 @@ def autoscale_y_from_fill_between(ax, margin=0.05):
             continue
 
         x, ylo, yhi = coll._data_for_scaling
+        x = x.astype(float)
         m = (x >= xmin) & (x <= xmax)
         if not np.any(m):
             continue
