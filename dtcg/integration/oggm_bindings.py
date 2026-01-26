@@ -1,4 +1,4 @@
-"""Copyright 2025-2026 DTCG Contributors
+"""Copyright 2026 DTCG Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import dtcg.datacube.cryotempo_eolis as cryotempo_eolis
 import dtcg.integration.calibration
 from dtcg.datacube.geozarr import GeoZarrHandler
 
-# TODO: Link to DTCG instead.
 # DEFAULT_BASE_URL = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/"
 # SHAPEFILE_PATH = (
 #     "https://cluster.klima.uni-bremen.de/~dtcg/test_files/case_study_regions/austria"
@@ -61,24 +60,24 @@ class BindingsOggmModel:
 
     def __init__(
         self,
-        rgi_id: str = None,
         base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2026.1/",
+        rgi_id: str or list[str] = None,
         working_dir: str = None,
         oggm_params: dict | None = None,
-        l1_datacube: xr.Dataset = None,
+        datacube_l1: xr.Dataset = None,
         use_multiprocessing: bool = True,
         continue_on_error: bool = True,
         add_default_values_to_settings: bool = False,
-        **kwargs
+        **kwargs,
     ):
         self.DEFAULT_BASE_URL = base_url
 
         if rgi_id is None:
-            if l1_datacube is not None:
-                rgi_id = l1_datacube.attrs['RGI-ID']
+            if datacube_l1 is not None:
+                rgi_id = datacube_l1.attrs["RGI-ID"]
 
         # this needs to be adapted/deleted (tests need to be adapted)
-        if rgi_id is not None:
+        if rgi_id:
             if isinstance(rgi_id, list):
                 rgi_id = rgi_id[0]
             self.rgi_id = rgi_id
@@ -87,21 +86,32 @@ class BindingsOggmModel:
             else:
                 self.oggm_params = oggm_params
 
-            self.init_oggm(working_dir=working_dir,
-                           use_multiprocessing=use_multiprocessing,
-                           continue_on_error=continue_on_error)
-            self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id],
-                                                     **kwargs)[0]
+            self.init_oggm(
+                working_dir=working_dir,
+                use_multiprocessing=use_multiprocessing,
+                continue_on_error=continue_on_error,
+            )
+            self.gdir = self.get_glacier_directories(rgi_ids=[self.rgi_id], **kwargs)[0]
             self.gdir.add_default_values_to_settings = add_default_values_to_settings
 
-            if l1_datacube is None:
-                self.l1_datacube = self.get_oggm_datacube(gdir=self.gdir)
+            if datacube_l1 is None:
+                self.datacube_l1 = self.get_oggm_datacube(gdir=self.gdir)
             else:
-                self.l1_datacube = l1_datacube
-            self.l1_datacube = self.add_rgi_id_to_dataset(dataset=self.l1_datacube)
+                self.datacube_l1 = datacube_l1
+            self.datacube_l1 = self.add_rgi_id_to_dataset(dataset=self.datacube_l1)
 
     def add_rgi_id_to_dataset(self, dataset):
-        dataset.attrs['RGI-ID'] = self.gdir.rgi_id
+        """
+
+        Parameters
+        ----------
+        dataset
+
+        Returns
+        -------
+
+        """
+        dataset.attrs["RGI-ID"] = self.gdir.rgi_id
         return dataset
 
     def set_oggm_params(self, **new_params: dict) -> None:
@@ -134,9 +144,13 @@ class BindingsOggmModel:
             if key in valid_keys:
                 cfg.PARAMS[key] = value
 
-    def init_oggm(self, working_dir: str, use_multiprocessing: bool = True,
-                  continue_on_error: bool = True,
-                  **kwargs) -> None:
+    def init_oggm(
+        self,
+        working_dir: str,
+        use_multiprocessing: bool = True,
+        continue_on_error: bool = True,
+        **kwargs,
+    ) -> None:
         """Initialise OGGM run parameters.
 
         TODO: Add kwargs for cfg.PATH.
@@ -151,7 +165,7 @@ class BindingsOggmModel:
 
         cfg.initialize(logging_level="CRITICAL")
         cfg.PARAMS["border"] = kwargs.get("border", 80)
-        if working_dir is None:
+        if not working_dir:
             working_dir = utils.gettempdir(self.rgi_id)
         self.WORKING_DIR = working_dir
         utils.mkdir(
@@ -163,7 +177,7 @@ class BindingsOggmModel:
         cfg.PARAMS["store_model_geometry"] = True
 
         cfg.PARAMS["use_multiprocessing"] = use_multiprocessing
-        cfg.PARAMS['continue_on_error'] = continue_on_error
+        cfg.PARAMS["continue_on_error"] = continue_on_error
 
         self.set_oggm_params(**kwargs)
         self.set_oggm_kwargs()
@@ -341,11 +355,11 @@ class BindingsOggmModel:
     def get_glacier_directories(
         self,
         rgi_ids: list,
-        prepro_base_url: str = None,
+        prepro_base_url: str = "",
         from_prepro_level: int = 3,
         prepro_border: int = 80,
         add_daily_w5e5: bool = True,
-        **kwargs
+        **kwargs,
     ) -> list[GlacierDirectory]:
         """Get OGGM glacier directories.
 
@@ -353,13 +367,15 @@ class BindingsOggmModel:
         ----------
         rgi_ids : list
             RGI IDs of glaciers.
-        prepro_base_url : str, default empty string
+        prepro_base_url : str, optional
             URL to OGGM data. If empty, uses the ``DEFAULT_BASE_URL``
             attribute.
         prepro_level : int, default 4
             File preprocessing level.
         prepro_border : int, default 80
             Grid border buffer around the glacier.
+        add_daily_w5e5 : bool, default True
+            Add daily W5E5 data.
         **kwargs
             Extra arguments to ``workflow.init_glacier_directories``.
 
@@ -369,7 +385,7 @@ class BindingsOggmModel:
             Glacier directories for the given RGI IDs.
         """
 
-        if prepro_base_url is None:
+        if not prepro_base_url:
             prepro_base_url = self.DEFAULT_BASE_URL
 
         gdirs = workflow.init_glacier_directories(
@@ -377,7 +393,8 @@ class BindingsOggmModel:
             prepro_base_url=prepro_base_url,
             from_prepro_level=from_prepro_level,
             prepro_border=prepro_border,
-            **kwargs)
+            **kwargs,
+        )
 
         if add_daily_w5e5:
             workflow.execute_entity_task(
@@ -394,7 +411,7 @@ class BindingsOggmModel:
                 "glacier",
                 "name",
                 "terminus",
-                "cenl",  # latitude, longitude
+                "cenl",  # latitude, longitudeR
                 "glims",
             )
             glacier_attributes = {
@@ -406,9 +423,10 @@ class BindingsOggmModel:
 
         return ds
 
-    def add_data_to_l1_datacube(self, datacube_manager, **kwargs):
-        self.l1_datacube = datacube_manager().add_data_to_datacube(
-            datacube=self.l1_datacube, gdir=self.gdir, **kwargs)
+    def add_data_to_datacube_l1(self, datacube_manager, **kwargs):
+        self.datacube_l1 = datacube_manager().add_data_to_datacube(
+            datacube=self.datacube_l1, gdir=self.gdir, **kwargs
+        )
 
     def get_outline_source_date(self, glacier_data: gpd.GeoDataFrame) -> int:
         """Get the date for an outline's source.

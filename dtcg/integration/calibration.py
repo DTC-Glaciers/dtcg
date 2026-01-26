@@ -18,24 +18,24 @@ limitations under the License.
 Calibrate OGGM models.
 """
 
-from datetime import datetime
-import warnings
-from functools import partial
 import inspect
 import logging
 import os
+import warnings
+from datetime import datetime
+from functools import partial
 
 import numpy as np
 import pandas as pd
+import SALib.sample.sobol as sampler
 import xarray as xr
+from dateutil import tz
 from dateutil.relativedelta import relativedelta
 from dateutil.tz import UTC
-from dateutil import tz
-from oggm import GlacierDirectory, cfg, utils, workflow, tasks, entity_task
+from numpy.typing import ArrayLike
+from oggm import GlacierDirectory, cfg, entity_task, tasks, utils, workflow
 from oggm.core import massbalance
 from tqdm import tqdm
-
-import SALib.sample.sobol as sampler
 
 # Module logger
 log = logging.getLogger(__name__)
@@ -46,9 +46,15 @@ class Calibrator:
 
     Attributes
     ----------
+    model_matrix : dict, default None
+        Matrix of model calibration parameters for different run
+        configurations.
+    datacube_l1 : Any, default None
+    gdir : GlacierDirectory, default None
+        An OGGM glacier directory.
     """
 
-    def __init__(self, model_matrix: dict = None, l1_datacube=None, gdir=None):
+    def __init__(self, model_matrix: dict = None, datacube_l1=None, gdir=None):
         if not model_matrix:
             self.model_matrix = {}
         else:
@@ -56,11 +62,11 @@ class Calibrator:
 
         self.gdir = gdir
 
-        self.l1_datacube = l1_datacube
-        if l1_datacube is not None:
-            self.RGI_ID_attrs = l1_datacube.attrs["RGI-ID"]
+        self.datacube_l1 = datacube_l1
+        if datacube_l1 is not None:
+            self.RGI_ID_attrs = datacube_l1.attrs["RGI-ID"]
         else:
-            self.RGI_ID_attrs = 'Not provided'
+            self.RGI_ID_attrs = "Not provided"
 
     def set_model_matrix(self, name: str, model, geo_period: str, **kwargs):
         """Set model parameters for calibration.
@@ -91,13 +97,14 @@ class Calibrator:
         self.model_matrix.update(matrix)
 
     def get_nearest_datetime(self, dates: np.ndarray, target_date: str):
-        """
+        """Get the nearest datetime.
 
         Parameters
         ----------
-        dates
+        dates : array_like
+            A range of dates that can be converted to ``datetime64``.
         target_date: str
-            "YYYY-MM-DD"
+            Date in the ISO-8601 format "YYYY-MM-DD".
 
         Returns
         -------
@@ -107,135 +114,142 @@ class Calibrator:
             warnings.filterwarnings(
                 "ignore",
                 message="no explicit representation of timezones available for np.datetime64",
-                category=UserWarning, )
+                category=UserWarning,
+            )
             dates_ns = dates.astype("datetime64[ns]")
-        target_ns = np.datetime64(
-            datetime.strptime(target_date, "%Y-%m-%d"), "ns")
+        target_ns = np.datetime64(datetime.strptime(target_date, "%Y-%m-%d"), "ns")
         diffs = np.abs(dates_ns - target_ns)
         idx = int(np.argmin(diffs))
         return dates[idx]
 
     def get_mcs_parameter_sample(
-            self, gdir, control_filesuffix, nr_samples=2**4,
-            ref_mb_err_sample_interval=1,
-            prcp_fac_sample_interval=0.5,
-            temp_bias_sample_interval=0.5,
-            melt_f_sample_interval=0.25,):
-        """
-        This function defines the distribution of the observation and model
-        parameters and creates a sample for the Monte Carlo simulation.
+        self,
+        gdir: GlacierDirectory,
+        control_filesuffix: str,
+        nr_samples: int = 2**4,
+        ref_mb_err_sample_interval: float = 1.0,
+        prcp_fac_sample_interval: float = 0.5,
+        temp_bias_sample_interval: float = 0.5,
+        melt_f_sample_interval: float = 0.25,
+    ):
+        """Defines the distribution of the observation and model
+        parameters and create a sample for the Monte Carlo simulation.
 
         Parameters
         ----------
-        gdir
+        gdir : GlacierDirectory
         control_filesuffix: str
-            The settings filesuffix of the control run, which used only the most
-            likely values of the default calibration.
-        nr_samples: int
-            This needs to be a multiple of 2 (e.g. 2**4). The total number of
-            generated samples equals nr_samples * (4 + 2). 4 is the number of
-            variables we use for sampling (ref_mb, prcp_fac, melt_f, temp_bias).
-        ref_mb_err_sample_interval: float
-            A factor which is used for multiplication of the ref_mb_err. Is is
-            assumed that ref_mb has a normal distribution.
-        prcp_fac_sample_interval: float
-            This value defines the width of the bounds by adding and
-            subtracting it from the prcp_fac of the control run. We use an
-            uniform distribution during sampling.
-        temp_bias_sample_interval
-            See docstring for prcp_fac_sample_interval, but for temp_bias.
-        melt_f_sample_interval
-            See docstring for prcp_fac_sample_interval, but for melt_f.
+            The filesuffix for the control run's settings, which used
+            only the most likely values of the default calibration.
+        nr_samples: int, default 2^4.
+            Number of samples. Must be a multiple of 2. The total number
+            of generated samples equals ``nr_samples * (4 + 2)``, where
+            4 is the number of variables used for sampling (``ref_mb``,
+            ``prcp_fac``, ``melt_f``, ``temp_bias``).
+        ref_mb_err_sample_interval: float, default 1.0
+            Multiplication factor applied to ``ref_mb_err``. It assumes
+            ``ref_mb`` has a normal distribution.
+        prcp_fac_sample_interval: float, default 0.5
+            The width of the bounds which are added and subtracted from
+            the ``prcp_fac`` of the control run. A uniform distribution
+             is used for sampling.
+        temp_bias_sample_interval: float, default 0.5
+            The width of the bounds which are added and subtracted from
+            the ``temp_bias`` of the control run. A uniform distribution
+             is used for sampling.
+        melt_f_sample_interval: float, default 0.5
+            The width of the bounds which are added and subtracted from
+            the ``melt_f`` of the control run. A uniform distribution
+             is used for sampling.
 
         Returns
         -------
+        tuple
+
 
         """
 
-        # to have a better overview I provide the parameter distribution in a
-        # more readable way first
+        # to have a better overview I provide the parameter distribution
+        # in a more readable way first
         parameter_distribution = {}
 
         # add geodetic mb observation
         gdir.observations_filesuffix = control_filesuffix
-        ref_mb = gdir.observations['ref_mb']
-        parameter_distribution['ref_mb'] = {
-            'bounds': [ref_mb['value'],
-                       ref_mb['err'] * ref_mb_err_sample_interval],
-            'dists': 'norm'
+        ref_mb = gdir.observations["ref_mb"]
+        parameter_distribution["ref_mb"] = {
+            "bounds": [ref_mb["value"], ref_mb["err"] * ref_mb_err_sample_interval],
+            "dists": "norm",
         }
 
         # get default maximum values for mb parameters
-        gdir.settings_filesuffix = ''
-        prcp_fac_min = gdir.settings['prcp_fac_min']
-        prcp_fac_max = gdir.settings['prcp_fac_max']
-        melt_f_min = gdir.settings['melt_f_min']
-        melt_f_max = gdir.settings['melt_f_max']
-        temp_bias_min = gdir.settings['temp_bias_min']
-        temp_bias_max = gdir.settings['temp_bias_max']
+        gdir.settings_filesuffix = ""
+        prcp_fac_min = gdir.settings["prcp_fac_min"]
+        prcp_fac_max = gdir.settings["prcp_fac_max"]
+        melt_f_min = gdir.settings["melt_f_min"]
+        melt_f_max = gdir.settings["melt_f_max"]
+        temp_bias_min = gdir.settings["temp_bias_min"]
+        temp_bias_max = gdir.settings["temp_bias_max"]
 
         # add mb parameter distributions
         gdir.settings_filesuffix = control_filesuffix
 
         # prcp_fac
-        prcp_fac_control = gdir.settings['prcp_fac']
+        prcp_fac_control = gdir.settings["prcp_fac"]
         prcp_fac_bounds = [
             max(prcp_fac_control - prcp_fac_sample_interval, prcp_fac_min),
-            min(prcp_fac_control + prcp_fac_sample_interval, prcp_fac_max)]
-        gdir.settings['prcp_fac_min'] = prcp_fac_bounds[0]
-        gdir.settings['prcp_fac_max'] = prcp_fac_bounds[1]
-        parameter_distribution['prcp_fac'] = {
-            'bounds': prcp_fac_bounds,
-            'dists': 'unif'
+            min(prcp_fac_control + prcp_fac_sample_interval, prcp_fac_max),
+        ]
+        gdir.settings["prcp_fac_min"] = prcp_fac_bounds[0]
+        gdir.settings["prcp_fac_max"] = prcp_fac_bounds[1]
+        parameter_distribution["prcp_fac"] = {
+            "bounds": prcp_fac_bounds,
+            "dists": "unif",
         }
 
         # melt_f
-        melt_f_control = gdir.settings['melt_f']
+        melt_f_control = gdir.settings["melt_f"]
         melt_f_bounds = [
             max(melt_f_control - melt_f_sample_interval, melt_f_min),
-            min(melt_f_control + melt_f_sample_interval, melt_f_max)]
-        gdir.settings['melt_f_min'] = melt_f_bounds[0]
-        gdir.settings['melt_f_max'] = melt_f_bounds[1]
-        parameter_distribution['melt_f'] = {
-            'bounds': melt_f_bounds,
-            'dists': 'unif'
-        }
+            min(melt_f_control + melt_f_sample_interval, melt_f_max),
+        ]
+        gdir.settings["melt_f_min"] = melt_f_bounds[0]
+        gdir.settings["melt_f_max"] = melt_f_bounds[1]
+        parameter_distribution["melt_f"] = {"bounds": melt_f_bounds, "dists": "unif"}
 
         # temp_bias
-        temp_bias_control = gdir.settings['temp_bias']
+        temp_bias_control = gdir.settings["temp_bias"]
         temp_bias_bounds = [
             max(temp_bias_control - temp_bias_sample_interval, temp_bias_min),
-            min(temp_bias_control + temp_bias_sample_interval, temp_bias_max)]
-        gdir.settings['temp_bias_min'] = temp_bias_bounds[0]
-        gdir.settings['temp_bias_max'] = temp_bias_bounds[1]
-        parameter_distribution['temp_bias'] = {
-            'bounds': temp_bias_bounds,
-            'dists': 'unif'
+            min(temp_bias_control + temp_bias_sample_interval, temp_bias_max),
+        ]
+        gdir.settings["temp_bias_min"] = temp_bias_bounds[0]
+        gdir.settings["temp_bias_max"] = temp_bias_bounds[1]
+        parameter_distribution["temp_bias"] = {
+            "bounds": temp_bias_bounds,
+            "dists": "unif",
         }
 
         # now convert to format which is expected by SALib
         num_vars = 0
         problem = {
-            'names': [],
-            'bounds': [],
-            'dists': [],
+            "names": [],
+            "bounds": [],
+            "dists": [],
         }
         for key in parameter_distribution:
             num_vars += 1
-            problem['names'].append(key)
-            problem['bounds'].append(parameter_distribution[key]['bounds'])
-            problem['dists'].append(parameter_distribution[key]['dists'])
-        problem['num_vars'] = num_vars
+            problem["names"].append(key)
+            problem["bounds"].append(parameter_distribution[key]["bounds"])
+            problem["dists"].append(parameter_distribution[key]["dists"])
+        problem["num_vars"] = num_vars
 
         # create a sample of parameters
-        param_values = sampler.sample(problem, nr_samples,
-                                      calc_second_order=False)
+        param_values = sampler.sample(problem, nr_samples, calc_second_order=False)
 
-        return param_values, problem['names']
+        return param_values, problem["names"]
 
     def calculate_and_add_total_runoff(self, ds):
-        """
-        Calculate total annual and monthly runoff from runoff components.
+        """Get total annual and monthly runoff from runoff components.
 
         Parameters
         ----------
@@ -245,50 +259,61 @@ class Calibrator:
         -------
 
         """
-        ds['runoff_monthly'] = (ds['melt_off_glacier_monthly'] +
-                                ds['melt_on_glacier_monthly'] +
-                                ds['liq_prcp_off_glacier_monthly'] +
-                                ds['liq_prcp_on_glacier_monthly'])
+        ds["runoff_monthly"] = (
+            ds["melt_off_glacier_monthly"]
+            + ds["melt_on_glacier_monthly"]
+            + ds["liq_prcp_off_glacier_monthly"]
+            + ds["liq_prcp_on_glacier_monthly"]
+        )
         ds.runoff_monthly.attrs = {
-            'unit': 'kg month-1',
-            'description': (
-                'Monthly glacier runoff from sum of monthly melt and liquid '
-                'precipitation on and off the glacier using a fixed-gauge with '
-                'a glacier minimum reference area from year 2000'
-            )
+            "unit": "kg month-1",
+            "description": (
+                "Monthly glacier runoff from sum of monthly melt and liquid "
+                "precipitation on and off the glacier using a fixed-gauge with "
+                "a glacier minimum reference area from year 2000"
+            ),
         }
 
-        ds['runoff'] = (ds['melt_off_glacier'] + ds['melt_on_glacier'] +
-                        ds['liq_prcp_off_glacier'] + ds['liq_prcp_on_glacier'])
+        ds["runoff"] = (
+            ds["melt_off_glacier"]
+            + ds["melt_on_glacier"]
+            + ds["liq_prcp_off_glacier"]
+            + ds["liq_prcp_on_glacier"]
+        )
         ds.runoff.attrs = {
-            'unit': 'kg yr-1',
-            'description': (
-                'Annual glacier runoff: sum of annual melt and liquid '
-                'precipitation on and off the glacier using a fixed-gauge with '
-                'a glacier minimum reference area from year 2000'
-            )
+            "unit": "kg yr-1",
+            "description": (
+                "Annual glacier runoff: sum of annual melt and liquid "
+                "precipitation on and off the glacier using a fixed-gauge with "
+                "a glacier minimum reference area from year 2000"
+            ),
         }
 
         return ds
 
     def add_specific_mb(self, ds, mb_model, fls, time_resolution, unit):
-        """
-        Calculate specific mass-balance in mm w.e. from a volume change time
-        series.
+        """Get specific mass-balance in mm w.e. from a volume change
+        time series.
 
         Parameters
         ----------
         ds
+        mb_model
+        fls
+        time_resolution
+        unit
 
         Returns
         -------
 
         """
         specific_mb = mb_model.get_specific_mb(
-            fls=fls, year=ds.time[:-1].values, time_resolution=time_resolution)
+            fls=fls, year=ds.time[:-1].values, time_resolution=time_resolution
+        )
         ds = ds.assign(
             specific_mb=xr.DataArray(
-                specific_mb, dims='time', coords={'time': ds.time[:-1]})
+                specific_mb, dims="time", coords={"time": ds.time[:-1]}
+            )
             .reindex(time=ds.time)  # adds last coord, fills with NaN
             .broadcast_like(ds.volume)
         )
@@ -298,132 +323,192 @@ class Calibrator:
 
         return self.add_specific_mb_attrs(ds, unit)
 
-    def add_annual_cumulative(self, ds, var, year_coord="calendar_year",
-                              cum_var_suffix="calendar_cum"):
-        out_var = f"{var}_{cum_var_suffix}"
+    def add_annual_cumulative(
+        self,
+        ds,
+        var,
+        year_coord="calendar_year",
+        cumulative_suffix="calendar_cumulative",
+    ):
+        """
+
+        Parameters
+        ----------
+        ds
+        var
+        year_coord
+        cumulative_suffix
+
+        Returns
+        -------
+
+        """
+        out_var = f"{var}_{cumulative_suffix}"
 
         # add "calendar_year" if not available
         if year_coord not in ds.coords:
             # Derive integer year from float-year time coordinate
-            year = np.floor(ds['time']).astype(int)
+            year = np.floor(ds["time"]).astype(int)
             # Attach year as coordinate for grouping
-            ds = ds.assign_coords({year_coord: ('time', year.data)})
+            ds = ds.assign_coords({year_coord: ("time", year.data)})
 
         def _cumsum(x):
-            return x.cumsum(dim='time')
+            return x.cumsum(dim="time")
 
-        annual_cum = ds[var].groupby(year_coord).map(_cumsum)
+        annual_cumulative = ds[var].groupby(year_coord).map(_cumsum)
 
         # Store back into the same dataset and adapt description
-        ds[out_var] = annual_cum
+        ds[out_var] = annual_cumulative
         attrs = ds[out_var].attrs
-        attrs['description'] = (f"cumulated over {year_coord}")
+        attrs["description"] = f"cumulated over {year_coord}"
         ds[out_var].attrs = attrs
 
         return ds
 
     def add_specific_mb_attrs(self, ds, unit):
-        ds.specific_mb.attrs = {
-            'unit': unit,
-            'description': ('Specific mass-balance')
-        }
+        """
+
+        Parameters
+        ----------
+        ds
+        unit
+
+        Returns
+        -------
+
+        """
+        ds.specific_mb.attrs = {"unit": unit, "description": ("Specific mass-balance")}
 
         return ds
 
     def add_snowline_attrs(self, ds, inf_values=None):
+        """
+
+        Parameters
+        ----------
+        ds
+        inf_values
+
+        Returns
+        -------
+
+        """
         ds.snowline.attrs = {
-            'unit': 'm',
-            'description': ('Snowline altitude'),
-            'inf_values': str(inf_values)
+            "unit": "m",
+            "description": ("Snowline altitude"),
+            "inf_values": str(inf_values),
         }
 
         return ds
 
-    def calibrate_mb_and_create_datacubes(
+    def get_calibrated_datacubes(
         self,
         mb_model_class,
         ref_mb: float,
         ref_mb_err: float,
-        ref_mb_unit: str = 'kg m-2 yr-1',
+        ref_mb_unit: str = "kg m-2 yr-1",
         ref_mb_period: str = "",
         gdir: GlacierDirectory = None,
         first_guess_settings: str = "",
-        datacubes_requested: str | list = 'monthly',
+        datacube_types: str | list[str] = "monthly",
         calibration_filesuffix: str = "",
-        calibration_strategy: str = None,
+        calibration_strategy: str = "",
         mcs_sampling_settings: dict = None,
         calibration_parameters_control: dict = None,
         calibration_parameters_mcs: dict = None,
         quantiles: list = None,
-        climate_input_filesuffix: str = None,
+        climate_input_filesuffix: str = "",
         show_log: bool = False,
         multiprocessing_during_datacube_creation: bool = True,
         **kwargs,
     ) -> dict:
-        """Calibrate model with provided reference mass balance and generate
-        resulting model datacube. This also includes a uncertainty propagation
-        through a Monte Carlo simulation.
+        """Calibrate models and generate datacubes.
+
+        Uses the provided reference mass balance to calibrate models and
+        generate model datacubes. These also include an uncertainty
+        propagation through a Monte Carlo simulation.
 
         Parameters
         ----------
-        gdir
-        mb_model_class
-        ref_mb
-        ref_mb_err
-        ref_mb_unit
-        ref_mb_period
-        first_guess_settings: str
+        gdir : GlacierDirectory
+            OGGM glacier directory.
+        mb_model_class : oggm.core.massbalance.MassBalanceModel
+            OGGM mass balance model class.
+        ref_mb : float
+            Reference mass balance.
+        ref_mb_err : float
+            Reference mass balance uncertainty.
+        ref_mb_unit : str, default "kg m-2 yr-1"
+            Unit used for the reference mass balance.
+        ref_mb_period : str, optional
+            Measurement period for the reference mass balance.
+        first_guess_settings: str, optional
             the mb parameters which should be used as a first guess
-        datacubes_requested: str or list
-            What data the returned datacubes should contain. You either can
-            select one or provide a list. Options are:
-            'monthly': monthly volume, area, length and mass-balance
-            'annual_hydro': annual volume, area, length and mass-balance, and annual
-              and monthly runoff components
-            'daily_smb': daily mass-balance
-            Default: 'monthly'
+        datacube_types: str or list[str], default "monthly"
+            Desired datacube types. Select one or provide a list.
+            Options are:
+
+                * ``monthly``: monthly volume, area, length and mass
+                  balance.
+                * ``annual_hydro``: annual volume, area, length and mass
+                  balance, and annual and monthly runoff components.
+                * ``daily_smb``: daily mass balance.
+
         calibration_filesuffix: str
-            the filesuffix used for all outputs of this datacube creation
+            The filesuffix used for all outputs of this method.
         calibration_strategy: str
-            A string describing the current calibration strategy.
-            E.g. "OGGM model X calibrated with data from Y over the period Z."
-        mcs_sampling_settings: dict
-            Defines the settings of the Monte Carlo simulation parameter
-            sampling. For default values look at signature of
-            Calibrator.get_mcs_parameter_sample.
-        calibration_parameters_control: dict
-            The order of calibration parameters for the control run. Default is
-            {"calibrate_param1": "melt_f", "calibrate_param2": "prcp_fac",
-            "calibrate_param3": "temp_bias",}
-        calibration_parameters_mcs: dict
-            The order of calibration parameters for the Monte Carlo simulation
-            runs. Default is {"calibrate_param1": "prcp_fac",
-            "calibrate_param2": "melt_f", "calibrate_param3": "temp_bias",}
-        quantiles: list
+            Text describing the current calibration strategy, e.g.
+            "OGGM model X calibrated with data from Y over the period Z."
+        mcs_sampling_settings: dict, default None
+            Settings for Monte Carlo simulation parameter sampling. For
+            default values look at signature of
+            ``Calibrator.get_mcs_parameter_sample``.
+        calibration_parameters_control: dict, default None
+            The order of calibration parameters for the control run.
+            If None, defaults to::
+
+                {
+                    "calibrate_param1": "melt_f",
+                    "calibrate_param2": "prcp_fac",
+                    "calibrate_param3": "temp_bias",
+                }
+
+        calibration_parameters_mcs: dict, default None
+            The order of calibration parameters for the Monte Carlo
+            simulation runs. If None, defaults to::
+
+                {
+                    "calibrate_param1": "prcp_fac",
+                    "calibrate_param2": "melt_f",
+                    "calibrate_param3": "temp_bias",
+                }
+
+        quantiles: list, default None
             The quantiles used for the aggregation of the Monte Carlo simulation
-            results, including labels for the final datacube. Default is
-            [0.05, 0.15, 0.25, 0.50, 0.75, 0.85, 0.95]
-        climate_input_filesuffix: str
+            results, including labels for the final datacube. If None,
+            defaults to [0.05, 0.15, 0.25, 0.50, 0.75, 0.85, 0.95].
+        climate_input_filesuffix: str, optional
             The filesuffix of the climate input file.
-        show_log: bool
-            If some basic logs should be shown during execution. Default is
-            False.
+        show_log: bool, default False
+            Show some basic logs during execution if True.
         kwargs: dict
-            kwargs to pass to the mb_model_class instance
+            kwargs to pass to the mb_model_class instance.
 
         Returns
         -------
-        xr.Dataset
-            The model datacube generated by using the provided data for
+        dict
+            The model datacubes generated by using the provided data for
             calibration, including uncertainties.
 
         """
 
-        if calibration_strategy is None:
-            raise ValueError("You must provide a description of the currently "
-                             "applied calibration strategy in the argument "
-                             "'calibration_strategy'. (e.g. OGGM model X "
-                             "calibrated with data from Y over the period Z.)")
+        if not calibration_strategy:
+            raise ValueError(
+                "You must provide a description of the currently "
+                "applied calibration strategy in the argument "
+                "'calibration_strategy'. (e.g. OGGM model X "
+                "calibrated with data from Y over the period Z.)"
+            )
 
         if gdir is None:
             gdir = self.gdir
@@ -432,38 +517,41 @@ class Calibrator:
             model_name = mb_model_class.__name__
             calibration_filesuffix = f"{model_name}_{ref_mb_period}"
 
-        if climate_input_filesuffix is None:
+        if not climate_input_filesuffix:
             # for MySfcTypeTIModel we often use partial
-            climate_input_filesuffix = '_era_monthly'
-            climate_input_filesuffix_daily = '_era_daily'
+            climate_input_filesuffix = "_era_monthly"
+            climate_input_filesuffix_daily = "_era_daily"
             if isinstance(mb_model_class, partial):
-                if mb_model_class.keywords['mb_model_class'].__name__ in ['DailyTIModel']:
+                if mb_model_class.keywords["mb_model_class"].__name__ in [
+                    "DailyTIModel"
+                ]:
                     climate_input_filesuffix = climate_input_filesuffix_daily
-            elif mb_model_class.__name__ in ['SfcTypeTIModel']:
-                if inspect.signature(
-                        mb_model_class.__init__
-                ).parameters['mb_model_class'].default.__name__ in ['DailyTIModel']:
+            elif mb_model_class.__name__ in ["SfcTypeTIModel"]:
+                if inspect.signature(mb_model_class.__init__).parameters[
+                    "mb_model_class"
+                ].default.__name__ in ["DailyTIModel"]:
                     climate_input_filesuffix = climate_input_filesuffix_daily
-            elif mb_model_class.__name__ in ['DailyTIModel']:
+            elif mb_model_class.__name__ in ["DailyTIModel"]:
                 climate_input_filesuffix = climate_input_filesuffix_daily
 
         # we need to extend the climate file to full calendar years to work with
         # OGGM, at the end we restore the original file again
-        fp_climate = gdir.get_filepath('climate_historical',
-                                       filesuffix=climate_input_filesuffix + '{}')
-        with xr.open_dataset(fp_climate.format('')) as ds_clim:
+        fp_climate = gdir.get_filepath(
+            "climate_historical", filesuffix=climate_input_filesuffix + "{}"
+        )
+        with xr.open_dataset(fp_climate.format("")) as ds_clim:
             ds_clim = ds_clim.load()
         # save the original file with suffix '_original' for later
-        ds_clim.to_netcdf(fp_climate.format('_original'))
+        ds_clim.to_netcdf(fp_climate.format("_original"))
         ds_clim, last_available_date = extend_to_full_calendar_year(ds_clim)
-        ds_clim.to_netcdf(fp_climate.format(''))
+        ds_clim.to_netcdf(fp_climate.format(""))
 
         # check if we are working with SfcTypeTIModel for snowline
         save_snowline = False
         if isinstance(mb_model_class, partial):
-            if mb_model_class.func.__name__ in ['SfcTypeTIModel']:
+            if mb_model_class.func.__name__ in ["SfcTypeTIModel"]:
                 save_snowline = True
-        elif mb_model_class.__name__ in ['SfcTypeTIModel']:
+        elif mb_model_class.__name__ in ["SfcTypeTIModel"]:
             save_snowline = True
 
         # we apply the kwargs to the mb_model class here, to be sure all
@@ -484,13 +572,13 @@ class Calibrator:
         # define what should be the default settings we use as first guess for
         # control calibration
         gdir.settings_filesuffix = first_guess_settings
-        prcp_fac_fg = gdir.settings['prcp_fac']
-        melt_f_fg = gdir.settings['melt_f']
-        temp_bias_fg = gdir.settings['temp_bias']
+        prcp_fac_fg = gdir.settings["prcp_fac"]
+        melt_f_fg = gdir.settings["melt_f"]
+        temp_bias_fg = gdir.settings["temp_bias"]
 
         # conduct a control calibration, this is the approach without MCS
         control_filesuffix = f"_{calibration_filesuffix}_control"
-        wrkflw_return = workflow.execute_entity_task(
+        workflow_return = workflow.execute_entity_task(
             tasks.mb_calibration_from_scalar_mb,
             gdir,
             settings_filesuffix=control_filesuffix,
@@ -505,29 +593,33 @@ class Calibrator:
             melt_f=melt_f_fg,
             temp_bias=temp_bias_fg,
             mb_model_class=mb_model_class,
-            filename='climate_historical',
+            filename="climate_historical",
             input_filesuffix=climate_input_filesuffix,
             return_mb_model=True,
         )
         # the finally calibrated mass balance model is returned because of
         # return_mb_model=True
-        mb_model_control = wrkflw_return[0][1]
+        mb_model_control = workflow_return[0][1]
 
         # now sample parameters of control calibration
         if mcs_sampling_settings is None:
             mcs_sampling_settings = {}
+        elif not isinstance(mcs_sampling_settings, dict):
+            raise TypeError("MCS sampling settings must be a dictionary.")
         parameter_sample, parameter_names = self.get_mcs_parameter_sample(
-            gdir=gdir, control_filesuffix=control_filesuffix,
-            **mcs_sampling_settings)
+            gdir=gdir, control_filesuffix=control_filesuffix, **mcs_sampling_settings
+        )
 
         # now conduct MCS by execute calibration for each sample
         gdir.observations_filesuffix = control_filesuffix
-        ref_mb_control = gdir.observations['ref_mb']
+        ref_mb_control = gdir.observations["ref_mb"]
 
         if show_log:
-            print(f"{calibration_filesuffix}:\n"
-                  f"  Starting Monte Carlo Simulation for "
-                  f"{parameter_sample.shape[0]} ensemble members.")
+            print(
+                f"{calibration_filesuffix}:\n"
+                f"  Starting Monte Carlo Simulation for "
+                f"{parameter_sample.shape[0]} ensemble members."
+            )
 
         # prepare the settings for individual mcs runs for multiprocessing,
         # define here kwargs which are individual for each run
@@ -537,38 +629,41 @@ class Calibrator:
             param_filesuffix = f"_{calibration_filesuffix}_{i}"
             all_param_filesuffix.append(param_filesuffix)
             all_mcs_runs.append(
-                (gdir, dict(
-                    settings_filesuffix=param_filesuffix,
-                    observations_filesuffix=param_filesuffix,
-                    ref_mb=param_val[parameter_names.index('ref_mb')],
-                    prcp_fac=param_val[parameter_names.index('prcp_fac')],
-                    melt_f=param_val[parameter_names.index('melt_f')],
-                    temp_bias=param_val[parameter_names.index('temp_bias')],
-                ))
+                (
+                    gdir,
+                    dict(
+                        settings_filesuffix=param_filesuffix,
+                        observations_filesuffix=param_filesuffix,
+                        ref_mb=param_val[parameter_names.index("ref_mb")],
+                        prcp_fac=param_val[parameter_names.index("prcp_fac")],
+                        melt_f=param_val[parameter_names.index("melt_f")],
+                        temp_bias=param_val[parameter_names.index("temp_bias")],
+                    ),
+                )
             )
 
         # execute mcs runs with execute_entity_task for multiprocessing,
         # kwargs defined below are the same for all runs
-        old_continue_one_error = cfg.PARAMS['continue_on_error']
-        cfg.PARAMS['continue_on_error'] = True
+        old_continue_one_error = cfg.PARAMS["continue_on_error"]
+        cfg.PARAMS["continue_on_error"] = True
         mcs_out = workflow.execute_entity_task(
             mcs_mb_calibration_workflow,
             all_mcs_runs,
             settings_parent_filesuffix=control_filesuffix,
             mb_model_class=mb_model_class,
-            filename='climate_historical',
+            filename="climate_historical",
             input_filesuffix=climate_input_filesuffix,
-            ref_mb_period=ref_mb_control['period'],
-            ref_mb_err=ref_mb_control['err'],
-            ref_mb_unit=ref_mb_control['unit'],
+            ref_mb_period=ref_mb_control["period"],
+            ref_mb_err=ref_mb_control["err"],
+            ref_mb_unit=ref_mb_control["unit"],
             calibration_parameters=calibration_parameters_mcs,
         )
-        cfg.PARAMS['continue_on_error'] = old_continue_one_error
+        cfg.PARAMS["continue_on_error"] = old_continue_one_error
 
         if not multiprocessing_during_datacube_creation:
             # this is for testing a bug on the cluster
-            old_multiprocessing = cfg.PARAMS['use_multiprocessing']
-            cfg.PARAMS['use_multiprocessing'] = False
+            old_multiprocessing = cfg.PARAMS["use_multiprocessing"]
+            cfg.PARAMS["use_multiprocessing"] = False
 
         # here we keep only working mcs runs and their mb_models
         working_samples = []
@@ -580,41 +675,57 @@ class Calibrator:
             mb_model_samples.append(out)
 
         if show_log:
-            print(f"  Finished Monte Carlo Simulation: {len(working_samples)} "
-                  f"ensemble members for output aggregation available.\n"
-                  f"  Start generating datacubes")
+            print(
+                f"  Finished Monte Carlo Simulation: {len(working_samples)} "
+                f"ensemble members for output aggregation available.\n"
+                f"  Start generating datacubes"
+            )
 
         datacube_dict = {}
-        if isinstance(datacubes_requested, str):
-            datacubes_requested = [datacubes_requested]
+        if isinstance(datacube_types, str):
+            datacube_types = [datacube_types]
 
-        for datacube_request in datacubes_requested:
+        for datacube_request in datacube_types:
             if show_log:
                 print(f"    Start generation of {datacube_request} datacube")
 
-            if datacube_request in ['annual_hydro', 'monthly']:
+            if datacube_request in ["annual_hydro", "monthly"]:
                 # define kwargs which are individual for each run
                 all_sample_runs = []
                 for sample_filesuffix in working_samples + [control_filesuffix]:
                     all_sample_runs.append(
-                        (gdir, dict(
-                            settings_filesuffix=sample_filesuffix,
-                            output_filesuffix=f"{sample_filesuffix}_{datacube_request}",
-                        ))
+                        (
+                            gdir,
+                            dict(
+                                settings_filesuffix=sample_filesuffix,
+                                output_filesuffix=f"{sample_filesuffix}_{datacube_request}",
+                            ),
+                        )
                     )
-            if datacube_request == 'annual_hydro':
-                datacube_vars = ['volume', 'area', 'length', 'off_area',
-                                 'on_area', 'melt_off_glacier', 'melt_on_glacier',
-                                 'liq_prcp_off_glacier', 'liq_prcp_on_glacier',
-                                 'snowfall_off_glacier', 'snowfall_on_glacier',
-                                 'melt_off_glacier_monthly',
-                                 'melt_on_glacier_monthly',
-                                 'liq_prcp_off_glacier_monthly',
-                                 'liq_prcp_on_glacier_monthly',
-                                 'snowfall_off_glacier_monthly',
-                                 'snowfall_on_glacier_monthly',
-                                 'runoff_monthly', 'runoff', 'specific_mb',
-                                 'runoff_monthly_cumulative']
+            if datacube_request == "annual_hydro":
+                datacube_vars = [
+                    "volume",
+                    "area",
+                    "length",
+                    "off_area",
+                    "on_area",
+                    "melt_off_glacier",
+                    "melt_on_glacier",
+                    "liq_prcp_off_glacier",
+                    "liq_prcp_on_glacier",
+                    "snowfall_off_glacier",
+                    "snowfall_on_glacier",
+                    "melt_off_glacier_monthly",
+                    "melt_on_glacier_monthly",
+                    "liq_prcp_off_glacier_monthly",
+                    "liq_prcp_on_glacier_monthly",
+                    "snowfall_off_glacier_monthly",
+                    "snowfall_on_glacier_monthly",
+                    "runoff_monthly",
+                    "runoff",
+                    "specific_mb",
+                    "runoff_monthly_cumulative",
+                ]
 
                 # run dynamic model with different calibration options
                 # kwargs which are the same for all runs, can be provided directly
@@ -627,12 +738,17 @@ class Calibrator:
                     ys=2000,
                     store_monthly_hydro=True,
                     mb_model_class=mb_model_class,
-                    climate_filename='climate_historical',
+                    climate_filename="climate_historical",
                     climate_input_filesuffix=climate_input_filesuffix,
                 )
-            elif datacube_request == 'monthly':
-                datacube_vars = ['volume', 'area', 'length', 'specific_mb',
-                                 'specific_mb_calendar_cum']
+            elif datacube_request == "monthly":
+                datacube_vars = [
+                    "volume",
+                    "area",
+                    "length",
+                    "specific_mb",
+                    "specific_mb_calendar_cum",
+                ]
 
                 # run dynamic model with different calibration options
                 # kwargs which are the same for all runs, can be provided directly
@@ -642,76 +758,85 @@ class Calibrator:
                     fixed_geometry_spinup_yr=2000,
                     ys=2000,
                     store_monthly_step=True,
-                    mb_elev_feedback='monthly',
+                    mb_elev_feedback="monthly",
                     mb_model_class=mb_model_class,
-                    climate_filename='climate_historical',
+                    climate_filename="climate_historical",
                     climate_input_filesuffix=climate_input_filesuffix,
                 )
 
             # create a xarray datacube including all ensemble members
-            if datacube_request in ['annual_hydro', 'monthly']:
+            if datacube_request in ["annual_hydro", "monthly"]:
                 # compile run outputs and merge
                 ds_all = []
                 # open each ensemble member and add a new coordinate for later
                 # merging
                 for sample_filesuffix, mb_model in zip(
                     working_samples + [control_filesuffix],
-                    mb_model_samples + [mb_model_control]
+                    mb_model_samples + [mb_model_control],
                 ):
                     ds_tmp = utils.compile_run_output(
-                        gdir,
-                        input_filesuffix=f"{sample_filesuffix}_{datacube_request}")
+                        gdir, input_filesuffix=f"{sample_filesuffix}_{datacube_request}"
+                    )
 
-                    if datacube_request == 'annual_hydro':
+                    if datacube_request == "annual_hydro":
                         ds_tmp = self.calculate_and_add_total_runoff(ds_tmp)
-                        cum_var = 'runoff_monthly_cumulative'
-                        var = 'runoff_monthly'
-                        ds_tmp[cum_var] = ds_tmp[var].cumsum(dim='month_2d')
-                        ds_tmp[cum_var].attrs['description'] = (
-                            f"Cumulative {ds_tmp[var].attrs['description']}"
-                        )
-                        ds_tmp[cum_var].attrs['unit'] = 'kg'
-                        mb_unit = 'mm w.e. yr-1'
-                        time_resolution = 'annual'
+                        cum_var = "runoff_monthly_cumulative"
+                        var = "runoff_monthly"
+                        ds_tmp[cum_var] = ds_tmp[var].cumsum(dim="month_2d")
+                        ds_tmp[cum_var].attrs[
+                            "description"
+                        ] = f"Cumulative {ds_tmp[var].attrs['description']}"
+                        ds_tmp[cum_var].attrs["unit"] = "kg"
+                        mb_unit = "mm w.e. yr-1"
+                        time_resolution = "annual"
                     else:
-                        mb_unit = 'mm w.e. month-1'
-                        time_resolution = 'monthly'
-                    fls = gdir.read_pickle('inversion_flowlines')
+                        mb_unit = "mm w.e. month-1"
+                        time_resolution = "monthly"
+                    fls = gdir.read_pickle("inversion_flowlines")
                     ds_tmp = self.add_specific_mb(
-                        ds_tmp, mb_model=mb_model, fls=fls,
-                        time_resolution=time_resolution, unit=mb_unit)
-                    if datacube_request == 'monthly':
+                        ds_tmp,
+                        mb_model=mb_model,
+                        fls=fls,
+                        time_resolution=time_resolution,
+                        unit=mb_unit,
+                    )
+                    if datacube_request == "monthly":
                         # add cumulative ouput
-                        ds_tmp = self.add_annual_cumulative(ds_tmp,
-                                                            var='specific_mb')
-                        ds_tmp["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
+                        ds_tmp = self.add_annual_cumulative(ds_tmp, var="specific_mb")
+                        ds_tmp["specific_mb_calendar_cum"].attrs["unit"] = "mm w.e."
                     ds_tmp = ds_tmp[datacube_vars]
 
                     # keep only data from the orignal climate file (we need full
                     # calendar years to work within OGGM)
-                    if datacube_request == 'monthly':
+                    if datacube_request == "monthly":
                         ds_tmp = ds_tmp.sel(
-                            time=slice(None,
-                                       utils.date_to_floatyear(
-                                           y=last_available_date.year,
-                                           m=last_available_date.month)))
-                    elif datacube_request == 'annual_hydro':
+                            time=slice(
+                                None,
+                                utils.date_to_floatyear(
+                                    y=last_available_date.year,
+                                    m=last_available_date.month,
+                                ),
+                            )
+                        )
+                    elif datacube_request == "annual_hydro":
                         ds_tmp = mask_mixed_year_month(
-                            ds=ds_tmp, last_available=last_available_date)
+                            ds=ds_tmp, last_available=last_available_date
+                        )
                     else:
                         raise NotImplementedError(f"{datacube_request}")
 
                     # add resulting dataset for merging
                     if sample_filesuffix == control_filesuffix:
                         ds_control = ds_tmp.expand_dims(member=["Control"])
-                    ds_tmp.coords['sample_name'] = sample_filesuffix
-                    ds_tmp = ds_tmp.expand_dims('sample_name')
+                    ds_tmp.coords["sample_name"] = sample_filesuffix
+                    ds_tmp = ds_tmp.expand_dims("sample_name")
                     ds_all.append(ds_tmp)
 
                 # merge all ensemble members into a single dataset
-                ds_all = xr.combine_by_coords(ds_all, fill_value=np.nan,
-                                              combine_attrs="override")
-            elif datacube_request == 'daily_smb':
+                ds_all = xr.combine_by_coords(
+                    ds_all, fill_value=np.nan, combine_attrs="override"
+                )
+            elif datacube_request == "daily_smb":
                 # define daily float year timeseries
                 y1 = int(mb_model_control.ye)
                 mb_years = utils.float_years_timeseries(
@@ -722,18 +847,18 @@ class Calibrator:
                 smb_all = []
                 if save_snowline:
                     snowline_all = []
-                fls = gdir.read_pickle('inversion_flowlines')
+                fls = gdir.read_pickle("inversion_flowlines")
                 for sample_filesuffix, mb_model in zip(
                     working_samples + [control_filesuffix],
-                    mb_model_samples + [mb_model_control]
+                    mb_model_samples + [mb_model_control],
                 ):
                     smb_tmp = mb_model.get_specific_mb(
-                        fls=fls, year=mb_years, time_resolution="daily")
+                        fls=fls, year=mb_years, time_resolution="daily"
+                    )
                     if save_snowline:
                         # use isclose to avoid rounding errors
                         snowline_yr = np.isclose(
-                            mb_model.snowline_year[:, None], mb_years,
-                            rtol=1e-10
+                            mb_model.snowline_year[:, None], mb_years, rtol=1e-10
                         ).any(axis=1)
                         assert snowline_yr.sum() == len(mb_years)
                         snowline_tmp = mb_model.snowline[snowline_yr]
@@ -742,12 +867,14 @@ class Calibrator:
                         if np.inf in inf_values:
                             snowline_tmp = np.where(
                                 np.isposinf(snowline_tmp),
-                                inf_values[np.inf], snowline_tmp
+                                inf_values[np.inf],
+                                snowline_tmp,
                             )
                         if -np.inf in inf_values:
                             snowline_tmp = np.where(
                                 np.isneginf(snowline_tmp),
-                                inf_values[-np.inf], snowline_tmp
+                                inf_values[-np.inf],
+                                snowline_tmp,
                             )
                     if sample_filesuffix == control_filesuffix:
                         smb_control = smb_tmp
@@ -760,45 +887,50 @@ class Calibrator:
                 # combine all ensemble members in a dataset for later quantile
                 # computation
                 ds_all = xr.Dataset(
-                    data_vars=dict(specific_mb=(["sample_name", "time"],
-                                                np.array(smb_all)),),
-                    coords=dict(sample_name=working_samples + [control_filesuffix],
-                                time=mb_years),)
+                    data_vars=dict(
+                        specific_mb=(["sample_name", "time"], np.array(smb_all)),
+                    ),
+                    coords=dict(
+                        sample_name=working_samples + [control_filesuffix],
+                        time=mb_years,
+                    ),
+                )
                 ds_all["time"].attrs = {"description": "Floating year"}
-                ds_all = self.add_specific_mb_attrs(ds_all,
-                                                    unit='mm w.e. day-1')
+                ds_all = self.add_specific_mb_attrs(ds_all, unit="mm w.e. day-1")
                 if save_snowline:
-                    ds_all['snowline'] = (("sample_name", "time"),
-                                          np.array(snowline_all))
-                    ds_all = self.add_snowline_attrs(ds_all,
-                                                     inf_values=inf_values)
+                    ds_all["snowline"] = (
+                        ("sample_name", "time"),
+                        np.array(snowline_all),
+                    )
+                    ds_all = self.add_snowline_attrs(ds_all, inf_values=inf_values)
 
                 ds_control = xr.Dataset(
-                    data_vars=dict(specific_mb=(["member", "time"],
-                                                [smb_control])),
+                    data_vars=dict(specific_mb=(["member", "time"], [smb_control])),
                     coords=dict(member=["Control"], time=mb_years),
                 )
                 ds_control["time"].attrs = {"description": "Floating year"}
-                ds_control = self.add_specific_mb_attrs(ds_control,
-                                                        unit='mm w.e. day-1')
+                ds_control = self.add_specific_mb_attrs(
+                    ds_control, unit="mm w.e. day-1"
+                )
                 if save_snowline:
-                    ds_control['snowline'] = (("member", "time"),
-                                              [snowline_control])
+                    ds_control["snowline"] = (("member", "time"), [snowline_control])
                     ds_control = self.add_snowline_attrs(
-                        ds_control, inf_values=inf_values)
+                        ds_control, inf_values=inf_values
+                    )
 
                 # add cumulative ouput
-                ds_all = self.add_annual_cumulative(ds_all, var='specific_mb')
-                ds_control = self.add_annual_cumulative(ds_control,
-                                                        var='specific_mb')
-                ds_all["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
-                ds_control["specific_mb_calendar_cum"].attrs['unit'] = "mm w.e."
+                ds_all = self.add_annual_cumulative(ds_all, var="specific_mb")
+                ds_control = self.add_annual_cumulative(ds_control, var="specific_mb")
+                ds_all["specific_mb_calendar_cum"].attrs["unit"] = "mm w.e."
+                ds_control["specific_mb_calendar_cum"].attrs["unit"] = "mm w.e."
 
                 # keep only data from the orignal climate file (we need full
                 # calendar years to work within OGGM)
                 last_available_floatyear = utils.date_to_floatyear(
-                    y=last_available_date.year, m=last_available_date.month,
-                    d=last_available_date.day)
+                    y=last_available_date.year,
+                    m=last_available_date.month,
+                    d=last_available_date.day,
+                )
                 ds_all = ds_all.sel(time=slice(None, last_available_floatyear))
                 ds_control = ds_control.sel(time=slice(None, last_available_floatyear))
 
@@ -807,11 +939,12 @@ class Calibrator:
 
             # calculate quantiles and rename, this is the same for all datacubes
             with warnings.catch_warnings():
-                warnings.filterwarnings("ignore",
-                                        message="All-NaN slice encountered",
-                                        category=RuntimeWarning)
-                ds_all = ds_all.quantile(q=quantiles,
-                                         dim='sample_name')
+                warnings.filterwarnings(
+                    "ignore",
+                    message="All-NaN slice encountered",
+                    category=RuntimeWarning,
+                )
+                ds_all = ds_all.quantile(q=quantiles, dim="sample_name")
             ds_all = ds_all.rename({"quantile": "member"})
             # convert float quantile values to str, for mixing with 'Control'
             # make sure to match ordering
@@ -822,23 +955,25 @@ class Calibrator:
             ds_all = xr.concat([ds_control, ds_all], dim="member")
             ds_all.coords["member"].attrs = {
                 "description": "Members include Monte Carlo ensemble percentiles "
-                               f"(calculated out of {len(working_samples)} "
-                               "ensemble members) and a Control run calibrated "
-                               "using median input values."
+                f"(calculated out of {len(working_samples)} "
+                "ensemble members) and a Control run calibrated "
+                "using median input values."
             }
 
-            # convert place holder inf values back for snowline
-            if 'snowline' in ds_all:
+            # convert placeholder inf values back for snowline
+            if "snowline" in ds_all:
                 if np.inf in inf_values:
-                    ds_all['snowline'] = xr.where(
-                        ds_all['snowline'] != inf_values[np.inf],
-                        ds_all['snowline'], np.inf,
+                    ds_all["snowline"] = xr.where(
+                        ds_all["snowline"] != inf_values[np.inf],
+                        ds_all["snowline"],
+                        np.inf,
                         keep_attrs=True,
                     )
                 if -np.inf in inf_values:
-                    ds_all['snowline'] = xr.where(
-                        ds_all['snowline'] != inf_values[-np.inf],
-                        ds_all['snowline'], -np.inf,
+                    ds_all["snowline"] = xr.where(
+                        ds_all["snowline"] != inf_values[-np.inf],
+                        ds_all["snowline"],
+                        -np.inf,
                         keep_attrs=True,
                     )
 
@@ -854,31 +989,32 @@ class Calibrator:
                 print(f"    Finished generation of {datacube_request} datacube")
 
         # we save the original climate data back to the gdir
-        with xr.open_dataset(fp_climate.format('_original')) as ds_clim:
+        with xr.open_dataset(fp_climate.format("_original")) as ds_clim:
             ds_clim = ds_clim.load()
-        ds_clim.to_netcdf(fp_climate.format(''))
-        os.remove(fp_climate.format('_original'))
+        ds_clim.to_netcdf(fp_climate.format(""))
+        os.remove(fp_climate.format("_original"))
 
         if show_log:
             print(f"  Finished generating datacubes\n")
 
         if not multiprocessing_during_datacube_creation:
-            cfg.PARAMS['use_multiprocessing'] = old_multiprocessing
+            cfg.PARAMS["use_multiprocessing"] = old_multiprocessing
 
         return datacube_dict
 
     def get_ref_mb(
-            self,
-            gdir: GlacierDirectory,
-            ref_mb_period: str = None,
-            l1_datacube: xr.Dataset = None,
-            source: str = 'Hugonnet') -> tuple:
+        self,
+        gdir: GlacierDirectory,
+        ref_mb_period: str = None,
+        datacube_l1: xr.Dataset = None,
+        source: str = "Hugonnet",
+    ) -> tuple:
         """Get observed mass balance for a specific reference period.
 
         Parameters
         ----------
         gdir
-        l1_datacube: xr.Dataset
+        datacube_l1: xr.Dataset
             If the reference mass balance should be derived from an observation
             data, which is available in a L1 datacube.
         ref_mb_period: str
@@ -893,7 +1029,7 @@ class Calibrator:
             balance to match with unit, associated uncertainty and valid period.
         """
 
-        if source == 'Hugonnet':
+        if source == "Hugonnet":
             if gdir is None:
                 gdir = self.gdir
             pd_geodetic = utils.get_geodetic_mb_dataframe()
@@ -907,12 +1043,12 @@ class Calibrator:
             raise NotImplementedError(f"Source {source} is not implemented.")
 
     def calibrate(
-            self,
-            gdir: GlacierDirectory,
-            model_matrix: dict = None,
-            l1_datacube: xr.Dataset = None,
-            ignore_errors: bool = False,
-            **kwargs
+        self,
+        gdir: GlacierDirectory,
+        model_matrix: dict = None,
+        datacube_l1: xr.Dataset = None,
+        ignore_errors: bool = False,
+        **kwargs,
     ) -> dict:
         """Calibrate the mass balance model and create L2 datacubes  using a
         model matrix.
@@ -923,13 +1059,13 @@ class Calibrator:
             Glacier directory.
         model_matrix: dict
             Model parameters for various calibration runs.
-        l1_datacube: xr.Dataset
+        datacube_l1: xr.Dataset
             If the reference mass balance should be derived from an observation
             data, which is available in a L1 datacube.
         ignore_errors: bool
             If True any exception raised during the calibration is ignored.
         kwargs: dict
-            kwargs passed on to Clibrator.calibrate_mb_and_create_datacubes
+            kwargs passed on to Calibrator.get_calibrated_datacubes
 
         Returns
         -------
@@ -938,10 +1074,10 @@ class Calibrator:
             parameters in ``model_matrix``
         """
         # Store results
-        l2_datacubes = {}
+        datacubes_l2 = {}
 
-        if l1_datacube is None:
-            l1_datacube = self.l1_datacube
+        if datacube_l1 is None:
+            datacube_l1 = self.datacube_l1
 
         if model_matrix is None:
             model_matrix = self.model_matrix
@@ -954,11 +1090,14 @@ class Calibrator:
                 calibration_filesuffix = f"{matrix_name}_{ref_mb_period}"
 
                 ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period = self.get_ref_mb(
-                    gdir=gdir, l1_datacube=l1_datacube,
-                    ref_mb_period=ref_mb_period, source=source)
+                    gdir=gdir,
+                    datacube_l1=datacube_l1,
+                    ref_mb_period=ref_mb_period,
+                    source=source,
+                )
 
-                if source == 'Hugonnet':
-                    source_description = 'Hugonnet et al. (2021)'
+                if source == "Hugonnet":
+                    source_description = "Hugonnet et al. (2021)"
                 else:
                     source_description = source
 
@@ -972,7 +1111,7 @@ class Calibrator:
                     f"period {ref_mb_period}."
                 )
 
-                l2_datacubes[matrix_name] = self.calibrate_mb_and_create_datacubes(
+                datacubes_l2[matrix_name] = self.get_calibrated_datacubes(
                     gdir=gdir,
                     mb_model_class=mb_model_class,
                     ref_mb=ref_mb,
@@ -981,23 +1120,32 @@ class Calibrator:
                     ref_mb_period=ref_mb_period,
                     calibration_filesuffix=calibration_filesuffix,
                     calibration_strategy=calibration_strategy,
-                    ** kwargs,
+                    **kwargs,
                 )
             except Exception as e:
                 if not ignore_errors:
                     raise
                 print(f"Calibration for {matrix_name} not successful: {e}")
 
-        return l2_datacubes
+        return datacubes_l2
 
 
 @entity_task(log)
 def mcs_mb_calibration_workflow(
-    gdir, settings_filesuffix, settings_parent_filesuffix,
+    gdir,
+    settings_filesuffix,
+    settings_parent_filesuffix,
     observations_filesuffix,
-    mb_model_class, filename, input_filesuffix,
-    ref_mb, ref_mb_period, ref_mb_err, ref_mb_unit,
-    prcp_fac, melt_f, temp_bias,
+    mb_model_class,
+    filename,
+    input_filesuffix,
+    ref_mb,
+    ref_mb_period,
+    ref_mb_err,
+    ref_mb_unit,
+    prcp_fac,
+    melt_f,
+    temp_bias,
     calibration_parameters=None,
 ):
     """
@@ -1043,32 +1191,39 @@ def mcs_mb_calibration_workflow(
 
     # add observations data to observations file
     gdir.observations_filesuffix = observations_filesuffix
-    gdir.observations['ref_mb'] = {'err': ref_mb_err,
-                                   'period': ref_mb_period,
-                                   'value': ref_mb,
-                                   'unit': ref_mb_unit}
+    gdir.observations["ref_mb"] = {
+        "err": ref_mb_err,
+        "period": ref_mb_period,
+        "value": ref_mb,
+        "unit": ref_mb_unit,
+    }
 
     # get bounds from parent
-    bounds_to_define = ['prcp_fac_min', 'prcp_fac_max',
-                        'melt_f_min', 'melt_f_max',
-                        'temp_bias_min', 'temp_bias_max',
-                        ]
+    bounds_to_define = [
+        "prcp_fac_min",
+        "prcp_fac_max",
+        "melt_f_min",
+        "melt_f_max",
+        "temp_bias_min",
+        "temp_bias_max",
+    ]
     gdir.settings_filesuffix = settings_parent_filesuffix
     default_bounds = {}
     for bound in bounds_to_define:
         default_bounds[bound] = gdir.settings[bound]
 
     # create the new settings file with the correct parent_filesuffix
-    utils.ModelSettings(gdir, filesuffix=settings_filesuffix,
-                        reset_parent_filesuffix=True)
+    utils.ModelSettings(
+        gdir, filesuffix=settings_filesuffix, reset_parent_filesuffix=True
+    )
     gdir.settings_filesuffix = settings_filesuffix
-    gdir.settings['use_winter_prcp_fac'] = False
+    gdir.settings["use_winter_prcp_fac"] = False
     # set parent bounds
     for bound in bounds_to_define:
         gdir.settings[bound] = default_bounds[bound]
 
     # the settings here mimic mb_calibration_from_hugonnet_mb
-    wrkflw_return = workflow.execute_entity_task(
+    workflow_output = workflow.execute_entity_task(
         massbalance.mb_calibration_from_scalar_mb,
         gdir,
         settings_filesuffix=settings_filesuffix,
@@ -1082,26 +1237,31 @@ def mcs_mb_calibration_workflow(
         filename=filename,
         input_filesuffix=input_filesuffix,
         return_mb_model=True,
-        )
+    )
     # the finally calibrated mass balance model is returned because of
     # return_mb_model=True
-    mb_model = wrkflw_return[0][1]
+    mb_model = workflow_output[0][1]
 
     return mb_model
 
 
 def extend_to_full_calendar_year(
-    ds: xr.Dataset,
-    time_dim: str = "time",
-    resolution: str | None = None,   # "daily" | "monthly" | None (infer)
-) -> tuple:
-    """
-    Extend an xarray Dataset along `time_dim` to the end of the last calendar
-    year present.
-    - daily: extend to YYYY-12-31 (daily frequency)
-    - monthly: extend to YYYY-12-01 assuming monthly-start timestamps (MS)
+    ds: xr.Dataset, time_dim: str = "time", resolution: str = ""
+) -> tuple or xr.Dataset:
+    """Extend an xarray Dataset along `time_dim` to the end of the last
+    calendar year present.
 
-    Any newly added timestamps are filled with the last available values (LOCF).
+    Any newly added timestamps are filled with the last available values
+    (LOCF).
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    time_dim : str, default "time"
+    resolution : str, optional
+        - daily: extend to YYYY-12-31 (daily frequency).
+        - monthly: extend to YYYY-12-01 assuming monthly start
+        timestamps (MS).
     """
     if time_dim not in ds.coords:
         raise ValueError(f"Dataset has no coordinate '{time_dim}'.")
@@ -1110,7 +1270,7 @@ def extend_to_full_calendar_year(
     if len(t) == 0:
         return ds
 
-    if resolution is None:
+    if not resolution:
         # Infer from median step in days. >= ~28 -> monthly, else daily.
         dt_days = pd.Series(t).diff().dropna().dt.total_seconds() / 86400.0
         med = float(dt_days.median()) if len(dt_days) else np.nan
@@ -1122,11 +1282,14 @@ def extend_to_full_calendar_year(
     if resolution.lower() == "daily":
         new_time = pd.date_range(t[0], year_end, freq="D")
     elif resolution.lower() == "monthly":
-        # Monthly dataset assumed to be on month starts (YYYY-MM-01). End is Dec 1.
+        # Monthly dataset assumed to be on month start (YYYY-MM-01).
+        # Ends December 1.
         end_ms = pd.Timestamp(year=last.year, month=12, day=1)
         new_time = pd.date_range(t[0], end_ms, freq="MS")
     else:
-        raise ValueError("resolution must be one of: None, 'daily', 'monthly'.")
+        raise ValueError(
+            "Accepted resolutions are: 'daily', 'monthly', or leave blank to infer."
+        )
 
     # Reindex introduces NaNs at new timestamps; ffill carries last observed value forward.
     out = ds.reindex({time_dim: new_time}).ffill(time_dim)
@@ -1135,6 +1298,17 @@ def extend_to_full_calendar_year(
 
 
 def mask_mixed_year_month(ds: xr.Dataset, last_available: pd.Timestamp) -> xr.Dataset:
+    """
+
+    Parameters
+    ----------
+    ds
+    last_available
+
+    Returns
+    -------
+
+    """
     last_year = last_available.year
     last_month = last_available.month
 
@@ -1143,9 +1317,8 @@ def mask_mixed_year_month(ds: xr.Dataset, last_available: pd.Timestamp) -> xr.Da
     else:
         year_mask = ds["time"] <= last_year  # dims: (time,)
 
-    ym_mask = (
-        (ds["time"] < last_year) |
-        ((ds["time"] == last_year) & (ds["month_2d"] <= last_month))
+    ym_mask = (ds["time"] < last_year) | (
+        (ds["time"] == last_year) & (ds["month_2d"] <= last_month)
     )
     # ym_mask dims: (time, month_2d)
 
@@ -1166,9 +1339,8 @@ def mask_mixed_year_month(ds: xr.Dataset, last_available: pd.Timestamp) -> xr.Da
 
 class CalibratorCryotempo(Calibrator):
 
-    def __init__(self, model_matrix: dict = None, l1_datacube=None, gdir=None):
-        super().__init__(model_matrix=model_matrix, l1_datacube=l1_datacube,
-                         gdir=gdir)
+    def __init__(self, model_matrix: dict = None, datacube_l1=None, gdir=None):
+        super().__init__(model_matrix=model_matrix, datacube_l1=datacube_l1, gdir=gdir)
 
     def set_model_matrix(
         self,
@@ -1226,7 +1398,7 @@ class CalibratorCryotempo(Calibrator):
             return np.array([datetime.fromtimestamp(t, tz=UTC) for t in ds.t.values])
 
     def get_eolis_mean_dh(self, ds: xr.Dataset) -> np.ndarray:
-        """Get
+        """Get mean elevation change from EOLIS data.
 
         Parameters
         ----------
@@ -1244,10 +1416,9 @@ class CalibratorCryotempo(Calibrator):
         ]
         return np.array(mean_time_series)
 
-    def get_temporal_bounds(self, dates: np.ndarray,
-                            date_start: str,
-                            date_end: str
-                            ) -> tuple:
+    def get_temporal_bounds(
+        self, dates: ArrayLike, date_start: str, date_end: str
+    ) -> tuple:
         """Get start and end dates of geodetic and observational periods.
 
         This matches the nearest available dates for irregular time
@@ -1255,7 +1426,7 @@ class CalibratorCryotempo(Calibrator):
 
         Parameters
         ----------
-        dates : list
+        dates : array_like
             Time index. This may be irregularly spaced.
         date_start : str
             Start year of a desired period.
@@ -1302,8 +1473,9 @@ class CalibratorCryotempo(Calibrator):
         data_start, data_end = self.get_temporal_bounds(
             dates=dates, date_start=date_start, date_end=date_end
         )
-        ref_mb_period = (f"{data_start.strftime('%Y-%m-%d')}_"
-                         f"{data_end.strftime('%Y-%m-%d')}")
+        ref_mb_period = (
+            f"{data_start.strftime('%Y-%m-%d')}_" f"{data_end.strftime('%Y-%m-%d')}"
+        )
 
         calib_frame = pd.DataFrame(
             {
@@ -1337,18 +1509,18 @@ class CalibratorCryotempo(Calibrator):
         return ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period
 
     def get_ref_mb(
-            self,
-            gdir: GlacierDirectory = None,
-            ref_mb_period: str = None,
-            l1_datacube: xr.Dataset = None,
-            source: str = 'Hugonnet'
+        self,
+        gdir: GlacierDirectory = None,
+        ref_mb_period: str = None,
+        datacube_l1: xr.Dataset = None,
+        source: str = "Hugonnet",
     ) -> tuple:
         """Get observed mass balance for a specific reference period.
 
         Parameters
         ----------
         gdir
-        l1_datacube: xr.Dataset
+        datacube_l1: xr.Dataset
             If the reference mass balance should be derived from an observation
             data, which is available in a L1 datacube.
         ref_mb_period: str
@@ -1363,20 +1535,26 @@ class CalibratorCryotempo(Calibrator):
             balance to match with unit, associated uncertainty and valid period.
         """
         if source == "CryoTEMPO-EOLIS":
-            dates = ref_mb_period.split('_')
+            dates = ref_mb_period.split("_")
             date_start = dates[0]
             date_end = dates[1]
 
-            if l1_datacube is None:
-                l1_datacube = self.l1_datacube
+            if datacube_l1 is None:
+                datacube_l1 = self.datacube_l1
 
-            ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period = self.get_geodetic_mb_from_dataset(
-                dataset=l1_datacube,
-                date_start=date_start, date_end=date_end,
+            ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period = (
+                self.get_geodetic_mb_from_dataset(
+                    dataset=datacube_l1,
+                    date_start=date_start,
+                    date_end=date_end,
+                )
             )
 
             return ref_mb, ref_mb_unit, ref_mb_err, ref_mb_period
         else:
             return super().get_ref_mb(
-                gdir=gdir, l1_datacube=l1_datacube, ref_mb_period=ref_mb_period,
-                source=source)
+                gdir=gdir,
+                datacube_l1=datacube_l1,
+                ref_mb_period=ref_mb_period,
+                source=source,
+            )

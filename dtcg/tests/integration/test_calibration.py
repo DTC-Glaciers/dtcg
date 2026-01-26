@@ -17,8 +17,8 @@ limitations under the License.
 import logging
 from datetime import datetime, timedelta
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 from dateutil.tz import UTC
 from oggm import utils
@@ -124,11 +124,12 @@ class TestCalibrator:
             ).rename_axis(index="rgiid")
 
         for ref_mb_period in test_mb.period:
-            compare_mb, compare_mb_unit, compare_mb_err, compare_mb_period = test_calibrator.get_ref_mb(
-                gdir, ref_mb_period=ref_mb_period)
+            compare_mb, compare_mb_unit, compare_mb_err, compare_mb_period = (
+                test_calibrator.get_ref_mb(gdir, ref_mb_period=ref_mb_period)
+            )
             assert isinstance(compare_mb, float)
             assert isinstance(compare_mb_err, float)
-            assert compare_mb_unit == 'kg m-2 yr-1'
+            assert compare_mb_unit == "kg m-2 yr-1"
             assert compare_mb_period == ref_mb_period
 
             test_mb_single = test_mb[test_mb.period == ref_mb_period]
@@ -222,11 +223,14 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
         test_mb["source"] = "Hugonnet"
 
         for ref_mb_period in test_mb.period:
-            compare_mb, compare_mb_unit, compare_mb_err, compare_mb_period = test_calibrator.get_ref_mb(
-                gdir, ref_mb_period=ref_mb_period, source="Hugonnet")
+            compare_mb, compare_mb_unit, compare_mb_err, compare_mb_period = (
+                test_calibrator.get_ref_mb(
+                    gdir, ref_mb_period=ref_mb_period, source="Hugonnet"
+                )
+            )
             assert isinstance(compare_mb, float)
             assert isinstance(compare_mb_err, float)
-            assert compare_mb_unit == 'kg m-2 yr-1'
+            assert compare_mb_unit == "kg m-2 yr-1"
             assert compare_mb_period == ref_mb_period
 
             test_mb_single = test_mb[test_mb.period == ref_mb_period]
@@ -246,27 +250,28 @@ class TestCalibratorCryotempoEolis(TestCalibrator):
     @pytest.mark.parametrize(
         "arg_years,expected",
         [
-            (('2000-01-01', '2004-01-01'),
-             (datetime(2000, 1, 1, tzinfo=UTC), datetime(2003, 11, 11, tzinfo=UTC))),
-            (('2001-01-01', '2003-01-01'),
-             (datetime(2000, 12, 26, tzinfo=UTC), datetime(2003, 1, 15, tzinfo=UTC))),
+            (
+                ("2000-01-01", "2004-01-01"),
+                (datetime(2000, 1, 1, tzinfo=UTC), datetime(2003, 11, 11, tzinfo=UTC)),
+            ),
+            (
+                ("2001-01-01", "2003-01-01"),
+                (datetime(2000, 12, 26, tzinfo=UTC), datetime(2003, 1, 15, tzinfo=UTC)),
+            ),
         ],
     )
     def test_get_temporal_bounds(self, Calibrator, arg_years, expected):
         test_calibrator = Calibrator
         # test_dates = [datetime(i)] for i in
         base_time = datetime(2000, 1, 1, tzinfo=UTC)
-        test_dates = np.array([base_time + timedelta(days=x * 30)
-                               for x in range(48)])
+        test_dates = np.array([base_time + timedelta(days=x * 30) for x in range(48)])
         assert len(test_dates) == 48
 
         test_year_start = arg_years[0]
         test_year_end = arg_years[1]
 
-        data_start, data_end = (
-            test_calibrator.get_temporal_bounds(
-                dates=test_dates, date_start=test_year_start, date_end=test_year_end
-            )
+        data_start, data_end = test_calibrator.get_temporal_bounds(
+            dates=test_dates, date_start=test_year_start, date_end=test_year_end
         )
 
         assert data_start == expected[0]
