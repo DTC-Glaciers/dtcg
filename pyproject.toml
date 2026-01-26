@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dtcg"
-version = "0.6.5"
+version = "1.0.1"
 authors = [
     { name = "DTCG Contributors", email = "" },
 ]
@@ -20,7 +20,7 @@ keywords = [
 ]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
-    "Development Status :: 1 - Planning",
+    "Development Status :: 5 - Production/Stable",
     "Private :: Do Not Upload",
     "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",

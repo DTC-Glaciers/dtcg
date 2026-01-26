@@ -509,7 +509,8 @@ class DatacubeCryotempoEolis:
                 name=data_name,
                 attrs={
                     "units": column_info["unit"],
-                } | eolis_metadata[col],
+                }
+                | eolis_metadata[col],
             )
             eolis_resampled_grids_xarr.coords['t'].attrs = {
                 'standard_name': 'time',
