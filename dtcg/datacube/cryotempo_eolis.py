@@ -1,4 +1,4 @@
-"""Copyright 2025 DTCG Contributors
+"""Copyright 2026 DTCG Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -111,14 +111,26 @@ class DatacubeCryotempoEolis:
             "version",
         ]
 
-    def add_data_to_datacube(self, datacube, gdir):
-        """Every datacube must support this method.
+    def add_data(self: DatacubeCryotempoEolis, datacube: xr.Dataset, gdir):
+        """Add gridded EOLIS data from a glacier directory to a datacube.
 
-        It should be able to add data to the provided datacube and returns the
-        final datacube.
+        Every datacube must support this method. It should be able to add
+        data to the provided datacube and returns the final datacube.
+
+        Parameters
+        ----------
+        datacube
+        gdir
+
+        Returns
+        -------
+        xr.Dataset
         """
-        return self.retrieve_prepare_eolis_gridded_data(oggm_ds=datacube,
-                                                        grid=gdir.grid)
+        # Whilst this is redundant here, other modules implement this
+        # differently. Do not refactor this method.
+        return self.retrieve_prepare_eolis_gridded_data(
+            oggm_ds=datacube, grid=gdir.grid
+        )
 
     def convert_gridded_dataframe_to_array(
         self: DatacubeCryotempoEolis,
@@ -160,7 +172,7 @@ class DatacubeCryotempoEolis:
 
         Returns
         -------
-        tuple[dict[str, np.ndarray], Grid, np.ndarray or None]
+        tuple[dict[str, np.ndarray], Grid, np.ndarray | None]
             - Dictionary of gridded arrays keyed by column name
             - Salem Grid object describing the spatial extent
             - Optional array of sorted time coordinates (if time is used)
@@ -512,10 +524,10 @@ class DatacubeCryotempoEolis:
                 }
                 | eolis_metadata[col],
             )
-            eolis_resampled_grids_xarr.coords['t'].attrs = {
-                'standard_name': 'time',
-                'long_name': 'time since the unix epoch',
-                'units': 'seconds since 1970-01-01 00:00:00',
+            eolis_resampled_grids_xarr.coords["t"].attrs = {
+                "standard_name": "time",
+                "long_name": "time since the unix epoch",
+                "units": "seconds since 1970-01-01 00:00:00",
             }
             # mask to glacier
             if "glacier_mask" in oggm_ds.variables:
@@ -626,7 +638,9 @@ class DatacubeCryotempoEolis:
                 f" (eolis_gridded_{elevation_change_var_name}) within the "
                 "glacier mask.",
                 "comment": f"Computed from eolis_gridded_{elevation_change_var_name}. "
-                + oggm_ds[f"eolis_gridded_{elevation_change_var_name}"].attrs["comment"],
+                + oggm_ds[f"eolis_gridded_{elevation_change_var_name}"].attrs[
+                    "comment"
+                ],
                 "ancillary_var": elevation_change_sigma_var_name,
             },
             elevation_change_sigma_var_name: {
