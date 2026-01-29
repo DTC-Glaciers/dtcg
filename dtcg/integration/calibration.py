@@ -578,7 +578,7 @@ class Calibrator:
 
         # conduct a control calibration, this is the approach without MCS
         control_filesuffix = f"_{calibration_filesuffix}_control"
-        workflow_return = workflow.execute_entity_task(
+        workflow_output = workflow.execute_entity_task(
             tasks.mb_calibration_from_scalar_mb,
             gdir,
             settings_filesuffix=control_filesuffix,
@@ -599,7 +599,7 @@ class Calibrator:
         )
         # the finally calibrated mass balance model is returned because of
         # return_mb_model=True
-        mb_model_control = workflow_return[0][1]
+        mb_model_control = workflow_output[0][1]
 
         # now sample parameters of control calibration
         if mcs_sampling_settings is None:
@@ -1247,7 +1247,7 @@ def mcs_mb_calibration_workflow(
 
 def extend_to_full_calendar_year(
     ds: xr.Dataset, time_dim: str = "time", resolution: str = ""
-) -> tuple or xr.Dataset:
+) -> tuple | xr.Dataset:
     """Extend an xarray Dataset along `time_dim` to the end of the last
     calendar year present.
 
