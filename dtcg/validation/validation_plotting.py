@@ -14,13 +14,23 @@ limitations under the License.
 
 """
 
-from matplotlib.collections import PolyCollection
 import numpy as np
+from matplotlib.collections import PolyCollection
 
 
-def add_line_with_unc(ax, x, y, y_unc, c, label, legend_handles, legend_labels,
-                      label_unc="± uncertainty", alpha=0.25):
-    line, = ax.plot(x, y, color=c, marker='.')
+def add_line_with_unc(
+    ax,
+    x,
+    y,
+    y_unc,
+    c,
+    label,
+    legend_handles,
+    legend_labels,
+    label_unc="± uncertainty",
+    alpha=0.25,
+):
+    (line,) = ax.plot(x, y, color=c, marker=".")
 
     if isinstance(y_unc, list):
         y_lower = y_unc[0]
@@ -29,8 +39,13 @@ def add_line_with_unc(ax, x, y, y_unc, c, label, legend_handles, legend_labels,
         y_lower = y - y_unc
         y_upper = y + y_unc
 
-    band = ax.fill_between(x, y_lower, y_upper,
-                           color=c, alpha=alpha, )
+    band = ax.fill_between(
+        x,
+        y_lower,
+        y_upper,
+        color=c,
+        alpha=alpha,
+    )
     # save here the data for automatic scaling of y-axis later
     band._data_for_scaling = (x, y_lower, y_upper)
 

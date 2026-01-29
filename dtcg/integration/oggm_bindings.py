@@ -61,7 +61,7 @@ class BindingsOggmModel:
     def __init__(
         self,
         base_url: str = "https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2026.1/",
-        rgi_id: str or list[str] = None,
+        rgi_id: str | list[str] = None,
         working_dir: str = None,
         oggm_params: dict | None = None,
         datacube_l1: xr.Dataset = None,
@@ -146,7 +146,7 @@ class BindingsOggmModel:
 
     def init_oggm(
         self,
-        working_dir: str,
+        working_dir: str = "",
         use_multiprocessing: bool = True,
         continue_on_error: bool = True,
         **kwargs,
@@ -755,7 +755,7 @@ class BindingsOggmWrangler(BindingsOggmModel):
         else:
             raise ValueError("No region or subregion name supplied.")
 
-        self.init_oggm(dirname=temp_name, **oggm_params)
+        self.init_oggm(working_dir=temp_name, **oggm_params)
 
         if shapefile_path:  # if user uploads/selects a shapefile
             if isinstance(shapefile_path, str):

@@ -22,37 +22,42 @@ from typing import Iterable, Optional, Union
 import numpy as np
 
 # import metrics from oggm
-from oggm.utils import mad, md, rmsd, corrcoef
+from oggm.utils import corrcoef, mad, md, rmsd
 
 
 def get_supported_metrics():
     # the keys define the column names of the final validation df output
     return {
-        'MeanAbsD': {
-            'fct_name': 'mad',
-            'add_unit': True,
-            'fmt': '.1f',
-            'description': 'Mean Absolute Deviation'},
-        'MeanD': {
-            'fct_name': 'mean_bias',
-            'add_unit': True,
-            'fmt': '.1f',
-            'description': 'Mean Deviation'},
-        'MedianD': {
-            'fct_name': 'median_bias',
-            'add_unit': True,
-            'fmt': '.1f',
-            'description': 'Median Deviation'},
-        'RMSD': {
-            'fct_name': 'rmsd',
-            'add_unit': True,
-            'fmt': '.1f',
-            'description': 'Root Mean Squared Deviation'},
-        'CORRCOEF': {
-            'fct_name': 'corrcoef',
-            'add_unit': False,
-            'fmt': '.2f',
-            'description': 'Pearson correlation coefficient'},
+        "MeanAbsD": {
+            "fct_name": "mad",
+            "add_unit": True,
+            "fmt": ".1f",
+            "description": "Mean Absolute Deviation",
+        },
+        "MeanD": {
+            "fct_name": "mean_bias",
+            "add_unit": True,
+            "fmt": ".1f",
+            "description": "Mean Deviation",
+        },
+        "MedianD": {
+            "fct_name": "median_bias",
+            "add_unit": True,
+            "fmt": ".1f",
+            "description": "Median Deviation",
+        },
+        "RMSD": {
+            "fct_name": "rmsd",
+            "add_unit": True,
+            "fmt": ".1f",
+            "description": "Root Mean Squared Deviation",
+        },
+        "CORRCOEF": {
+            "fct_name": "corrcoef",
+            "add_unit": False,
+            "fmt": ".2f",
+            "description": "Pearson correlation coefficient",
+        },
     }
 
 
@@ -60,12 +65,11 @@ def get_supported_metrics_descriptions():
     supported_metrics = get_supported_metrics()
     metrics_descriptions = {}
     for key in supported_metrics:
-        metrics_descriptions[key] = supported_metrics[key]['description']
+        metrics_descriptions[key] = supported_metrics[key]["description"]
     return metrics_descriptions
 
 
-def _as_1d_float_array(x: Union[Iterable[float], np.ndarray], name: str
-                       ) -> np.ndarray:
+def _as_1d_float_array(x: Union[Iterable[float], np.ndarray], name: str) -> np.ndarray:
     a = np.asarray(x, dtype=float).reshape(-1)
     if a.size == 0:
         raise ValueError(f"{name} is empty.")
@@ -74,8 +78,9 @@ def _as_1d_float_array(x: Union[Iterable[float], np.ndarray], name: str
     return a
 
 
-def _as_2d_float_array(x: Union[Iterable[Iterable[float]], np.ndarray],
-                       name: str) -> np.ndarray:
+def _as_2d_float_array(
+    x: Union[Iterable[Iterable[float]], np.ndarray], name: str
+) -> np.ndarray:
     a = np.asarray(x, dtype=float)
     if a.ndim != 2:
         raise ValueError(f"{name} must be a 2D array (n_time, n_quantiles).")
@@ -95,39 +100,61 @@ def _norm_ppf(p: float) -> float:
         raise ValueError("p must be in (0,1).")
 
     # Coefficients from Peter J. Acklam's approximation
-    a = [-3.969683028665376e+01,  2.209460984245205e+02, -2.759285104469687e+02,
-         1.383577518672690e+02, -3.066479806614716e+01,  2.506628277459239e+00]
-    b = [-5.447609879822406e+01,  1.615858368580409e+02, -1.556989798598866e+02,
-         6.680131188771972e+01, -1.328068155288572e+01]
-    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-         -2.549732539343734e+00,  4.374664141464968e+00,  2.938163982698783e+00]
-    d = [7.784695709041462e-03,  3.224671290700398e-01,  2.445134137142996e+00,
-         3.754408661907416e+00]
+    a = [
+        -3.969683028665376e01,
+        2.209460984245205e02,
+        -2.759285104469687e02,
+        1.383577518672690e02,
+        -3.066479806614716e01,
+        2.506628277459239e00,
+    ]
+    b = [
+        -5.447609879822406e01,
+        1.615858368580409e02,
+        -1.556989798598866e02,
+        6.680131188771972e01,
+        -1.328068155288572e01,
+    ]
+    c = [
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e00,
+        -2.549732539343734e00,
+        4.374664141464968e00,
+        2.938163982698783e00,
+    ]
+    d = [
+        7.784695709041462e-03,
+        3.224671290700398e-01,
+        2.445134137142996e00,
+        3.754408661907416e00,
+    ]
 
     plow = 0.02425
     phigh = 1.0 - plow
 
     if p < plow:
         q = np.sqrt(-2.0 * np.log(p))
-        num = (((((c[0]*q + c[1])*q + c[2])*q + c[3])*q + c[4])*q + c[5])
-        den = ((((d[0]*q + d[1])*q + d[2])*q + d[3])*q + 1.0)
+        num = ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
+        den = (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
         return num / den
 
     if p > phigh:
         q = np.sqrt(-2.0 * np.log(1.0 - p))
-        num = (((((c[0]*q + c[1])*q + c[2])*q + c[3])*q + c[4])*q + c[5])
-        den = ((((d[0]*q + d[1])*q + d[2])*q + d[3])*q + 1.0)
+        num = ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
+        den = (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
         return -(num / den)
 
     q = p - 0.5
     r = q * q
-    num = (((((a[0]*r + a[1])*r + a[2])*r + a[3])*r + a[4])*r + a[5]) * q
-    den = (((((b[0]*r + b[1])*r + b[2])*r + b[3])*r + b[4])*r + 1.0)
+    num = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
+    den = ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0
     return num / den
 
 
-def _validate_quantiles(q_levels: np.ndarray, y2_q: np.ndarray,
-                        tol: float = 1e-10) -> None:
+def _validate_quantiles(
+    q_levels: np.ndarray, y2_q: np.ndarray, tol: float = 1e-10
+) -> None:
     if np.any(q_levels <= 0.0) or np.any(q_levels >= 1.0):
         raise ValueError("y2_q_levels must be strictly within (0,1).")
     if np.any(np.diff(q_levels) <= 0.0):
@@ -201,8 +228,7 @@ def _inv_cdf_piecewise_linear(
     return out
 
 
-def _compute_metric(ref: np.ndarray, data: np.ndarray, metric: str
-                    ) -> float:
+def _compute_metric(ref: np.ndarray, data: np.ndarray, metric: str) -> float:
     if metric == "median_bias":
         return float(np.median(data - ref))
     elif metric == "mean_bias":
@@ -405,22 +431,24 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
 
     if interpret_obs_as_quantiles:
         # Interpret obs_median as obs_quantiles (2D) and obs_unc as obs_q_levels (1D)
-        obs_q_levels = _as_1d_float_array(obs_unc,
-                                          "obs_q_levels (from obs_unc)")
-        obs_q = _as_2d_float_array(obs_median,
-                                   "obs_quantiles (from obs_median)")
-        _validate_quantiles(obs_q_levels, obs_q,
-                            tol=allow_quantile_inversions_tol)
+        obs_q_levels = _as_1d_float_array(obs_unc, "obs_q_levels (from obs_unc)")
+        obs_q = _as_2d_float_array(obs_median, "obs_quantiles (from obs_median)")
+        _validate_quantiles(obs_q_levels, obs_q, tol=allow_quantile_inversions_tol)
         if obs_q.shape[1] != obs_q_levels.size:
-            raise ValueError("When interpret_obs_as_quantiles=True, obs_median "
-                             "must have shape (n_time, len(obs_unc)).")
+            raise ValueError(
+                "When interpret_obs_as_quantiles=True, obs_median "
+                "must have shape (n_time, len(obs_unc))."
+            )
 
         # Require 0.5 for point estimate
         obs_idx50_candidates = np.where(
-            np.isclose(obs_q_levels, 0.5, atol=q50_tol, rtol=0.0))[0]
+            np.isclose(obs_q_levels, 0.5, atol=q50_tol, rtol=0.0)
+        )[0]
         if obs_idx50_candidates.size == 0:
-            raise ValueError("obs_q_levels (obs_unc) must include 0.5 when"
-                             "interpret_obs_as_quantiles=True.")
+            raise ValueError(
+                "obs_q_levels (obs_unc) must include 0.5 when"
+                "interpret_obs_as_quantiles=True."
+            )
         obs_idx50 = int(obs_idx50_candidates[0])
 
         n = obs_q.shape[0]
@@ -430,8 +458,10 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
         obs_u = _as_1d_float_array(obs_unc, "obs_unc")
 
         if obs_med.size != obs_u.size:
-            raise ValueError("obs_median and obs_unc must have the same length"
-                             "(aligned timestamps).")
+            raise ValueError(
+                "obs_median and obs_unc must have the same length"
+                "(aligned timestamps)."
+            )
         if np.any(obs_u < 0.0):
             raise ValueError("obs_unc must be >= 0 at all timestamps.")
 
@@ -441,15 +471,16 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     mdl_q = _as_2d_float_array(mdl_quantiles, "mdl_quantiles")
 
     if mdl_q.shape != (n, q_levels.size):
-        raise ValueError("mdl_quantiles must have shape "
-                         "(n_time, len(mdl_q_levels)).")
+        raise ValueError(
+            "mdl_quantiles must have shape " "(n_time, len(mdl_q_levels))."
+        )
     _validate_quantiles(q_levels, mdl_q, tol=allow_quantile_inversions_tol)
 
-    idx50_candidates = np.where(np.isclose(q_levels, 0.5, atol=q50_tol,
-                                           rtol=0.0))[0]
+    idx50_candidates = np.where(np.isclose(q_levels, 0.5, atol=q50_tol, rtol=0.0))[0]
     if idx50_candidates.size == 0:
-        raise ValueError("mdl_q_levels must include 0.5 so the model p50 can "
-                         "be extracted.")
+        raise ValueError(
+            "mdl_q_levels must include 0.5 so the model p50 can " "be extracted."
+        )
     idx50 = int(idx50_candidates[0])
 
     if (not interpret_obs_as_quantiles) and (not (0.0 < obs_bounds_level < 1.0)):
@@ -457,14 +488,12 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     if not (0.0 < ci_level < 1.0):
         raise ValueError("ci_level must be between 0 and 1.")
     if n_boot < 200:
-        raise ValueError("n_boot is very small; use at least ~200 (prefer "
-                         "2000+).")
+        raise ValueError("n_boot is very small; use at least ~200 (prefer " "2000+).")
 
     mdl_point = mdl_q[:, idx50]
     point_est = []
     for metric in metrics:
-        point_est.append(_compute_metric(ref=obs_med, data=mdl_point,
-                                         metric=metric))
+        point_est.append(_compute_metric(ref=obs_med, data=mdl_point, metric=metric))
 
     if not interpret_obs_as_quantiles:
         z = _norm_ppf((1.0 + obs_bounds_level) / 2.0)
@@ -481,8 +510,7 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
     def _mbb_indices() -> np.ndarray:
         k = int(np.ceil(n / block_length))
         chosen_starts = rng.choice(starts, size=k, replace=True)
-        idx = np.concatenate([np.arange(s, s + block_length)
-                              for s in chosen_starts])
+        idx = np.concatenate([np.arange(s, s + block_length) for s in chosen_starts])
         return idx[:n]
 
     boot_stats = np.empty((len(metrics), n_boot), dtype=float)
@@ -492,17 +520,20 @@ def bootstrap_metric_obs_normal_mdl_quantiles(
 
         if interpret_obs_as_quantiles:
             u_obs = rng.uniform(0.0, 1.0, size=idx.size)
-            obs_draw = _inv_cdf_piecewise_linear(u_obs, obs_q_levels,
-                                                 obs_q[idx, :], tail=model_tail)
+            obs_draw = _inv_cdf_piecewise_linear(
+                u_obs, obs_q_levels, obs_q[idx, :], tail=model_tail
+            )
         else:
             obs_draw = obs_med[idx] + rng.normal(0.0, obs_sigma[idx])
         u = rng.uniform(0.0, 1.0, size=idx.size)
-        mdl_draw = _inv_cdf_piecewise_linear(u, q_levels, mdl_q[idx, :],
-                                             tail=model_tail)
+        mdl_draw = _inv_cdf_piecewise_linear(
+            u, q_levels, mdl_q[idx, :], tail=model_tail
+        )
 
         for i, metric in enumerate(metrics):
-            boot_stats[i, b] = _compute_metric(ref=obs_draw, data=mdl_draw,
-                                               metric=metric)
+            boot_stats[i, b] = _compute_metric(
+                ref=obs_draw, data=mdl_draw, metric=metric
+            )
 
     alpha = 1.0 - ci_level
     ci = []

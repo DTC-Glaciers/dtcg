@@ -45,10 +45,10 @@ class GeoZarrHandler(MetadataMapper):
 
         Parameters
         ----------
-        ds : xarray.Dataset, default None
+        ds : xarray.DataTree | xarray.Dataset, default None
             Input dataset with dimensions ('x', 'y') or ('t', 'x', 'y').
-            Must include coordinate variables. Either ds or data_tree must be
-            provided.
+            Must include coordinate variables. Accepts either a dataset
+            or data tree.
         data_tree : xarray.DataTree, default None
             Input data_tree. Either ds or data_tree must be provided.
         ds_name : str, default 'L1'
@@ -80,8 +80,23 @@ class GeoZarrHandler(MetadataMapper):
         )
         self.zarr_format = zarr_format
         self.encoding = {}
+        self._set_data(ds=ds, ds_name=ds_name)
 
-        # TODO: why not enforce a type check?
+    def _set_data(
+        self, ds: xr.Dataset | xr.DataTree = None, ds_name: str = "L1"
+    ) -> None:
+        """Validate and set data.
+
+        Parameters
+        ----------
+        ds : xarray.DataTree | xarray.Dataset, default None
+            Input dataset with dimensions ('x', 'y') or ('t', 'x', 'y').
+            Must include coordinate variables. Accepts either a dataset
+            or data tree.
+        ds_name : str, default "L1"
+            Input data_tree. Either ds or data_tree must be provided.
+        """
+
         if ds is None:
             raise ValueError("No dataset provided.")
         elif isinstance(ds, xr.Dataset):
@@ -118,55 +133,6 @@ class GeoZarrHandler(MetadataMapper):
                         )
         else:
             raise TypeError("Dataset should either be an xarray Dataset or DataTree.")
-
-    def _set_data(
-        self, ds: xr.Dataset = None, data_tree: xr.DataTree = None, ds_name: str = "L1"
-    ) -> None:
-        """Validate and set data.
-
-        Parameters
-        ----------
-        ds : xr.Dataset, default None
-        data_tree : xr.DataTree, default None
-        ds_name : str, default "L1"
-        """
-
-        if ds is not None:
-            self.ds_name = ds_name
-            ds = self._validate_dataset(ds)
-            ds = self._update_metadata(ds, ds_name)
-            self._define_encodings(ds, ds_name)
-
-            # convert dataset to datatree
-            self.data_tree = xr.DataTree.from_dict({ds_name: ds})
-        elif data_tree is not None:
-            # define encodings for potential exporting later on
-            self.data_tree = data_tree
-            for tree_level in self.data_tree:
-                if tree_level in ["L1"]:
-                    self._define_encodings(
-                        ds=self.data_tree[tree_level].ds, ds_name=tree_level
-                    )
-                elif "L2" in tree_level or "L3" in tree_level:
-                    for datacube_type in self.data_tree[tree_level]:
-                        if datacube_type not in [
-                            "monthly",
-                            "annual_hydro",
-                            "daily_smb",
-                        ]:
-                            raise ValueError(
-                                "We currently only support model "
-                                "output datacubes of the types "
-                                "'monthly', 'annual_hydro' and "
-                                "'daily_smb'."
-                            )
-                        self._define_encodings(
-                            ds=self.data_tree[tree_level][datacube_type],
-                            ds_name=tree_level,
-                            ds_type=datacube_type,
-                        )
-        else:
-            raise ValueError("Provide either `ds` or `data_tree`.")
 
     def _validate_dataset(self: GeoZarrHandler, ds: xr.Dataset) -> xr.Dataset:
         """Validate the input dataset to ensure it includes required
