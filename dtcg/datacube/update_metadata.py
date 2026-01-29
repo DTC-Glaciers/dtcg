@@ -1,4 +1,4 @@
-"""Copyright 2025 DTCG Contributors
+"""Copyright 2026 DTCG Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import warnings
 from datetime import datetime
+from importlib import resources
 
 import rioxarray  # noqa: F401
 import xarray as xr
@@ -35,30 +36,44 @@ class MetadataMapper:
 
     Attributes
     ----------
-    METADATA_SCHEMA : schema.Schema
-        Validation schema for variable metadata.
-    metadata_mappings : dict
-        Dictionary of metadata mappings loaded from a YAML file.
+    METADATA_SCHEMA_DATA : schema.Schema
+        Validation schema for data variable metadata.
+    METADATA_SCHEMA_COORDS : schema.Schema
+        Validation schema for coordinates metadata.
+    metadata_mappings_data : dict
+        Dictionary of metadata mappings for data variables loaded from a YAML
+        file.
+    metadata_mappings_coords : dict
+        Dictionary of metadata mappings for coordinates loaded from a YAML file.
     """
 
-    metadata_mappings: dict  # as this is not explicitly passed to __init__().
+    metadata_mappings_data: dict  # as this is not explicitly passed to __init__().
+    metadata_mappings_coords: dict  # as this is not explicitly passed to __init__().
 
-    def __init__(self: MetadataMapper, metadata_mapping_file_path: str = None):
+    def __init__(
+        self: MetadataMapper,
+        metadata_mapping_data: str = "",
+        metadata_mapping_coords: str = "",
+    ):
         """Initialise MetadataMapper with a given or default mapping file.
 
         Parameters
         ----------
-        metadata_mapping_file_path : str, optional
+        metadata_mapping_data : str, optional
             Path to the YAML file containing variable metadata mappings.
-            If None, defaults to 'metadata_mapping.yaml' in the current
-            directory.
+            If empty, defaults to 'metadata_mapping_data.yaml' provided
+            by the ``dtcg`` package.
+        metadata_mapping_coords : str, optional
+            Path to the YAML file containing variable metadata mappings.
+            If empty, defaults to 'metadata_mapping_coords.yaml'
+            provided by the ``dtcg`` package.
         """
 
-        if metadata_mapping_file_path is None:
-            metadata_mapping_file_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "metadata_mapping.yaml"
+        if not metadata_mapping_data:
+            metadata_mapping_data = resources.files("dtcg.datacube").joinpath(
+                "metadata_mapping_data.yaml"
             )
-        self.METADATA_SCHEMA = Schema(
+        self.METADATA_SCHEMA_DATA = Schema(
             {
                 "standard_name": str,
                 "long_name": str,
@@ -70,30 +85,54 @@ class MetadataMapper:
                 "references": str,
             }
         )
-        self.read_metadata_mappings(metadata_mapping_file_path)
+        self.metadata_mappings_data = self.read_metadata_mappings(
+            self.METADATA_SCHEMA_DATA, metadata_mapping_data
+        )
+
+        if not metadata_mapping_coords:
+            metadata_mapping_coords = resources.files("dtcg.datacube").joinpath(
+                "metadata_mapping_coords.yaml"
+            )
+        self.METADATA_SCHEMA_COORDS = Schema(
+            {
+                "standard_name": str,
+                "long_name": str,
+                "units": str,
+            }
+        )
+        self.metadata_mappings_coords = self.read_metadata_mappings(
+            self.METADATA_SCHEMA_COORDS, metadata_mapping_coords
+        )
 
     def read_metadata_mappings(
-        self: MetadataMapper, metadata_mapping_file_path: str
-    ) -> None:
+        self: MetadataMapper, schema: Schema, map_file: str
+    ) -> dict:
         """Load and validate metadata mappings from a YAML file.
 
         Parameters
         ----------
-        metadata_mapping_file_path : str
+        schema : Schema
+            The schema structure used for validation
+        map_file : str
             Path to the YAML file containing metadata mappings.
+
+        Return
+        ------
+        dict
+            Metadata mappings loaded from YAML file.
 
         Raises
         ------
         schema.SchemaError
             If any of the metadata entries fail schema validation.
         """
-        with open(metadata_mapping_file_path) as f:
+        with open(map_file) as f:
             config_dict = yaml.safe_load(f)
 
         for _, metadata in config_dict.items():
-            self.METADATA_SCHEMA.validate(metadata)
+            schema.validate(metadata)
 
-        self.metadata_mappings = config_dict
+        return config_dict
 
     @staticmethod
     def _update_shared_metadata(dataset: xr.Dataset, ds_name: str) -> None:
@@ -113,9 +152,6 @@ class MetadataMapper:
         `pyproj_srs` attribute. Shared metadata includes CF conventions,
         title, and summary.
         """
-        # create a spatial_ref layer in the dataset
-        if not dataset.rio.crs and not {"x", "y"}.isdisjoint(dataset.dims):
-            dataset.rio.write_crs(dataset.pyproj_srs, inplace=True)
 
         # update metadata shared across all variables
         shared_metadata = {
@@ -126,60 +162,50 @@ class MetadataMapper:
                 "Components (DTC) Early Development Actions."
             ),
             "date_created": datetime.now().isoformat(),
+            "RGI-ID": dataset.attrs["RGI-ID"],
             "glacier_attributes": dataset.attrs.get("glacier_attributes", {}),
         }
-        if ds_name == "L1":
+        if "L1" in ds_name:
+            if not (
+                "spatial_ref" in dataset.data_vars or "spatial_ref" in dataset.coords
+            ):
+                # create a spatial_ref layer in the dataset
+                if not dataset.rio.crs and not {"x", "y"}.isdisjoint(dataset.dims):
+                    dataset.rio.write_crs(dataset.pyproj_srs, inplace=True)
             shared_metadata.update(
                 {
                     "title": "Datacube of glacier-domain variables.",
                     "summary": (
-                        "Resampled glacier-domain variables from multiple sources. "
+                        "Resampled glacier-domain variables from multiple sources "
+                        f"for RGI6-ID '{dataset.attrs['RGI-ID']}'. "
                         "Generated for the DTC Glaciers project."
                     ),
                 }
             )
-        elif ds_name == "L2":
+        elif "L2" in ds_name:
             shared_metadata.update(
                 {
                     "title": "Datacube of observation-informed modelled variables.",
                     "summary": (
-                        "Observation-informed modelled variables. "
+                        "Observation-informed modelled variables for RGI6-ID "
+                        f"'{dataset.attrs['RGI-ID']}'. "
                         "Generated for the DTC Glaciers project."
                     ),
                 }
             )
+            # L2 must contain a description of the applied calibration strategy
+            if "calibration_strategy" not in dataset.attrs:
+                raise ValueError(
+                    "Missing required attribute 'calibration_strategy' in"
+                    "dataset.attrs. Add a description of the applied "
+                    "calibration strategy."
+                )
+            shared_metadata["calibration_strategy"] = dataset.attrs[
+                "calibration_strategy"
+            ]
 
         dataset.attrs.clear()  # clear old metadata
         dataset.attrs.update(shared_metadata)
-
-        if "x" in dataset.dims:
-            # update coordinate metadata
-            dataset["x"].attrs.update(
-                {
-                    "standard_name": "projection_x_coordinate",
-                    "long_name": "x coordinate of projection",
-                    "units": "m",
-                }
-            )
-
-        if "y" in dataset.dims:
-            dataset["y"].attrs.update(
-                {
-                    "standard_name": "projection_y_coordinate",
-                    "long_name": "y coordinate of projection",
-                    "units": "m",
-                }
-            )
-
-        if "t" in dataset.dims:
-            # assuming unix epoch
-            dataset["t"].attrs.update(
-                {
-                    "standard_name": "time",
-                    "long_name": "time since the unix epoch",
-                    "units": "seconds since 1970-01-01 00:00:00",
-                }
-            )
 
     def update_metadata(
         self: MetadataMapper, dataset: xr.Dataset, ds_name: str
@@ -209,22 +235,95 @@ class MetadataMapper:
         Missing variable mappings are reported as warnings, not errors.
         """
         # check there are mappings for all variables in the dataset
-        difference = set(dataset.data_vars) - set(self.metadata_mappings.keys())
-        if difference:
-            warning_msg = (
-                "Metadata mapping is missing for the following variables: "
-                f"{sorted(difference)}. The metadata for these variables might "
-                "not be compliant with Climate and Forecast conventions "
-                "https://cfconventions.org/."
-            )
-            with warnings.catch_warnings():
-                warnings.simplefilter("always")
-                warnings.warn(warning_msg, UserWarning, stacklevel=2)
+        difference_data = set(dataset.data_vars) - set(
+            self.metadata_mappings_data.keys()
+        )
+        difference_coords = set(dataset.coords) - set(
+            self.metadata_mappings_coords.keys()
+        )
+        for difference in [difference_data, difference_coords]:
+            # remove eolis check as they contain the metadata
+            not_needed = [
+                "eolis_elevation_change_sigma_timeseries",
+                "eolis_elevation_change_timeseries",
+                "eolis_gridded_elevation_change",
+                "eolis_gridded_elevation_change_sigma",
+                "spatial_ref",
+            ]
+            difference = [x for x in difference if x not in not_needed]
+            if difference:
+                warning_msg = (
+                    "Metadata mapping is missing for the following variables: "
+                    f"{sorted(difference)}. The metadata for these variables "
+                    "might not be compliant with Climate and Forecast "
+                    "conventions https://cfconventions.org/."
+                )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("always")
+                    warnings.warn(warning_msg, UserWarning, stacklevel=2)
+
+        # special treatment for model parameters, to convert some of their attrs
+        model_variables = [
+            "volume",
+            "area",
+            "length",
+            "off_area",
+            "on_area",
+            "melt_off_glacier",
+            "melt_on_glacier",
+            "liq_prcp_off_glacier",
+            "liq_prcp_on_glacier",
+            "snowfall_off_glacier",
+            "snowfall_on_glacier",
+            "melt_off_glacier_monthly",
+            "melt_on_glacier_monthly",
+            "liq_prcp_off_glacier_monthly",
+            "liq_prcp_on_glacier_monthly",
+            "snowfall_off_glacier_monthly",
+            "snowfall_on_glacier_monthly",
+            "runoff_monthly",
+            "runoff_monthly_cumulative",
+            "runoff",
+            "specific_mb",
+            "specific_mb_calendar_cum",
+            "snowline",
+        ]
+        model_coordinates = [
+            "member",
+            "time",
+            "rgi_id",
+            "hydro_year",
+            "hydro_month",
+            "calendar_year",
+            "calendar_month",
+            "month_2d",
+            "calendar_month_2d",
+        ]
+
+        # small helper function to rename some model output attributes
+        def _rename_key(attrs, new_key, old_key):
+            if new_key not in attrs:
+                default = "N/A"
+            else:
+                default = attrs[new_key]
+            attrs[new_key] = attrs.pop(old_key, default)
 
         # simple function to apply metadata to all layers in an xarray dataset
-        for data_name, metadata in self.metadata_mappings.items():
-            if data_name in dataset.data_vars:
-                dataset[data_name].attrs.update(metadata)
+        for metadata_mappings in [
+            self.metadata_mappings_data,
+            self.metadata_mappings_coords,
+        ]:
+            for data_name, metadata in metadata_mappings.items():
+                if data_name in dataset.data_vars or data_name in dataset.coords:
+                    dataset[data_name].attrs.update(metadata)
+
+                    # special treatment of model output attributes
+                    if data_name in model_variables:
+                        _rename_key(dataset[data_name].attrs, "units", "unit")
+                    if data_name in model_coordinates + model_variables:
+                        _rename_key(
+                            dataset[data_name].attrs, "long_name", "description"
+                        )
 
         self._update_shared_metadata(dataset, ds_name)
 
