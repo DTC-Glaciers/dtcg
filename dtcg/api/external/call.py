@@ -41,8 +41,8 @@ class StreamDatacube:
 
     def __init__(self, server=DEFAULT_L1_DATACUBE_URL):
         self.server = server
-        self.binder = oggm_bindings.BindingsCryotempo()
-        self.binder.init_oggm()
+        # self.binder = oggm_bindings.BindingsCryotempo()
+        # self.binder.init_oggm()
 
     def stream_datacube(
         self, glacier: str, layer: str = "", region_name: str = "Iceland"
@@ -64,7 +64,7 @@ class StreamDatacube:
             Datacube or datacube layer.
         """
         if glacier[:3] != "RGI":
-
+            raise NotImplementedError("Searching by glacier name is currently unsupported.")
             glacier_data = self.binder.get_rgi_files_from_subregion(
                 region_name=region_name, subregion_name=""
             )

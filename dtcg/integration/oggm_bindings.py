@@ -75,18 +75,19 @@ class BindingsOggmModel:
         if rgi_id is None:
             if datacube_l1 is not None:
                 rgi_id = datacube_l1.attrs["RGI-ID"]
+            else:
+                rgi_id = ""
 
         # this needs to be adapted/deleted (tests need to be adapted)
-        if oggm_params is None:
-            self.oggm_params = {}
-        else:
-            self.oggm_params = oggm_params
-        if not rgi_id:
-            self.rgi_id = ""
-        else:
+        if rgi_id is not None:
             if isinstance(rgi_id, list):
                 rgi_id = rgi_id[0]
             self.rgi_id = rgi_id
+            if oggm_params is None:
+                self.oggm_params = {}
+            else:
+                self.oggm_params = oggm_params
+        
 
             self.init_oggm(
                 working_dir=working_dir,
@@ -148,7 +149,7 @@ class BindingsOggmModel:
 
     def init_oggm(
         self,
-        working_dir: str = "",
+        working_dir: str = None,
         use_multiprocessing: bool = True,
         continue_on_error: bool = True,
         **kwargs,
@@ -167,7 +168,7 @@ class BindingsOggmModel:
 
         cfg.initialize(logging_level="CRITICAL")
         cfg.PARAMS["border"] = kwargs.get("border", 80)
-        if not working_dir:
+        if  working_dir is None:
             working_dir = utils.gettempdir(self.rgi_id)
         self.WORKING_DIR = working_dir
         utils.mkdir(
@@ -357,7 +358,7 @@ class BindingsOggmModel:
     def get_glacier_directories(
         self,
         rgi_ids: list,
-        prepro_base_url: str = "",
+        prepro_base_url: str = None,
         from_prepro_level: int = 3,
         prepro_border: int = 80,
         add_daily_w5e5: bool = True,
@@ -387,7 +388,7 @@ class BindingsOggmModel:
             Glacier directories for the given RGI IDs.
         """
 
-        if not prepro_base_url:
+        if prepro_base_url is None:
             prepro_base_url = self.DEFAULT_BASE_URL
 
         gdirs = workflow.init_glacier_directories(
@@ -413,7 +414,7 @@ class BindingsOggmModel:
                 "glacier",
                 "name",
                 "terminus",
-                "cenl",  # latitude, longitudeR
+                "cenl",  # latitude, longitude
                 "glims",
             )
             glacier_attributes = {
