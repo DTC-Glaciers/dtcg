@@ -412,7 +412,7 @@ class Calibrator:
         first_guess_settings: str = "",
         datacube_types: str | list[str] = "monthly",
         calibration_filesuffix: str = "",
-        calibration_strategy: str = "",
+        calibration_strategy: str = None,
         mcs_sampling_settings: dict = None,
         calibration_parameters_control: dict = None,
         calibration_parameters_mcs: dict = None,
@@ -517,7 +517,7 @@ class Calibrator:
             model_name = mb_model_class.__name__
             calibration_filesuffix = f"{model_name}_{ref_mb_period}"
 
-        if not climate_input_filesuffix:
+        if climate_input_filesuffix is None:
             # for MySfcTypeTIModel we often use partial
             climate_input_filesuffix = "_era_monthly"
             climate_input_filesuffix_daily = "_era_daily"
