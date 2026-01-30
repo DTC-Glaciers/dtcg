@@ -939,7 +939,7 @@ class BindingsHydro(BindingsOggmWrangler):
             name=name,
             from_prepro_level=5,
             prepro_border=160,
-            prepro_base_url="https://cluster.klima.uni-bremen.de/~dtcg/gdirs/v2025.2/",
+            prepro_base_url="https://cluster.klima.uni-bremen.de/~oggm/gdirs/oggm_v1.6/L3-L5_files/2023.3/elev_bands/W5E5_spinup",
         )
         climatology = self.get_hydro_climatology(gdir=glacier)
 

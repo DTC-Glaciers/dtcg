@@ -25,14 +25,24 @@ import zarr
 from zarr.errors import GroupNotFoundError
 
 import dtcg.integration.oggm_bindings as oggm_bindings
+from dtcg import DEFAULT_L1_DATACUBE_URL
 
 
 class StreamDatacube:
+    """Streams data cubes.
 
-    def __init__(self, server="https://cluster.klima.uni-bremen.de/~dtcg/test_zarr/"):
+    Attributes
+    ----------
+    server : str, default DEFAULT_L1_DATACUBE_URL
+        Base URL for data cubes.
+    binder : BindingsOggmModel
+        Handles interaction between user and model.
+    """
+
+    def __init__(self, server=DEFAULT_L1_DATACUBE_URL):
+        self.server = server
         self.binder = oggm_bindings.BindingsCryotempo()
         self.binder.init_oggm()
-        self.server = server
 
     def stream_datacube(
         self, glacier: str, layer: str = "", region_name: str = "Iceland"
@@ -46,7 +56,7 @@ class StreamDatacube:
         layer : str, optional
             Datacube layer. Default will load all available layers.
         region : str, default "Iceland"
-            RGI region name.
+            RGI region name. Ignored if a valid RGI-ID is passed.
 
         Returns
         -------
