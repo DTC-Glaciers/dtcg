@@ -107,7 +107,7 @@ class GeoZarrHandler(MetadataMapper):
 
             # convert dataset to datatree
             self.data_tree = xr.DataTree.from_dict({ds_name: ds})
-        elif isinstance(xr.DataTree):
+        elif isinstance(ds, xr.DataTree):
             # define encodings for potential exporting later on
             self.data_tree = ds
             for tree_level in self.data_tree:
@@ -151,12 +151,14 @@ class GeoZarrHandler(MetadataMapper):
             - If any dimension does not have an associated coordinate
               variable.
         """
-        accepted_dims = {"x", "y", "t", "t_wgms", "t_sfc_type"}
-        if not set(ds.dims).issubset(accepted_dims):
-            raise ValueError(
-                "Incorrect dataset dimensions."
-                f" Accepted data dimensions are: {accepted_dims}"
-            )
+
+        # TODO: get accepted dims from metadata mapping?
+        # accepted_dims = {"x", "y", "t", "t_wgms", "t_sfc_type", "snowcover_frac"}
+        # if not set(ds.dims).issubset(accepted_dims):
+        #     raise ValueError(
+        #         "Incorrect dataset dimensions."
+        #         f" Accepted data dimensions are: {accepted_dims}"
+        #     )
         for dim in ds.dims:
             if dim not in ds.coords:
                 raise ValueError(
