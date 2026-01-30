@@ -64,7 +64,9 @@ class StreamDatacube:
             Datacube or datacube layer.
         """
         if glacier[:3] != "RGI":
-            raise NotImplementedError("Searching by glacier name is currently unsupported.")
+            raise NotImplementedError(
+                "Searching by glacier name is currently unsupported."
+            )
             glacier_data = self.binder.get_rgi_files_from_subregion(
                 region_name=region_name, subregion_name=""
             )

@@ -87,7 +87,6 @@ class BindingsOggmModel:
                 self.oggm_params = {}
             else:
                 self.oggm_params = oggm_params
-        
 
             self.init_oggm(
                 working_dir=working_dir,
@@ -168,7 +167,7 @@ class BindingsOggmModel:
 
         cfg.initialize(logging_level="CRITICAL")
         cfg.PARAMS["border"] = kwargs.get("border", 80)
-        if  working_dir is None:
+        if working_dir is None:
             working_dir = utils.gettempdir(self.rgi_id)
         self.WORKING_DIR = working_dir
         utils.mkdir(
