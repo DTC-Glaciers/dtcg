@@ -77,14 +77,16 @@ class BindingsOggmModel:
                 rgi_id = datacube_l1.attrs["RGI-ID"]
 
         # this needs to be adapted/deleted (tests need to be adapted)
-        if rgi_id:
+        if oggm_params is None:
+            self.oggm_params = {}
+        else:
+            self.oggm_params = oggm_params
+        if not rgi_id:
+            self.rgi_id = ""
+        else:
             if isinstance(rgi_id, list):
                 rgi_id = rgi_id[0]
             self.rgi_id = rgi_id
-            if oggm_params is None:
-                self.oggm_params = {}
-            else:
-                self.oggm_params = oggm_params
 
             self.init_oggm(
                 working_dir=working_dir,
@@ -423,8 +425,8 @@ class BindingsOggmModel:
 
         return ds
 
-    def add_data_to_datacube_l1(self, datacube_manager, **kwargs):
-        self.datacube_l1 = datacube_manager().add_data_to_datacube(
+    def add_data(self, datacube_manager, **kwargs):
+        self.datacube_l1 = datacube_manager().add_data(
             datacube=self.datacube_l1, gdir=self.gdir, **kwargs
         )
 

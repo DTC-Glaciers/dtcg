@@ -328,7 +328,7 @@ class Calibrator:
         ds,
         var,
         year_coord="calendar_year",
-        cumulative_suffix="calendar_cumulative",
+        cumulative_suffix="calendar_cum",
     ):
         """
 
@@ -417,7 +417,7 @@ class Calibrator:
         calibration_parameters_control: dict = None,
         calibration_parameters_mcs: dict = None,
         quantiles: list = None,
-        climate_input_filesuffix: str = "",
+        climate_input_filesuffix: str = None,
         show_log: bool = False,
         multiprocessing_during_datacube_creation: bool = True,
         **kwargs,
