@@ -83,7 +83,7 @@ oggm = [
     "ipython",
     "joblib",
     "progressbar2",
-    "pytest-mpl @ git+https://github.com/OGGM/pytest-mpl",
+    "pytest-mpl-oggm",
 ]
 docs = [
     "sphinx",
